@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "SSIT CRM",
+    "slug": "growth-os-mobile",
+    "scheme": "growthos",
+    "version": "1.0.1",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.ssit.growthos",
+      "buildNumber": "2"
+    },
+    "android": {
+      "package": "in.ssit.growthos",
+      "versionCode": 2,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/android-icon-foreground.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-local-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SSIT CRM uses your photos to attach client KYC documents.",
+          "cameraPermission": "SSIT CRM uses your camera to capture client KYC documents."
+        }
+      ],
+      "expo-router",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SSIT CRM records where a client visit or attendance punch happened, so your firm has an accurate field record.",
+          "locationWhenInUsePermission": "SSIT CRM records where a client visit or attendance punch happened, so your firm has an accurate field record.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6f496da1-7cc7-4891-9fb7-ca03a97dd8f0"
+      }
+    },
+    "owner": "ssit-services-llp"
+  }
+}

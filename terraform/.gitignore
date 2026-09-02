@@ -1,0 +1,10 @@
+# Never commit Terraform state (contains the DB password) or local var files.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+terraform.tfvars
+*.auto.tfvars
+override.tf
+override.tf.json

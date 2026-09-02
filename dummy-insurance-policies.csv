@@ -1,0 +1,11 @@
+clientPan,insurer,planName,policyNumber,policyType,sumAssured,annualPremium,premiumFrequency,policyStartDate,maturityDate,nextPremiumDueDate,nomineeName,nomineeRelation
+ABCDE1234F,LIC of India,Jeevan Anand,LIC0010001,endowment,1000000,48500,annual,2021-04-15,2041-04-15,2025-04-15,Sunita Sharma,Spouse
+ABCDE1234F,HDFC Life,Click 2 Protect Super,HDFC2010002,term,10000000,14999,annual,2022-06-01,2052-06-01,2025-06-01,Sunita Sharma,Spouse
+FGHIJ5678K,ICICI Prudential,iProtect Smart,ICICI3010003,term,15000000,18200,annual,2023-01-10,2058-01-10,2025-07-10,Rohan Mehta,Son
+FGHIJ5678K,Star Health,Family Health Optima,STAR4010004,health,500000,21500,annual,2024-03-20,2025-03-19,2025-03-20,Priya Mehta,Spouse
+KLMNO9012P,SBI Life,Smart Wealth Builder,SBI5010005,ulip,2500000,120000,annual,2020-09-05,2035-09-05,2025-09-05,Anil Gupta,Father
+KLMNO9012P,Bajaj Allianz,Goal Assure,BAJAJ6010006,ulip,2000000,100000,monthly,2023-11-12,2038-11-12,2025-08-12,Anil Gupta,Father
+PQRST3456U,Max Life,Smart Term Plan,MAX7010007,term,12000000,16800,annual,2022-02-18,2057-02-18,2026-02-18,Neha Verma,Spouse
+PQRST3456U,Niva Bupa,ReAssure 2.0,NIVA8010008,health,1000000,28900,annual,2024-05-25,2025-05-24,2025-05-25,Neha Verma,Spouse
+UVWXY7890Z,Tata AIA,Sampoorna Raksha,TATA9010009,term,8000000,11500,annual,2021-07-30,2056-07-30,2025-07-30,Karan Singh,Brother
+UVWXY7890Z,Kotak Life,Assured Savings Plan,KOTAK1010010,money_back,1500000,75000,annual,2019-12-01,2034-12-01,2025-12-01,Pooja Singh,Mother

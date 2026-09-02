@@ -1,0 +1,75 @@
+name: CI
+
+# Run on EVERY branch, not just main/master. Day-to-day work happens on feature
+# branches (feat/…) and this repo rarely opens PRs, so the old filter meant CI
+# effectively never ran: the checks below — typecheck, RBAC gating, migration
+# numbering, RLS coverage — only fired on branches nobody pushes to.
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    name: Typecheck · RBAC · Calc · Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: RBAC guard (every mutation route is capability/session gated)
+        run: npm run check:rbac
+      - name: Migration numbering guard (no new duplicate prefixes)
+        run: npm run check:migrations
+      - name: Calculator math assertions
+        run: npm run check:calc
+      - name: Hardcoded-color ratchet (shared components stay themeable)
+        run: npm run check:colors
+      - name: as-any ratchet (type-safety doesn't regress)
+        run: npm run check:asany
+      - name: Math-convention import guard (no file mixes nominal + effective)
+        run: npm run check:mathimports
+      - name: Unit tests (money math + central spine)
+        run: npm test
+      - name: Lint (non-blocking for now — surfaces issues without failing CI)
+        run: npm run lint
+        continue-on-error: true
+
+  db-checks:
+    name: Migrate · RLS coverage
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mfd
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/mfd
+      # Activates the DB-backed vitest suites (RLS isolation, share-token claim)
+      # which skipIf(!TEST_DATABASE_URL) — previously dead in CI because no job
+      # set this while also having a database.
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mfd
+      ALLOW_SYSTEM_TX: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Apply migrations
+        run: npm run migrate:all
+      - name: RLS coverage guard (every tenant table has a policy)
+        run: npm run check:rls
+      - name: DB-backed unit tests (RLS isolation · share-token · webhook sigs)
+        run: npx vitest run

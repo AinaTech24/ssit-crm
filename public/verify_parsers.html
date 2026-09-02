@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RTA Parsers Verification</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #0f172a; color: #e2e8f0; }
+    h1 { color: #38bdf8; }
+    .test-case { margin-bottom: 20px; padding: 15px; border-radius: 8px; border: 1px solid #334155; }
+    .success { background: #064e3b; border-color: #059669; }
+    .error { background: #7f1d1d; border-color: #dc2626; }
+    pre { background: #1e293b; padding: 10px; border-radius: 4px; overflow-x: auto; color: #f8fafc; }
+  </style>
+</head>
+<body>
+  <h1>RTA Feed Parsers Verification</h1>
+  <div id="results">Running tests...</div>
+
+  <script>
+    // Copy the implementation variables & helpers
+    const CAMS_TRANSACTION_TYPES = {
+      PURCHASE: "lumpsum",
+      ADDPURCH: "lumpsum",
+      SIP: "sip",
+      SIP_INSTL: "sip",
+      REDEMPTION: "redemption",
+      STPOUT: "stp",
+      SWPOUT: "swp",
+      DIVPAYOUT: "dividend_payout",
+      DIVREINVEST: "dividend_reinvest",
+    };
+    const KFIN_TRANSACTION_TYPES = CAMS_TRANSACTION_TYPES;
+
+    const HEADER_ALIASES = {
+      amcCode: ["AMC", "AMC_CODE", "AMCCOD", "AMC_NAME", "AMC NAME", "FMIM_CODE", "AMC_CD"],
+      folioNumber: ["FOLIO", "FOLIO_NO", "FOLIO_NUM", "FOLIONO", "FOLIO NO", "FOLIO NUM", "FOLIONUM", "FOL_NO"],
+      pan: ["PAN", "INV_PAN", "PAN_NO", "PAN NO", "PAN_NUM", "PAN NUM", "INVPAN", "PAN_NUMBER"],
+      schemeCode: ["SCH_CODE", "SCHEME_CODE", "SCHEME CODE", "PRODUCT_CODE", "PRODUCT CODE", "SCHCOD", "PRODCODE", "SCH_CD"],
+      schemeName: ["SCH_NAME", "SCHEME_NAME", "SCHEME NAME", "PRODUCT_NAME", "PRODUCT NAME", "SCHNAME", "PRODNAME"],
+      type: ["TR_TYPE", "TXN_TYPE", "TRANS_TYPE", "TRTYPE", "TXNTYPE", "TRANSTYPE", "TYPE", "TRANS_DESC", "TRANS DESCRIPTION", "TXN_DESC_CAMS"],
+      orderDate: ["TR_DATE", "TXN_DATE", "TRANS_DATE", "TRDATE", "TXNDATE", "TRANSDATE", "DATE", "POST_DATE", "POST DATE", "TXN_DT"],
+      amount: ["AMOUNT", "AMT", "TXN_AMT", "TXN_AMOUNT", "TRANS_AMT", "PURCHASE_AMOUNT", "RED_AMOUNT"],
+      units: ["UNITS", "UNIT", "QTY", "QUANTITY", "NO_OF_UNITS", "NO OF UNITS"],
+      nav: ["NAV", "RATE", "NAV_PUR", "NAV_RATE", "PUR_NAV", "ALLOT_NAV", "ALLOTNAV"],
+      externalRef: ["ORDER_REF", "REF_NO", "REF NO", "TXN_ID", "TXN ID", "TXN_REF", "TXN REF", "REF_NUM", "REF NUM"],
+      status: ["STATUS", "TR_STATUS", "TXN_STATUS", "STATUS_DESC", "STATUS DESC"],
+      reasonCode: ["REASON_CODE", "REJ_CODE", "REJECT_CODE", "REASON CODE", "REJ CODE", "REJ_REASON", "REJ REASON"],
+    };
+
+    const DEFAULT_CAMS_MAP = {
+      amcCode: 0,
+      folioNumber: 1,
+      pan: 2,
+      schemeCode: 4,
+      schemeName: 5,
+      type: 6,
+      orderDate: 7,
+      amount: 8,
+      units: 9,
+      nav: 10,
+      externalRef: 11,
+      status: 12,
+      reasonCode: 13,
+    };
+
+    function buildHeaderIndexMap(headerCols, aliases = HEADER_ALIASES) {
+      const map = {};
+      const normalizedHeaders = headerCols.map(h => h.trim().toUpperCase().replace(/[^A-Z0-9]/g, ""));
+      for (const [field, aliasList] of Object.entries(aliases)) {
+        const aliasSet = new Set(aliasList.map(a => a.toUpperCase().replace(/[^A-Z0-9]/g, "")));
+        const idx = normalizedHeaders.findIndex(h => aliasSet.has(h));
+        if (idx !== -1) {
+          map[field] = idx;
+        }
+      }
+      return map;
+    }
+
+    function parseCamsFeed(text) {
+      const rows = [];
+      const lines = text.split(/\r?\n/);
+      let dataStart = 0;
+      let indexMap = DEFAULT_CAMS_MAP;
+
+      if (lines[0]?.toUpperCase().includes("PAN") && (lines[0]?.toUpperCase().includes("FOLIO") || lines[0]?.toUpperCase().includes("CLIENT"))) {
+        dataStart = 1;
+        const headerCols = lines[0].split("|");
+        indexMap = { ...DEFAULT_CAMS_MAP, ...buildHeaderIndexMap(headerCols) };
+      }
+
+      for (let i = dataStart; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = line.split("|");
+        const maxIdx = Math.max(...Object.values(indexMap));
+        if (cols.length <= maxIdx) continue;
+
+        const val = (field) => cols[indexMap[field]]?.trim() ?? "";
+        const trType = val("type").toUpperCase();
+        const ourType = CAMS_TRANSACTION_TYPES[trType] ?? "lumpsum";
+        const amount = parseFloat(val("amount") ?? "0") || 0;
+        const direction =
+          ourType === "redemption" || ourType === "swp" || ourType === "dividend_payout" || ourType === "stp"
+            ? "outflow"
+            : "inflow";
+
+        rows.push({
+          externalRef: val("externalRef") || `cams_${i}`,
+          pan: val("pan"),
+          folioNumber: val("folioNumber"),
+          amcCode: val("amcCode"),
+          schemeCode: val("schemeCode"),
+          schemeName: val("schemeName"),
+          type: ourType,
+          direction,
+          amount,
+          units: parseFloat(val("units") ?? "0") || 0,
+          nav: parseFloat(val("nav") ?? "0") || 0,
+          orderDate: normalizeDate(val("orderDate")),
+          status:
+            val("status").toUpperCase() === "ALLOTTED" || val("status").toUpperCase() === "SUCCESS"
+              ? "successful"
+              : val("status").toUpperCase() === "REJECTED"
+              ? "rejected"
+              : val("status").toUpperCase() === "FAILED"
+              ? "failed"
+              : "pending",
+          reasonCode: val("reasonCode") || undefined,
+        });
+      }
+      return rows;
+    }
+
+    function parseKfintechFeed(text) {
+      const rows = [];
+      const lines = text.split(/\r?\n/);
+      let dataStart = 0;
+      let indexMap = DEFAULT_CAMS_MAP;
+
+      if (lines[0]?.toUpperCase().includes("PAN") && (lines[0]?.toUpperCase().includes("FOLIO") || lines[0]?.toUpperCase().includes("CLIENT"))) {
+        dataStart = 1;
+        const headerCols = parseCsvRow(lines[0]);
+        indexMap = { ...DEFAULT_CAMS_MAP, ...buildHeaderIndexMap(headerCols) };
+      }
+
+      for (let i = dataStart; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = parseCsvRow(line);
+        const maxIdx = Math.max(...Object.values(indexMap));
+        if (cols.length <= maxIdx) continue;
+
+        const val = (field) => cols[indexMap[field]]?.trim() ?? "";
+        const trType = val("type").toUpperCase();
+        const ourType = KFIN_TRANSACTION_TYPES[trType] ?? "lumpsum";
+
+        rows.push({
+          externalRef: val("externalRef") || `kfin_${i}`,
+          pan: val("pan"),
+          folioNumber: val("folioNumber"),
+          amcCode: val("amcCode"),
+          schemeCode: val("schemeCode"),
+          schemeName: val("schemeName"),
+          type: ourType,
+          direction:
+            ourType === "redemption" || ourType === "swp" || ourType === "dividend_payout" || ourType === "stp"
+              ? "outflow"
+              : "inflow",
+          amount: parseFloat(val("amount") ?? "0") || 0,
+          units: parseFloat(val("units") ?? "0") || 0,
+          nav: parseFloat(val("nav") ?? "0") || 0,
+          orderDate: normalizeDate(val("orderDate")),
+          status:
+            val("status").toUpperCase() === "SUCCESS" || val("status").toUpperCase() === "ALLOTTED"
+              ? "successful"
+              : val("status").toUpperCase() === "REJECTED"
+              ? "rejected"
+              : val("status").toUpperCase() === "FAILED"
+              ? "failed"
+              : "pending",
+          reasonCode: val("reasonCode") || undefined,
+        });
+      }
+      return rows;
+    }
+
+    const DEFAULT_SIP_REJECT_MAP = {
+      amcName: 0,
+      folioNumber: 1,
+      pan: 2,
+      schemeName: 3,
+      rejectionDate: 4,
+      amount: 5,
+      reasonCode: 6,
+      reason: 7,
+    };
+
+    const SIP_REJECT_ALIASES = {
+      amcName: ["AMC", "AMC_NAME", "AMC NAME", "FMIM_CODE", "MUTUAL_FUND", "AMC_CD", "AMC_DESC"],
+      folioNumber: ["FOLIO", "FOLIO_NO", "FOLIO_NUM", "FOLIONO", "FOLIO NO", "FOLIO NUM", "FOLIONUM", "FOL_NO"],
+      pan: ["PAN", "INV_PAN", "PAN_NO", "PAN NO", "PAN_NUM", "PAN NUM", "INVPAN", "PAN_NUMBER"],
+      schemeName: ["SCH_NAME", "SCHEME_NAME", "SCHEME NAME", "PRODUCT_NAME", "PRODUCT NAME", "SCHNAME", "PRODNAME"],
+      rejectionDate: ["REJECT_DATE", "REJECTION_DATE", "REJ_DATE", "REJECT DATE", "REJECTION DATE", "DATE", "REJ_DT"],
+      amount: ["AMOUNT", "AMT", "TXN_AMT", "TXN_AMOUNT", "TRANS_AMT", "SIP_AMOUNT"],
+      reasonCode: ["REASON_CODE", "REJ_CODE", "REJECT_CODE", "REASON CODE", "REJ CODE", "REJ_REASON", "REJ REASON", "FAIL_CODE"],
+      reason: ["REASON", "REASON_DESC", "REASON DESCRIPTION", "REMARK", "REMARKS", "REJ_DESC", "REJECT_DESC", "REJECTION_REASON"],
+    };
+
+    const DEFAULT_BROKERAGE_MAP = {
+      amcCode: 0,
+      schemeCode: 1,
+      schemeName: 2,
+      folioNumber: 3,
+      pan: 4,
+      brokerageType: 5,
+      periodStart: 6,
+      periodEnd: 7,
+      aumAmount: 8,
+      brokerageRate: 9,
+      brokerageAmount: 10,
+    };
+
+    const BROKERAGE_ALIASES = {
+      amcCode: ["AMC", "AMC_CODE", "AMCCOD", "AMC_CD"],
+      schemeCode: ["SCH_CODE", "SCHEME_CODE", "SCHEME CODE", "PRODUCT_CODE", "PRODUCT CODE", "SCHCOD", "PRODCODE"],
+      schemeName: ["SCH_NAME", "SCHEME_NAME", "SCHEME NAME", "PRODUCT_NAME", "PRODUCT NAME", "SCHNAME", "PRODNAME"],
+      folioNumber: ["FOLIO", "FOLIO_NO", "FOLIO_NUM", "FOLIONO", "FOLIO NO", "FOLIO NUM", "FOLIONUM", "FOL_NO"],
+      pan: ["PAN", "INV_PAN", "PAN_NO", "PAN NO", "PAN_NUM", "PAN NUM", "INVPAN", "PAN_NUMBER"],
+      brokerageType: ["TYPE", "BROKERAGE_TYPE", "COMMISSION_TYPE", "BROK_TYPE", "COMM_TYPE"],
+      periodStart: ["PERIOD_START", "START_DATE", "FROM_DATE", "FROM DATE", "PERIOD START", "START DATE"],
+      periodEnd: ["PERIOD_END", "END_DATE", "TO_DATE", "TO DATE", "PERIOD END", "END DATE"],
+      aumAmount: ["AUM", "AVG_AUM", "AVERAGE_AUM", "AUM_AMOUNT", "AVG AUM", "AVERAGE AUM"],
+      brokerageRate: ["RATE", "BROKERAGE_RATE", "COMMISSION_RATE", "BROK_RATE", "COMM_RATE"],
+      brokerageAmount: ["AMOUNT", "BROKERAGE_AMOUNT", "COMMISSION_AMOUNT", "BROK_AMOUNT", "COMM_AMOUNT", "NET_AMOUNT"],
+    };
+
+    const REASON_CODE_MAP = {
+      "001": "Insufficient funds",
+      "002": "Account closed",
+      "003": "Mandate inactive / cancelled",
+      "004": "Signature mismatch",
+      "005": "Mandate amount exceeded",
+      "006": "No such account",
+      "007": "Frozen account",
+      "008": "Other",
+    };
+
+    function parseSipRejectionReport(text, source) {
+      const out = [];
+      const lines = text.split(/\r?\n/);
+      if (!lines.length) return out;
+      const delim = source === "kfintech" ? "," : "|";
+      let start = 0;
+      let indexMap = DEFAULT_SIP_REJECT_MAP;
+
+      const firstLineUpper = lines[0]?.toUpperCase() ?? "";
+      if (
+        firstLineUpper.includes("PAN") &&
+        (firstLineUpper.includes("REJECT") || firstLineUpper.includes("FAIL") || firstLineUpper.includes("FOLIO"))
+      ) {
+        start = 1;
+        const headerCols = lines[0].split(delim);
+        indexMap = { ...DEFAULT_SIP_REJECT_MAP, ...buildHeaderIndexMap(headerCols, SIP_REJECT_ALIASES) };
+      }
+
+      for (let i = start; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = line.split(delim);
+        const maxIdx = Math.max(...Object.values(indexMap));
+        if (cols.length <= maxIdx) continue;
+
+        const val = (field) => cols[indexMap[field]]?.trim() ?? "";
+        const reasonCode = val("reasonCode");
+
+        out.push({
+          amcName: val("amcName"),
+          folioNumber: val("folioNumber"),
+          pan: val("pan"),
+          schemeName: val("schemeName"),
+          rejectionDate: normaliseDate(val("rejectionDate")) ?? today(),
+          amount: parseFloat(val("amount") ?? "0") || 0,
+          reasonCode,
+          reason:
+            (reasonCode && REASON_CODE_MAP[reasonCode]) ??
+            val("reason") ??
+            "Unknown",
+        });
+      }
+      return out;
+    }
+
+    function parseBrokerageStatement(text, source) {
+      const out = [];
+      const lines = text.split(/\r?\n/);
+      if (!lines.length) return out;
+      const delim = source === "kfintech" ? "," : "|";
+      let start = 0;
+      let indexMap = DEFAULT_BROKERAGE_MAP;
+
+      const firstLineUpper = lines[0]?.toUpperCase() ?? "";
+      if (
+        firstLineUpper.includes("BROKERAGE") ||
+        firstLineUpper.includes("COMMISSION") ||
+        (firstLineUpper.includes("PAN") && firstLineUpper.includes("FOLIO"))
+      ) {
+        start = 1;
+        const headerCols = lines[0].split(delim);
+        indexMap = { ...DEFAULT_BROKERAGE_MAP, ...buildHeaderIndexMap(headerCols, BROKERAGE_ALIASES) };
+      }
+
+      for (let i = start; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = line.split(delim);
+        const maxIdx = Math.max(...Object.values(indexMap));
+        if (cols.length <= maxIdx) continue;
+
+        const val = (field) => cols[indexMap[field]]?.trim() ?? "";
+        const typeRaw = val("brokerageType").toUpperCase();
+        let brokerageType = "other";
+        if (typeRaw.includes("UPFRONT")) brokerageType = "upfront";
+        else if (typeRaw.includes("TRAIL")) brokerageType = "trail";
+        else if (typeRaw.includes("B30") || typeRaw.includes("B-30")) brokerageType = "b30";
+
+        out.push({
+          amcCode: val("amcCode"),
+          schemeCode: val("schemeCode"),
+          schemeName: val("schemeName"),
+          folioNumber: val("folioNumber"),
+          pan: val("pan"),
+          brokerageType,
+          periodStart: normaliseDate(val("periodStart")) ?? today(),
+          periodEnd: normaliseDate(val("periodEnd")) ?? today(),
+          aumAmount: parseFloat(val("aumAmount") ?? "0") || 0,
+          brokerageRate: parseFloat(val("brokerageRate") ?? "0") || 0,
+          brokerageAmount: parseFloat(val("brokerageAmount") ?? "0") || 0,
+        });
+      }
+      return out;
+    }
+
+    function normaliseDate(d) {
+      if (!d) return null;
+      const s = d.trim();
+      const dmy = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+      if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+      return null;
+    }
+
+    function normalizeDate(d) {
+      return normaliseDate(d) || today();
+    }
+
+    function today() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function parseCsvRow(line) {
+      const out = [];
+      let cur = "";
+      let inQuote = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"' && line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuote = !inQuote;
+        } else if (ch === "," && !inQuote) {
+          out.push(cur);
+          cur = "";
+        } else {
+          cur += ch;
+        }
+      }
+      out.push(cur);
+      return out;
+    }
+
+    // --- TEST SUITE ---
+    const resultsContainer = document.getElementById("results");
+    resultsContainer.innerHTML = "";
+
+    function runTest(name, fn) {
+      const el = document.createElement("div");
+      el.className = "test-case";
+      try {
+        fn();
+        el.className += " success";
+        el.innerHTML = `<strong>PASS</strong>: ${name}`;
+      } catch (err) {
+        el.className += " error";
+        el.innerHTML = `<strong>FAIL</strong>: ${name}<br><pre>${err.stack || err}</pre>`;
+      }
+      resultsContainer.appendChild(el);
+    }
+
+    // 1. CAMS daily feed test
+    runTest("CAMS Daily Feed - Standard Index mapping", () => {
+      const camsStd = "FT|12345|ABCDE1234F|Pritesh|SCH001|Growth|SIP|01-06-2026|10000|100|100|REF001|ALLOTTED|00";
+      const res = parseCamsFeed(camsStd)[0];
+      if (res.pan !== "ABCDE1234F") throw new Error("PAN mismatch: " + res.pan);
+      if (res.folioNumber !== "12345") throw new Error("Folio mismatch: " + res.folioNumber);
+      if (res.amount !== 10000) throw new Error("Amount mismatch: " + res.amount);
+      if (res.type !== "sip") throw new Error("Type mismatch: " + res.type);
+    });
+
+    runTest("CAMS Daily Feed - Dynamic Header mapping (Shuffled columns & Extra header)", () => {
+      const camsShuffled = 
+        "SchemeCode|Amount|PAN|FolioNo|TrType|AMC|OrderRef|Units|NAV|TrDate|Status|ReasonCode|SchemeName|ExtraColumn\n" +
+        "SCH001|10000|ABCDE1234F|12345|SIP|FT|REF001|100|100|01-06-2026|ALLOTTED|00|Growth|DummyValue";
+      const res = parseCamsFeed(camsShuffled)[0];
+      if (res.pan !== "ABCDE1234F") throw new Error("PAN mismatch: " + res.pan);
+      if (res.folioNumber !== "12345") throw new Error("Folio mismatch: " + res.folioNumber);
+      if (res.amount !== 10000) throw new Error("Amount mismatch: " + res.amount);
+      if (res.type !== "sip") throw new Error("Type mismatch: " + res.type);
+      if (res.externalRef !== "REF001") throw new Error("Ref mismatch: " + res.externalRef);
+    });
+
+    // 2. KFintech feed test
+    runTest("KFintech Feed - Standard vs Shuffled Header mapping", () => {
+      const kfinShuffled = 
+        "SchemeCode,Amount,PAN,FolioNo,TrType,AMC,OrderRef,Units,NAV,TrDate,Status,ReasonCode,SchemeName\n" +
+        "SCH001,10000,ABCDE1234F,12345,SIP,FT,REF001,100,100,01-06-2026,SUCCESS,00,Growth";
+      const res = parseKfintechFeed(kfinShuffled)[0];
+      if (res.pan !== "ABCDE1234F") throw new Error("PAN mismatch");
+      if (res.folioNumber !== "12345") throw new Error("Folio mismatch");
+      if (res.amount !== 10000) throw new Error("Amount mismatch");
+      if (res.type !== "sip") throw new Error("Type mismatch");
+    });
+
+    // 3. SIP Rejection test
+    runTest("SIP Rejection - Shuffled mapping", () => {
+      const sipShuffled = 
+        "RejectDate|Amount|PAN|Folio|ReasonCode|AMC|Scheme|ReasonDesc\n" +
+        "01-06-2026|10000|ABCDE1234F|12345|001|FT|Growth|Insufficient balance";
+      const res = parseSipRejectionReport(sipShuffled, "cams")[0];
+      if (res.pan !== "ABCDE1234F") throw new Error("PAN mismatch");
+      if (res.amount !== 10000) throw new Error("Amount mismatch");
+      if (res.reason !== "Insufficient funds") throw new Error("Reason code classification mismatch: " + res.reason);
+    });
+
+    // 4. Brokerage Statement test
+    runTest("Brokerage Statement - Shuffled mapping", () => {
+      const brokerageShuffled = 
+        "PeriodStart|PeriodEnd|AUM|Rate|Amount|PAN|Folio|Type|AMCCode|SchemeCode|SchemeName\n" +
+        "01-05-2026|31-05-2026|100000|0.01|1000|ABCDE1234F|12345|TRAIL|FT|SCH001|Growth";
+      const res = parseBrokerageStatement(brokerageShuffled, "cams")[0];
+      if (res.pan !== "ABCDE1234F") throw new Error("PAN mismatch");
+      if (res.brokerageType !== "trail") throw new Error("Type mismatch: " + res.brokerageType);
+      if (res.brokerageAmount !== 1000) throw new Error("Amount mismatch: " + res.brokerageAmount);
+    });
+  </script>
+</body>
+</html>

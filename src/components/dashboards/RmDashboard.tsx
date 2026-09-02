@@ -1,0 +1,608 @@
+import Link from "next/link";
+import { and, eq, sql, desc, isNotNull, gte, lte } from "drizzle-orm";
+import { Calendar, Users, TrendingUp, AlertCircle, Phone } from "lucide-react";
+import { withTenant } from "@/db/client";
+import { investors, leads, tasks, communications, sips } from "@/db/schema";
+import { formatINR, formatRelative, formatDate } from "@/lib/utils";
+import type { SessionUser } from "@/lib/auth/session";
+import { RmInsightsSection } from "./RmInsightsSection";
+import { NbaDateFilter } from "@/components/nba/NbaDateFilter";
+import { Avatar } from "@/components/ui/Avatar";
+import { resolvePeriodRange } from "@/lib/dashboard/period";
+import { getDashboardThresholds } from "@/lib/dashboard/thresholds";
+import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
+import { Sparkline } from "@/components/dashboards/Sparkline";
+
+/**
+ * RM dashboard — shows only what's assigned to this RM. Per spec section 2:
+ *   My leads · My clients · Today's follow-ups · Review meetings due
+ *   SIP rejection follow-ups · Birthday/anniversary clients
+ *   Pending service requests · SIP top-up opportunities
+ *   My monthly business · My pending tasks
+ */
+export async function RmDashboard({
+  session,
+  limited = false,
+  targetUserId,
+  targetName,
+  from,
+  to,
+}: {
+  session: SessionUser;
+  limited?: boolean;
+  /** When an owner/branch-head views a specific team member's dashboard. */
+  targetUserId?: string;
+  targetName?: string;
+  /** Date-range window (yyyy-mm-dd). Scopes the period metrics (net sales,
+   *  conversions). Defaults to month-to-date when unset. */
+  from?: string;
+  to?: string;
+}) {
+  const userId = targetUserId ?? session.userId;
+  const viewingOther = !!targetUserId && targetUserId !== session.userId;
+  // Possessive prefix for "My X" KPI labels — owner viewing a member sees
+  // "Aman's clients" instead of "My clients".
+  const who = viewingOther ? `${(targetName ?? "Member").split(" ")[0]}'s` : "My";
+  const today = new Date();
+  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+  const next7 = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  // Normalize the period window through the shared resolver so RmDashboard uses
+  // the same {fromISO,toISO,label} foundation as OwnerCockpit. We still accept
+  // from/to props (so existing deep-links keep working) — a given range resolves
+  // as "custom"; otherwise we default to month-to-date (MTD).
+  const hasRange = !!(from && /^\d{4}-\d{2}-\d{2}$/.test(from));
+  const range = hasRange
+    ? resolvePeriodRange("custom", today, { from, to })
+    : resolvePeriodRange("mtd", today);
+  const { fromISO, toISO, label: periodLabel } = range;
+
+  // Per-tenant business thresholds (SIP-rejection look-back, etc.).
+  const thresholds = getDashboardThresholds(session.tenantId);
+  const sipRejectionWindowDays = thresholds.sipRejectionWindowDays;
+
+  const data = await withTenant(session.tenantId, async (tx) => {
+    // My clients + AUM
+    const clientStats = await tx.execute(sql`
+      SELECT
+        COUNT(*)::int AS my_clients,
+        COALESCE(SUM(aum::numeric), 0)::numeric AS my_aum,
+        COALESCE(SUM(active_sip_amount::numeric), 0)::numeric AS my_sip_book
+      FROM investors WHERE rm_id = ${userId} AND status = 'active' AND deleted_at IS NULL
+    `);
+    const c = clientStats.rows[0] as any;
+
+    // My leads by stage
+    const leadStats = await tx.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold'))::int AS open_leads,
+        COUNT(*) FILTER (WHERE converted_investor_id IS NOT NULL AND converted_at >= ${fromISO} AND converted_at <= ${toISO})::int AS converted_mtd,
+        COUNT(*) FILTER (WHERE next_follow_up_at <= ${endOfDay.toISOString()} AND converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold'))::int AS follow_ups_today
+      FROM leads WHERE owner_id = ${userId}
+    `);
+    const l = leadStats.rows[0] as any;
+
+    // My monthly business (from transactions)
+    const businessStats = await tx.execute(sql`
+      SELECT
+        COALESCE(SUM(CASE WHEN direction = 'inflow' THEN amount::numeric ELSE 0 END), 0) AS gross,
+        COALESCE(SUM(CASE WHEN direction = 'outflow' THEN amount::numeric ELSE 0 END), 0) AS redemption
+      FROM transactions t
+      WHERE t.status IN ('processed', 'successful')
+        AND t.order_date >= ${fromISO.slice(0, 10)}::date
+        AND t.order_date <= ${toISO.slice(0, 10)}::date
+        AND t.investor_id IN (SELECT id FROM investors WHERE rm_id = ${userId})
+    `);
+    const b = businessStats.rows[0] as any;
+
+    // Per-day net-sales series across the resolved window — drives the
+    // "My net sales" hero-tile sparkline. Cheap aggregate over the same rows
+    // businessStats already scans; ordered ascending so the line reads L→R.
+    const netSeriesRes = await tx.execute(sql`
+      SELECT t.order_date::date AS d,
+             COALESCE(SUM(CASE WHEN t.direction = 'inflow' THEN t.amount::numeric ELSE 0 END), 0)
+               - COALESCE(SUM(CASE WHEN t.direction = 'outflow' THEN t.amount::numeric ELSE 0 END), 0) AS net
+      FROM transactions t
+      WHERE t.status IN ('processed', 'successful')
+        AND t.order_date >= ${fromISO.slice(0, 10)}::date
+        AND t.order_date <= ${toISO.slice(0, 10)}::date
+        AND t.investor_id IN (SELECT id FROM investors WHERE rm_id = ${userId})
+      GROUP BY t.order_date::date
+      ORDER BY t.order_date::date ASC
+    `);
+    const netSeries = (netSeriesRes.rows as any[]).map((r) => Number(r.net));
+
+    // Reviews due this week
+    const reviewsDue = await tx
+      .select()
+      .from(investors)
+      .where(
+        and(
+          eq(investors.rmId, userId),
+          isNotNull(investors.nextReviewAt),
+          sql`next_review_at <= ${next7.toISOString()}`
+        )
+      )
+      .orderBy(investors.nextReviewAt)
+      .limit(10);
+
+    // Today's follow-ups (leads + tasks)
+    const followUps = await tx.execute(sql`
+      SELECT 'lead' AS kind, id, name AS title, next_follow_up_at AS due_at FROM leads
+      WHERE owner_id = ${userId} AND next_follow_up_at IS NOT NULL
+        AND next_follow_up_at <= ${endOfDay.toISOString()}
+        AND converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold')
+      UNION ALL
+      SELECT 'task', id, title, due_at FROM tasks
+      WHERE assignee_id = ${userId} AND status = 'open'
+        AND due_at IS NOT NULL AND due_at <= ${endOfDay.toISOString()}
+      ORDER BY due_at ASC LIMIT 10
+    `);
+
+    // Birthdays this week (DOB month-day matches today + 7)
+    const birthdays = await tx.execute(sql`
+      SELECT id, name, dob, segment_tag, avatar_url FROM investors
+      WHERE rm_id = ${userId} AND dob IS NOT NULL
+        AND to_char(dob, 'MM-DD') BETWEEN to_char(current_date, 'MM-DD')
+                                       AND to_char(current_date + interval '7 days', 'MM-DD')
+      LIMIT 8
+    `);
+
+    // My open tasks
+    const myTasks = await tx
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.assigneeId, userId), eq(tasks.status, "open")))
+      .orderBy(desc(tasks.priority), tasks.dueAt)
+      .limit(8);
+
+    // SIP top-up opportunities (HNI / Affluent with active SIPs that haven't increased in 12mo)
+    const topUpRes = await tx.execute(sql`
+      SELECT i.id, i.name, i.segment_tag, i.active_sip_amount, i.avatar_url
+      FROM investors i
+      WHERE i.rm_id = ${userId}
+        AND i.segment_tag IN ('HNI', 'Affluent')
+        AND i.active_sip_amount::numeric > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM sips s
+          WHERE s.investor_id = i.id
+            AND s.created_at >= now() - interval '12 months'
+        )
+      LIMIT 5
+    `);
+
+    // SIP rejection follow-ups — rejected SIPs within the configured look-back
+    // window (getDashboardThresholds.sipRejectionWindowDays) for my clients.
+    const sipRejections = await tx.execute(sql`
+      SELECT t.id, t.scheme_name, t.amount, t.reason_code, t.created_at,
+             i.id AS investor_id, i.name AS investor_name, i.avatar_url AS investor_avatar_url
+      FROM transactions t
+      JOIN investors i ON i.id = t.investor_id
+      WHERE i.rm_id = ${userId}
+        AND t.type = 'sip'
+        AND t.status = 'rejected'
+        AND t.created_at >= now() - make_interval(days => ${sipRejectionWindowDays})
+      ORDER BY t.created_at DESC
+      LIMIT 8
+    `);
+
+    // Anniversaries (investor onboarded_at month-day matches today + 7)
+    const anniversaries = await tx.execute(sql`
+      SELECT id, name, onboarded_at, avatar_url,
+             EXTRACT(YEAR FROM age(current_date, onboarded_at))::int AS years
+      FROM investors
+      WHERE rm_id = ${userId} AND onboarded_at IS NOT NULL
+        AND to_char(onboarded_at, 'MM-DD') BETWEEN to_char(current_date, 'MM-DD')
+                                                AND to_char(current_date + interval '7 days', 'MM-DD')
+      LIMIT 8
+    `);
+
+    // Pending service requests for assigned clients
+    const myServiceReqs = await tx.execute(sql`
+      SELECT sr.id, sr.ticket_no, sr.subject, sr.type, sr.status, sr.sla_resolution_at,
+             i.id AS investor_id, i.name AS investor_name, i.avatar_url AS investor_avatar_url
+      FROM service_requests sr
+      JOIN investors i ON i.id = sr.investor_id
+      WHERE i.rm_id = ${userId}
+        AND sr.status IN ('open', 'in_progress')
+      ORDER BY sr.sla_resolution_at ASC NULLS LAST
+      LIMIT 8
+    `);
+
+    // RM personal targets — annual_target / 12 = monthly sales target
+    // sip_monthly_target = monthly SIP mobilisation target
+    const myTargets = await tx.execute(sql`
+      SELECT
+        COALESCE(annual_target::numeric, 0) AS annual_target,
+        COALESCE(sip_monthly_target::numeric, 0) AS sip_monthly_target
+      FROM users WHERE id = ${userId}
+    `);
+    const t = myTargets.rows[0] as any;
+    const annualTarget = Number(t?.annual_target ?? 0);
+    // Monthly sales target = annualTarget / 12; fallback 0 (no target set)
+    const monthlyTarget = annualTarget > 0 ? annualTarget / 12 : 0;
+    const sipMonthlyTarget = Number(t?.sip_monthly_target ?? 0);
+
+    return {
+      myClients: Number(c.my_clients),
+      myAum: Number(c.my_aum),
+      mySipBook: Number(c.my_sip_book),
+      openLeads: Number(l.open_leads),
+      convertedMtd: Number(l.converted_mtd),
+      followUpsToday: Number(l.follow_ups_today),
+      grossMtd: Number(b.gross),
+      netMtd: Number(b.gross) - Number(b.redemption),
+      netSeries,
+      reviewsDue,
+      followUps: followUps.rows as any[],
+      birthdays: birthdays.rows as any[],
+      myTasks,
+      topUps: topUpRes.rows as any[],
+      sipRejections: sipRejections.rows as any[],
+      anniversaries: anniversaries.rows as any[],
+      myServiceReqs: myServiceReqs.rows as any[],
+      monthlyTarget,
+      sipMonthlyTarget,
+      annualTarget,
+    };
+  }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
+
+  return (
+    <div className="space-y-6 max-w-7xl">
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {viewingOther ? `${targetName ?? "Team member"}'s day` : "My day"}
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            {viewingOther
+              ? `Read-only view of ${targetName ?? "this team member"}'s book, pipeline and tasks.`
+              : `Hi ${session.name.split(" ")[0]} — here's what to focus on today.`}
+          </p>
+        </div>
+        <NbaDateFilter from={from ?? ""} to={to ?? ""} />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <Kpi label={`${who} clients`} value={String(data.myClients)} sub={formatINR(data.myAum) + " AUM"} />
+        <Kpi label={`${who} SIP book`} value={formatINR(data.mySipBook)} sub="per month" />
+        <Kpi
+          label={`${who} net sales`}
+          value={formatINR(data.netMtd)}
+          sub={`Gross ${formatINR(data.grossMtd)} · ${periodLabel}`}
+        >
+          {data.netSeries.length >= 2 && (
+            <Sparkline
+              data={data.netSeries}
+              className="mt-2 w-full"
+              strokeClass={data.netMtd >= 0 ? "text-emerald-500" : "text-rose-500"}
+            />
+          )}
+        </Kpi>
+        <Kpi label="Open leads" value={String(data.openLeads)} sub={`${data.convertedMtd} converted · ${periodLabel}`} />
+        {/* Sales Quota Ring — driven by users.annual_target / 12 */}
+        {data.monthlyTarget > 0 ? (
+          <div className="card-surface glass-card p-4 flex flex-col items-center justify-center text-center">
+            <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">MTD Sales Quota</div>
+            <div className="relative size-16 flex items-center justify-center">
+              <svg className="size-full transform -rotate-90">
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="26"
+                  className="stroke-slate-100 dark:stroke-slate-800 fill-none"
+                  strokeWidth="5"
+                />
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="26"
+                  className={`fill-none ${
+                    data.netMtd >= data.monthlyTarget
+                      ? "stroke-emerald-500"
+                      : data.netMtd >= data.monthlyTarget * 0.75
+                      ? "stroke-amber-500"
+                      : "stroke-brand-cyan"
+                  }`}
+                  strokeWidth="5"
+                  strokeDasharray={`${2 * Math.PI * 26}`}
+                  strokeDashoffset={`${2 * Math.PI * 26 * (1 - Math.min(100, Math.max(0, data.netMtd > 0 ? (data.netMtd / data.monthlyTarget) * 100 : 0)) / 100)}`}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute text-center">
+                <span className={`text-xs font-bold ${
+                  data.netMtd >= data.monthlyTarget ? "text-emerald-600" : "text-gradient"
+                }`}>
+                  {Math.min(100, Math.round(data.netMtd > 0 ? (data.netMtd / data.monthlyTarget) * 100 : 0))}%
+                </span>
+              </div>
+            </div>
+            <div className="text-[9px] text-muted-foreground mt-2 font-medium">
+              Target {formatINR(data.monthlyTarget)} · Got {formatINR(data.netMtd)}
+            </div>
+            {data.sipMonthlyTarget > 0 && (
+              <div className="text-[9px] text-muted-foreground mt-1">
+                SIP target: {formatINR(data.sipMonthlyTarget)}/mo
+              </div>
+            )}
+          </div>
+        ) : (
+          <Link
+            href="/dashboard/settings/targets"
+            className="card-surface glass-card p-4 flex flex-col items-center justify-center text-center hover:bg-accent/40 transition-colors"
+          >
+            <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">MTD Quota</div>
+            <div className="size-16 rounded-full border-2 border-dashed border-border flex items-center justify-center">
+              <span className="text-xl text-muted-foreground/40">—</span>
+            </div>
+            <div className="text-[9px] text-brand-cyan-deep mt-2 font-semibold">
+              Set your target →
+            </div>
+          </Link>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Section title="Follow-ups today" count={data.followUps.length}>
+          {data.followUps.length === 0 ? (
+            <DashboardEmptyState
+              compact
+              title="No follow-ups due today 🎉"
+              hint="You're all caught up — nothing on your plate for today."
+            />
+          ) : (
+            <ul className="divide-y">
+              {data.followUps.map((f: any) => (
+                <li key={`${f.kind}-${f.id}`} className="py-2 flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className={f.kind === "lead" ? "pulse-warning-dot" : "pulse-danger-dot"} />
+                    {f.kind === "lead" ? (
+                      <Phone className="size-3.5 text-blue-600" />
+                    ) : (
+                      <AlertCircle className="size-3.5 text-amber-600" />
+                    )}
+                    <span>{f.title}</span>
+                    <span className="text-xs uppercase text-muted-foreground">{f.kind}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{formatRelative(f.due_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section title="Reviews due this week" count={data.reviewsDue.length}>
+          {data.reviewsDue.length === 0 ? (
+            <DashboardEmptyState
+              compact
+              title="No reviews due this week 🎉"
+              hint="No client portfolio reviews are scheduled in the next 7 days."
+            />
+          ) : (
+            <ul className="divide-y">
+              {data.reviewsDue.map((i) => (
+                <li key={i.id} className="py-2 flex items-center justify-between text-sm">
+                  <Link href={`/dashboard/investors/${i.id}`} className="flex items-center gap-2 hover:underline">
+                    <Avatar src={(i as any).avatarUrl ? `/api/investors/${i.id}/avatar` : null} name={i.name} size={26} />
+                    <span>{i.name}</span>
+                  </Link>
+                  <span className="text-xs text-muted-foreground">
+                    {i.segmentTag} · {i.nextReviewAt ? formatDate(i.nextReviewAt) : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
+
+      {!limited && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Section title={`SIP rejection follow-ups (${sipRejectionWindowDays}d)`} count={data.sipRejections.length}>
+              {data.sipRejections.length === 0 ? (
+                <DashboardEmptyState
+                  compact
+                  title="No SIP rejections to chase 🎉"
+                  hint={`No SIPs were rejected for your clients in the last ${sipRejectionWindowDays} days.`}
+                />
+              ) : (
+                <ul className="divide-y">
+                  {data.sipRejections.map((r: any) => (
+                    <li key={r.id} className="py-2 flex items-center justify-between text-sm">
+                      <Link href={`/dashboard/investors/${r.investor_id}`} className="flex items-center gap-2 hover:underline">
+                        <Avatar src={r.investor_avatar_url ? `/api/investors/${r.investor_id}/avatar` : null} name={r.investor_name} size={26} />
+                        <div>
+                          <div className="font-medium">{r.investor_name}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {r.scheme_name ?? "—"} · {r.reason_code ?? "unknown reason"}
+                          </div>
+                        </div>
+                      </Link>
+                      <div className="text-right">
+                        <div className="text-xs text-rose-600 font-medium">{formatINR(Number(r.amount))}</div>
+                        <div className="text-xs text-muted-foreground">{formatRelative(r.created_at)}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section title="Pending service requests" count={data.myServiceReqs.length}>
+              {data.myServiceReqs.length === 0 ? (
+                <DashboardEmptyState
+                  compact
+                  title="No open service requests 🎉"
+                  hint="None of your clients have an open or in-progress ticket."
+                />
+              ) : (
+                <ul className="divide-y">
+                  {data.myServiceReqs.map((sr: any) => {
+                    const slaMs = sr.sla_resolution_at
+                      ? new Date(sr.sla_resolution_at).getTime() - Date.now()
+                      : null;
+                    const breached = slaMs != null && slaMs < 0;
+                    return (
+                      <li key={sr.id} className="py-2 flex items-center justify-between text-sm">
+                        <Link href="/dashboard/service-requests" className="flex items-center gap-2 hover:underline">
+                          <Avatar src={sr.investor_avatar_url ? `/api/investors/${sr.investor_id}/avatar` : null} name={sr.investor_name} size={26} />
+                          <div>
+                            <div className="font-medium">{sr.subject}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {sr.investor_name} · {sr.type}
+                            </div>
+                          </div>
+                        </Link>
+                        <span className={`text-xs ${breached ? "text-rose-600 font-medium" : "text-muted-foreground"}`}>
+                          {breached ? "SLA breached" : sr.status}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Section>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Section title="Birthdays this week" count={data.birthdays.length}>
+              {data.birthdays.length === 0 ? (
+                <DashboardEmptyState
+                  compact
+                  title="No birthdays this week"
+                  hint="No client birthdays fall in the next 7 days."
+                />
+              ) : (
+                <ul className="divide-y">
+                  {data.birthdays.map((b: any) => (
+                    <li key={b.id} className="py-2 flex items-center justify-between text-sm">
+                      <Link href={`/dashboard/investors/${b.id}`} className="flex items-center gap-2 hover:underline">
+                        <Avatar src={b.avatar_url ? `/api/investors/${b.id}/avatar` : null} name={b.name} size={26} />
+                        <span>{b.name}</span>
+                      </Link>
+                      <span className="text-xs text-muted-foreground">{formatDate(b.dob)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section title="Anniversaries this week" count={data.anniversaries.length}>
+              {data.anniversaries.length === 0 ? (
+                <DashboardEmptyState
+                  compact
+                  title="No anniversaries this week"
+                  hint="No client onboarding anniversaries fall in the next 7 days."
+                />
+              ) : (
+                <ul className="divide-y">
+                  {data.anniversaries.map((a: any) => (
+                    <li key={a.id} className="py-2 flex items-center justify-between text-sm">
+                      <Link href={`/dashboard/investors/${a.id}`} className="flex items-center gap-2 hover:underline">
+                        <Avatar src={a.avatar_url ? `/api/investors/${a.id}/avatar` : null} name={a.name} size={26} />
+                        <span>{a.name}</span>
+                      </Link>
+                      <span className="text-xs text-muted-foreground">
+                        {a.years > 0 ? `${a.years} yr` : "today"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section title="SIP top-up opportunities" count={data.topUps.length}>
+              {data.topUps.length === 0 ? (
+                <DashboardEmptyState
+                  compact
+                  title="No top-up opportunities right now"
+                  hint="No HNI/Affluent clients are due for a SIP step-up at the moment."
+                />
+              ) : (
+                <ul className="divide-y">
+                  {data.topUps.map((t: any) => (
+                    <li key={t.id} className="py-2 flex items-center justify-between text-sm">
+                      <Link href={`/dashboard/investors/${t.id}`} className="flex items-center gap-2 hover:underline">
+                        <Avatar src={t.avatar_url ? `/api/investors/${t.id}/avatar` : null} name={t.name} size={26} />
+                        <span>{t.name}</span>
+                      </Link>
+                      <span className="text-xs text-muted-foreground">
+                        {t.segment_tag} · {formatINR(Number(t.active_sip_amount))}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          </div>
+        </>
+      )}
+
+      <Section title={`${who} open tasks`} count={data.myTasks.length}>
+        {data.myTasks.length === 0 ? (
+          <DashboardEmptyState
+            compact
+            title="No open tasks 🎉"
+            hint="Your task list is clear. Nice work staying on top of things."
+          />
+        ) : (
+          <ul className="divide-y">
+            {data.myTasks.map((t) => (
+              <li key={t.id} className="py-2 flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" className="size-3.5 rounded" />
+                  <span>{t.title}</span>
+                  <span className="text-xs uppercase text-muted-foreground">{t.priority}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {t.dueAt ? formatRelative(t.dueAt) : "no due"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* ---------- RM Insights — service-first cockpit additions ---------- */}
+      {!limited && <RmInsightsSection session={session} targetUserId={targetUserId} />}
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  sub,
+  children,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="card-surface glass-card p-5 hover-glow-cyan">
+      <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">{label}</div>
+      <div className="text-2xl font-bold mt-2 tracking-tight text-gradient">{value}</div>
+      {sub && <div className="text-xs text-muted-foreground mt-1 font-medium">{sub}</div>}
+      {children}
+    </div>
+  );
+}
+
+function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+  return (
+    <div className="card-surface glass-card p-5">
+      <div className="font-semibold flex items-center justify-between mb-3">
+        <span className="text-sm font-semibold tracking-tight text-foreground/90">{title}</span>
+        {count !== undefined && (
+          <span className="chip bg-brand-cyan-light text-brand-cyan-deep text-xs font-semibold px-2 py-0.5">
+            {count}
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}

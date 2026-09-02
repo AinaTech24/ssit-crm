@@ -1,0 +1,121 @@
+name: Deploy to AWS (EC2)
+
+# Ships the checked-out tree to the EC2 box and runs the blue-green deploy
+# script that already lives there (~/run-deploy.sh): prune → build → typecheck →
+# migrate → schema guard → start the idle colour → health-check → stop the old
+# colour. A failed deploy leaves the previous colour serving, so it cannot take
+# the site down.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_SSH_HOST   EC2 public IP / DNS        e.g. 13.204.102.20
+#   DEPLOY_SSH_USER   ssh user                   e.g. ec2-user
+#   DEPLOY_SSH_KEY    the PRIVATE key (PEM), full file including the BEGIN/END lines
+# Optional:
+#   DEPLOY_SSH_PORT   defaults to 22
+#   DEPLOY_APP_DIR    tree on the box            defaults to /home/ec2-user/app
+#
+# NOTE ON .env: the box owns its own ~/app/.env. This workflow never writes it,
+# so production secrets stay on the box and out of CI.
+
+on:
+  push:
+    branches: [deploy/aws]
+  workflow_dispatch:
+
+concurrency:
+  # Two deploys at once fight over the Docker build and the blue/green state
+  # file. Queue them instead of cancelling — a half-finished deploy is worse
+  # than a slow one.
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fail loudly when the deploy isn't configured. This job used to "succeed"
+      # in 6 seconds with only a ::warning:: when the secrets were absent, so the
+      # branch looked green while nothing had shipped for weeks. A deploy that
+      # does nothing must be RED.
+      - name: Require deploy secrets
+        env:
+          HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          USER: ${{ secrets.DEPLOY_SSH_USER }}
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          missing=""
+          [ -n "$HOST" ] || missing="$missing DEPLOY_SSH_HOST"
+          [ -n "$USER" ] || missing="$missing DEPLOY_SSH_USER"
+          [ -n "$KEY" ]  || missing="$missing DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Auto-deploy is not configured. Missing repo secret(s):$missing"
+            echo "Add them under Settings → Secrets and variables → Actions, then re-run."
+            exit 1
+          fi
+
+      # The box holds a plain source tree (NOT a git checkout), so we ship the
+      # tree rather than pulling on the far side.
+      - name: Package the tree
+        run: |
+          tar czf /tmp/app.tgz \
+            --exclude='node_modules' --exclude='.next' --exclude='.git' \
+            src public drizzle scripts \
+            package.json package-lock.json next.config.ts tsconfig.json \
+            drizzle.config.ts postcss.config.js tailwind.config.ts \
+            next-env.d.ts vitest.config.ts
+          ls -lh /tmp/app.tgz
+
+      - name: Copy to the box
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          source: /tmp/app.tgz
+          target: /tmp
+          strip_components: 1
+
+      - name: Deploy (blue-green) and wait for the result
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          command_timeout: 40m
+          script: |
+            set -euo pipefail
+            APP_DIR="${{ secrets.DEPLOY_APP_DIR || '/home/ec2-user/app' }}"
+            cd "$APP_DIR"
+
+            # A tarball only ADDS files. Anything deleted in git must be deleted
+            # here too, or removed code keeps shipping. Snapshot, extract, then
+            # drop paths that are no longer in the tarball.
+            tar tzf /tmp/app.tgz | sed 's#/$##' | sort -u > /tmp/shipped.txt
+            tar xzf /tmp/app.tgz -C "$APP_DIR"
+            find src scripts -type f 2>/dev/null | sort -u > /tmp/onbox.txt
+            comm -13 /tmp/shipped.txt /tmp/onbox.txt | while read -r stale; do
+              [ -n "$stale" ] && rm -f "$stale" && echo "removed stale: $stale"
+            done
+
+            # Run detached: the SSH session must not own a 20-minute build.
+            rm -f ~/deploy-current.log
+            nohup bash ~/run-deploy.sh > ~/deploy-current.log 2>&1 &
+
+            # Poll for the terminal marker the script writes.
+            for _ in $(seq 1 240); do
+              grep -aq "DEPLOY_DONE_EXIT" ~/deploy-current.log 2>/dev/null && break
+              sleep 10
+            done
+
+            grep -aE "^=== |DEPLOY_DONE_EXIT" ~/deploy-current.log || true
+            code=$(grep -ao "DEPLOY_DONE_EXIT=[0-9]*" ~/deploy-current.log | tail -1 | cut -d= -f2)
+            if [ "${code:-}" != "0" ]; then
+              echo "::error::Deploy failed (DEPLOY_DONE_EXIT=${code:-timeout}). The previous colour is still serving."
+              tail -80 ~/deploy-current.log
+              exit 1
+            fi
+            echo "Deploy OK — active colour: $(cat ~/app/.active-color 2>/dev/null || echo unknown)"

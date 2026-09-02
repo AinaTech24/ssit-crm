@@ -1,0 +1,1054 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ═══════════════════════════════════════════════════════════════════════
+       SSIT CRM palette — SSIT red primary (#C5202A), dark-teal accent (#1F3D3B).
+       Derived from the SSIT logo. The brand token names below keep their legacy
+       spelling (`--brand-navy` = red, `--brand-cyan` = teal) so the hundreds of
+       existing `bg-brand-navy` / `text-brand-cyan` consumers re-theme in place.
+       ═══════════════════════════════════════════════════════════════════════ */
+    --background: 195 24% 98.6%;             /* paper-white with a faint teal tint */
+    --foreground: 200 30% 12%;               /* near-black charcoal-teal */
+    --card: 0 0% 100%;
+    --card-foreground: 200 30% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 30% 12%;
+
+    --primary: 358 75% 41%;                  /* SSIT red #B71A20 */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 200 20% 95.5%;              /* soft neutral for hovers / chips */
+    --secondary-foreground: 200 30% 20%;
+
+    --muted: 200 18% 95%;
+    --muted-foreground: 200 12% 44%;
+
+    --accent: 358 70% 96%;                   /* light brand tint — hover surface */
+    --accent-foreground: 358 60% 30%;        /* deep red text on the tint */
+
+    --destructive: 4 80% 52%;                /* warmer red, distinct from brand crimson */
+    --destructive-foreground: 0 0% 100%;
+    --success: 151 55% 35%;
+    --success-foreground: 151 62% 22%;
+    --warning: 37 92% 50%;
+    --warning-foreground: 31 78% 25%;
+    --info: 199 74% 45%;
+    --info-foreground: 202 72% 28%;
+
+    --border: 200 20% 90%;
+    --input: 200 20% 90%;
+    --ring: 358 75% 41%;                     /* SSIT-red focus ring — one accent */
+
+    --radius: 0.75rem;                       /* 12px base; xl utilities give 16/20px */
+
+    /* Extended brand tokens (consumed by gradients, badges, hero strips).
+       Names are legacy; values are the SSIT palette. */
+    --brand-navy: 358 75% 41%;               /* = SSIT red #B71A20 */
+    --brand-navy-deep: 358 78% 32%;          /* deep red */
+    --brand-navy-light: 358 70% 96%;         /* red tint */
+    --brand-cyan: 358 75% 41%;               /* re-pointed: = SSIT red (one accent) */
+    --brand-cyan-deep: 358 78% 32%;          /* deep red */
+    --brand-cyan-light: 358 70% 96%;         /* red tint */
+    --brand-violet: 356 60% 55%;
+    --brand-mint: 358 75% 41%;              /* re-pointed: = SSIT red (one accent) */
+    /* Sidebar active-item tint — theme-aware (see .nav-link-active). Soft brand
+       red on light; a muted deep red on dark (brand-navy-light would be near
+       white in dark, so it gets its own value below). */
+    --nav-active-bg: 358 75% 41%;            /* solid SSIT red pill */
+    --nav-active-fg: 0 0% 100%;              /* white label + icon on the pill */
+  }
+
+  .dark {
+    --background: 200 30% 7%;
+    --foreground: 200 20% 96%;
+    --card: 200 30% 10%;
+    --card-foreground: 200 20% 96%;
+    --popover: 200 30% 10%;
+    --popover-foreground: 200 20% 96%;
+    --primary: 358 72% 52%;                  /* brighter SSIT red (#B71A20) for dark bg */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 200 22% 15%;
+    --secondary-foreground: 200 20% 96%;
+    --muted: 200 22% 15%;
+    --muted-foreground: 200 14% 64%;
+    --accent: 358 24% 22%;                   /* dark red-tinted hover surface */
+    --accent-foreground: 0 0% 98%;
+    --destructive: 4 70% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 151 52% 47%;
+    --success-foreground: 151 70% 82%;
+    --warning: 42 88% 55%;
+    --warning-foreground: 42 90% 84%;
+    --info: 199 72% 58%;
+    --info-foreground: 199 82% 84%;
+    --border: 200 22% 19%;
+    --input: 200 22% 19%;
+    --ring: 358 72% 52%;
+    /* brand aliases for dark mode */
+    --brand-navy: 358 72% 52%;
+    --brand-navy-deep: 358 74% 38%;
+    --brand-cyan: 358 72% 52%;
+    --brand-cyan-deep: 358 74% 38%;
+    --nav-active-bg: 358 72% 52%;
+    --nav-active-fg: 0 0% 100%;
+  }
+
+  /* Dark sidebar — a scoped theme applied to the sidebar shell (desktop aside +
+     mobile drawer). It re-points the neutral + active tokens the nav already
+     consumes to a charcoal/light palette, so the whole rail goes dark without
+     touching any nav component. The rest of the app keeps its own light/dark. */
+  .sidebar-theme {
+    --card: 218 24% 11%;
+    --popover: 218 24% 13%;
+    --secondary: 220 16% 20%;
+    --secondary-foreground: 220 16% 92%;
+    --muted: 220 16% 18%;
+    --muted-foreground: 220 10% 60%;
+    --foreground: 220 18% 91%;
+    --border: 220 14% 22%;
+    --input: 220 14% 24%;
+    --ring: 358 72% 52%;
+    --nav-active-bg: 358 72% 52%;
+    --nav-active-fg: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  /* Native checkboxes / radios pick up the firm's theme accent (not the
+     browser-default blue) everywhere — filter dropdowns, forms, pickers. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: hsl(var(--primary));
+  }
+  /* Checkboxes / radios must NEVER show the boxy native outline or the form
+     field's border-ring (which made a square halo around the tick). On mouse:
+     no outline. On keyboard: a small, tight on-brand ring. */
+  input[type="checkbox"]:focus,
+  input[type="radio"]:focus {
+    @apply outline-none ring-0;
+  }
+  input[type="checkbox"]:focus-visible,
+  input[type="radio"]:focus-visible {
+    @apply outline-none ring-2 ring-ring/40 ring-offset-1 ring-offset-background rounded;
+  }
+
+  html {
+    /* --brand-font is set per-tenant (Settings → Appearance); falls back to Inter. */
+    font-family: var(--brand-font, var(--font-inter)), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "cv02" 1, "cv11" 1, "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Global themed scrollbar — replaces the OS/system scrollbar app-wide with an
+     on-brand thin bar that follows the active theme (light/dark + tenant hues).
+     Per-element opt-out utilities (.scrollbar-none / .scrollbar-thin /
+     .table-scroll) have higher specificity and a later layer, so they still
+     override this everywhere they're applied. */
+  /* One scrollbar treatment for the whole app — same tint as .table-scroll, so
+     a table that scrolls sideways looks identical whether it opted into
+     .table-scroll or just uses overflow-x-auto. All colours come from theme
+     variables, so light/dark and tenant themes are handled automatically. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 120ms ease;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.6);
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* When printing, drop the mesh + force white so PDFs aren't tinted. */
+  @media print {
+    body {
+      background: white !important;
+      background-image: none !important;
+    }
+    /* Allow page breaks to flow naturally */
+    .card-elevated, .card-surface { box-shadow: none !important; }
+  }
+
+  /* Display headings — tighter tracking, OpenType salt for confident feel.
+     Intentionally NOT setting a color here so a heading inside a dark/branded
+     container can inherit the parent's color (e.g. white on brand-mesh). */
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight;
+    font-feature-settings: "cv11" 1, "ss01" 1, "ss02" 1;
+  }
+
+  h1 { letter-spacing: -0.025em; }
+  h2 { letter-spacing: -0.02em; }
+
+  /* No raw browser outline on interactive controls — we render a custom
+     focus-visible ring (below) for keyboard users instead, so mouse clicks
+     never flash an ugly native outline but keyboard a11y is preserved. */
+  button, a, [role="button"], [role="tab"], summary, [tabindex]:not([tabindex="-1"]),
+  input, textarea, select {
+    @apply outline-none;
+  }
+
+  /* Smoother focus ring everywhere — keyboard a11y without ugliness */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring/40 ring-offset-1 ring-offset-background;
+  }
+
+  /* Form fields NEVER show the native black outline or the dark focus ring —
+     only a soft on-brand cue. Clicking any input on the site no longer flashes
+     a black outline anywhere. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="search"]):focus,
+  textarea:focus, select:focus,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="search"]):focus-visible,
+  textarea:focus-visible, select:focus-visible {
+    @apply outline-none ring-2 ring-ring/25 ring-offset-0;
+    border-color: hsl(var(--brand-cyan) / 0.55);
+  }
+  /* Search inputs render inside their own styled shell (e.g. GlobalSearch) —
+     no ring/border here so we never get a double outline. */
+  input[type="search"]:focus,
+  input[type="search"]:focus-visible {
+    @apply outline-none ring-0;
+    border-color: transparent;
+  }
+
+  /* Animated AI-assistant icon — a gentle "alive" twinkle so the AI entry
+     stands out (lightweight CSS, no Lottie runtime). Applied to the sidebar
+     AI Assistant nav item and anything tagged .ai-icon-animated. */
+  @keyframes ai-twinkle {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.9; filter: drop-shadow(0 0 0 transparent); }
+    50% { transform: scale(1.18) rotate(8deg); opacity: 1; filter: drop-shadow(0 0 4px hsl(var(--brand-cyan) / 0.55)); }
+  }
+  [data-href="/dashboard/ai-assistant"] .nav-link-icon,
+  .ai-icon-animated {
+    animation: ai-twinkle 2.4s ease-in-out infinite;
+    color: hsl(var(--brand-cyan));
+    transform-origin: center;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-href="/dashboard/ai-assistant"] .nav-link-icon,
+    .ai-icon-animated { animation: none; }
+  }
+
+  /* Native <select> not yet migrated to the custom <Select> component still get
+     a consistent look: our own chevron instead of the OS arrow, and no black
+     outline (handled above). The fully-custom dropdown ships on the filter bar
+     and rolls out to forms over time. */
+  select:not([multiple]) {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.55rem center;
+    background-size: 0.85rem;
+    padding-right: 1.85rem;
+  }
+
+  /* Dark mode: the chevron stroke above is hardcoded slate-500, which vanishes
+     on dark surfaces — swap in a slate-400 stroke. */
+  .dark select:not([multiple]) {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  }
+
+  /* Selection — on-brand cyan tint */
+  ::selection {
+    background: hsl(var(--brand-cyan) / 0.18);
+    color: hsl(var(--foreground));
+  }
+
+  /* Hide default number-input spinners */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Component utility classes — referenced by hand-built buttons / cards / chips
+   so we don't need shadcn primitives everywhere. Keep names stable; tweak look.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  /* ─── Buttons ────────────────────────────────────────────────────────── */
+
+  /* Primary — gradient navy with soft glow + active press */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap
+           rounded-lg px-4 py-2 text-sm font-medium
+           text-white shadow-sm
+           transition-all duration-150
+           hover:shadow-md hover:-translate-y-px
+           active:translate-y-0 active:shadow-sm active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed
+           disabled:translate-y-0 disabled:shadow-none
+           focus-visible:ring-2 focus-visible:ring-ring/50;
+    background-color: hsl(var(--primary));
+  }
+  .btn-primary:hover { background-color: hsl(var(--primary) / 0.9); }
+
+  /* Accent — electric cyan gradient with a vivid glow on hover */
+  .btn-accent {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap
+           rounded-lg px-4 py-2 text-sm font-semibold
+           text-white shadow-sm
+           transition-all duration-150
+           hover:shadow-md hover:-translate-y-px
+           active:translate-y-0 active:shadow-sm active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: hsl(var(--primary));
+  }
+  .btn-accent:hover { background-color: hsl(var(--primary) / 0.9); }
+
+  /* Secondary — refined ghost-card button */
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap
+           rounded-lg border border-border bg-card text-foreground
+           px-4 py-2 text-sm font-medium shadow-sm
+           hover:bg-secondary hover:border-foreground/15 hover:shadow
+           active:scale-[0.98]
+           transition-all duration-150
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Ghost — text-first, polite */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap
+           rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground
+           hover:bg-secondary hover:text-foreground
+           active:scale-[0.98]
+           transition-all duration-150;
+  }
+
+  /* Danger (destructive) — for delete actions */
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap
+           rounded-lg px-4 py-2 text-sm font-medium
+           bg-destructive text-destructive-foreground shadow-sm
+           hover:bg-destructive/90 hover:shadow
+           active:scale-[0.98]
+           transition-all duration-150
+           disabled:opacity-50;
+  }
+
+  /* Icon button — square, used for table row actions */
+  .btn-icon {
+    @apply inline-flex items-center justify-center
+           size-8 rounded-md text-muted-foreground
+           hover:bg-secondary hover:text-foreground
+           transition-colors duration-150
+           focus-visible:ring-2 focus-visible:ring-ring/40;
+  }
+
+  /* ─── Surfaces ───────────────────────────────────────────────────────── */
+
+  /* Card — the workhorse. Soft elevation, subtle gradient overlay. */
+  .card-surface {
+    @apply rounded-xl bg-card text-card-foreground shadow-none
+           border border-border
+           transition-shadow duration-200;
+  }
+
+  /* Elevated card — for hero/feature panels */
+  .card-elevated {
+    @apply rounded-2xl bg-card shadow-lg border border-border;
+  }
+
+  /* Glass panel — frosted, on-brand mesh */
+  .glass-panel {
+    @apply rounded-2xl border border-white/40 shadow-xl
+           backdrop-blur-xl backdrop-saturate-150;
+    background: linear-gradient(
+      135deg,
+      hsl(0 0% 100% / 0.7) 0%,
+      hsl(0 0% 100% / 0.85) 100%
+    );
+  }
+
+  /* KPI card — used on dashboard stat strips. Interactive lift on hover.
+     h-full so every tile fills its grid/flex cell → a row of KPI cards is
+     always the same height even when one has a longer sub-label. */
+  .kpi-card {
+    @apply h-full rounded-xl bg-card border border-border/70 p-4 shadow-sm
+           transition-all duration-200
+           hover:shadow-md hover:-translate-y-0.5 hover:border-brand-cyan/30;
+  }
+
+  /* Opt-in equal-height card for any grid/flex row of cards that should never
+     end up "one tall, one short". Add alongside card-surface. */
+  .card-equal {
+    @apply h-full;
+  }
+
+  /* Highlighted KPI — gradient navy → cyan, white text */
+  .kpi-hero {
+    @apply rounded-xl p-4 text-white shadow-lg
+           transition-all duration-200
+           hover:shadow-xl hover:-translate-y-0.5;
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--brand-navy-deep)) 0%,
+      hsl(var(--brand-navy)) 60%,
+      hsl(var(--brand-cyan-deep)) 100%
+    );
+  }
+
+  /* ─── Inputs ─────────────────────────────────────────────────────────── */
+
+  .input-base {
+    @apply w-full rounded-lg border border-border bg-card
+           px-3 py-2 text-sm shadow-sm
+           placeholder:text-muted-foreground
+           transition-all duration-150
+           focus:outline-none focus:border-brand-cyan
+           focus:ring-2 focus:ring-brand-cyan/20 focus:shadow
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-secondary;
+  }
+
+  /* Textarea — same shell, more breathing room */
+  textarea.input-base {
+    @apply leading-relaxed py-2.5;
+  }
+
+  /* ─── Chips & badges ─────────────────────────────────────────────────── */
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full
+           px-2.5 py-0.5 text-xs font-semibold;
+    box-shadow: inset 0 0 0 1px currentColor;
+    /* The inset ring uses currentColor at a low alpha via mix-blend; fallback below */
+  }
+  .chip {
+    /* re-declare so the inset ring blends gently */
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06);
+  }
+
+  /* Leading dot indicator — works inside chip with the right color */
+  .chip-dot::before {
+    content: "";
+    @apply size-1.5 rounded-full bg-current opacity-70 mr-0.5;
+  }
+
+  /* ─── Brand surfaces ─────────────────────────────────────────────────── */
+
+  .brand-gradient {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--brand-navy-deep)) 0%,
+      hsl(var(--brand-navy)) 50%,
+      hsl(var(--brand-cyan)) 100%
+    );
+  }
+
+  /* Soft brand bg — login pane, empty states, restricted screen */
+  .brand-soft {
+    background:
+      radial-gradient(ellipse at top left,
+        hsl(var(--brand-navy-light)) 0%, transparent 50%),
+      radial-gradient(ellipse at bottom right,
+        hsl(var(--brand-cyan-light)) 0%, transparent 55%),
+      hsl(var(--background));
+  }
+
+  /* Brand mesh — for sidebar header, login splash */
+  .brand-mesh {
+    background:
+      radial-gradient(at 0% 0%, hsl(var(--brand-cyan) / 0.18) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsl(var(--brand-navy) / 0.95) 0px, transparent 50%),
+      linear-gradient(135deg,
+        hsl(var(--brand-navy-deep)) 0%,
+        hsl(var(--brand-navy)) 100%);
+  }
+
+  /* Vertical brand accent bar — used at top of hero cards */
+  .brand-bar {
+    background-image: linear-gradient(
+      to right,
+      hsl(var(--brand-navy)) 0%,
+      hsl(var(--brand-cyan)) 100%
+    );
+  }
+
+  /* ─── Page chrome ────────────────────────────────────────────────────── */
+
+  /* Page section heading + subtitle */
+  .page-title {
+    @apply text-2xl font-bold tracking-tight flex items-center gap-2;
+  }
+  .page-subtitle {
+    @apply text-sm text-muted-foreground;
+  }
+
+  /* Section title (smaller, used on inner panels) */
+  .section-title {
+    @apply text-sm font-semibold tracking-tight text-foreground/90;
+  }
+  .section-subtitle {
+    @apply text-xs text-muted-foreground;
+  }
+
+  /* Soft divider with a subtle gradient */
+  .divider-soft {
+    @apply h-px w-full;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      hsl(var(--border)) 20%,
+      hsl(var(--border)) 80%,
+      transparent 100%
+    );
+  }
+
+  /* ─── Sidebar nav links ──────────────────────────────────────────────── */
+  /* `group` is added as a literal class in the component (Tailwind @apply
+     can't consume the group variant). */
+
+  /* Nav rows — calm, modern tinted-pill treatment (Linear/Notion style):
+     a subtle brand-tinted active pill with brand-coloured icon + label, and a
+     neutral hover. Replaces the old heavy solid-red fill, which read as loud
+     when stacked with pinned duplicates + red section headers. */
+  .nav-link {
+    @apply relative flex items-center gap-3 rounded-lg
+           px-3 py-[9px] text-[13px] font-medium
+           text-muted-foreground
+           hover:bg-secondary hover:text-foreground
+           transition-colors duration-150;
+  }
+  /* NOTE: the base `.nav-link-icon` sizing/colour lives as PLAIN top-level CSS
+     below (search "nav-link-icon base"). Inside @layer components a bare
+     single-class rule gets tree-shaken and never ships, which left the icons
+     unsized + uncoloured (invisible). The compound rules below are safe here. */
+  .nav-link:hover .nav-link-icon {
+    color: hsl(var(--foreground));
+  }
+  .nav-link-active,
+  .nav-link-active:hover {
+    background-color: hsl(var(--nav-active-bg));
+    color: hsl(var(--nav-active-fg));
+    font-weight: 600;
+  }
+  .nav-link-active .nav-link-icon,
+  .nav-link-active:hover .nav-link-icon {
+    color: hsl(var(--nav-active-fg));
+  }
+  /* The active row is now a SOLID brand pill with white text, so the old left
+     accent bar is redundant (it read as a double marker). Intentionally removed
+     — see .nav-link-active above. */
+
+  /* ─── Modern table polish ────────────────────────────────────────────── */
+
+  /* Apply on <table>. Adds sticky header, gentle row hover, and softer borders. */
+  .table-modern thead th {
+    @apply text-[11px] font-semibold uppercase tracking-wider
+           text-muted-foreground bg-secondary/40
+           border-b border-border sticky top-0 z-[1];
+  }
+  .table-modern tbody tr {
+    @apply transition-colors duration-100;
+  }
+  .table-modern tbody tr:hover {
+    @apply bg-brand-cyan-light/30;
+  }
+  .table-modern tbody tr + tr {
+    @apply border-t border-border/50;
+  }
+
+  /* ─── Loading skeleton ───────────────────────────────────────────────── */
+  .skeleton {
+    @apply animate-shimmer rounded;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--secondary)) 0%,
+      hsl(var(--muted)) 50%,
+      hsl(var(--secondary)) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  /* ─── Pulse-dot — for "live" / "scheduled" indicators ─────────────────── */
+  .pulse-dot {
+    @apply relative inline-flex size-2 rounded-full bg-emerald-500;
+  }
+  .pulse-dot::after {
+    content: "";
+    @apply absolute inset-0 rounded-full bg-emerald-500/50;
+    animation: pulse-glow 2.2s ease-in-out infinite;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Utilities — opt-in helpers
+   ═══════════════════════════════════════════════════════════════════════════ */
+@layer utilities {
+  /* Refined scrollbars — barely there, on-brand on hover */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+
+  /* No-scrollbar — invisible but scrollable */
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .scrollbar-none { scrollbar-width: none; }
+
+  /* Standard data-table scroll viewport — one consistent height for EVERY
+   * module's list table (so risk-profiles, clients, proposals… all match,
+   * whether the table is full or empty), butter-smooth momentum scroll, and
+   * no visible scrollbar on either axis. Tune the height via --table-scroll-h. */
+  .table-scroll {
+    /* max-height (not fixed height) so short lists don't create a scroll box
+       to get trapped in; only long lists scroll internally. */
+    max-height: var(--table-scroll-h, 30rem);
+    overflow: auto;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    /* `auto` (not `contain`) so once the table reaches its end the wheel chains
+       to the page — otherwise the cursor gets "stuck" inside the table. */
+    overscroll-behavior: auto;
+    /* Firefox/standards: a THIN themed bar rather than `none`. `scrollbar-width:
+       none` hid the horizontal bar too, so outside WebKit a wide table gave no
+       hint it could scroll sideways. Colours are theme variables, so the bar
+       follows light/dark automatically. */
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  /* Show a slim HORIZONTAL scrollbar so wide tables are obviously draggable
+     sideways (e.g. Leads, where columns run past the viewport). The vertical
+     scrollbar stays hidden — vertical scroll chains to the page as before. The
+     bar only appears when the table actually overflows horizontally, so narrow
+     tables look unchanged. */
+  .table-scroll::-webkit-scrollbar { height: 10px; width: 0; }
+  .table-scroll::-webkit-scrollbar:vertical { width: 0; display: none; }
+  .table-scroll::-webkit-scrollbar-track {
+    background: hsl(var(--muted) / 0.5);
+    border-radius: 9999px;
+  }
+  /* `--border` alone was almost invisible against the card, so a wide table
+     looked like it simply had cut-off columns. Use a muted-foreground tint:
+     still quiet, but clearly a draggable bar — and it re-derives from the
+     active theme's variables, so it tracks dark mode / tenant themes. */
+  .table-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background 120ms ease;
+  }
+  .table-scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.6);
+    background-clip: content-box;
+  }
+  .table-scroll::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--brand-cyan, var(--primary)) / 0.75);
+    background-clip: content-box;
+  }
+
+  /* Uniform column gutters + row rhythm for every standardized list table, so
+   * columns line up with even spacing across all modules. Scoped to
+   * .table-scroll so it only touches the main list tables (not worksheets or
+   * detail sub-tables). Specificity (class + 2 types) intentionally beats the
+   * per-cell Tailwind padding utilities so spacing is consistent everywhere. */
+  .table-scroll table th,
+  .table-scroll table td {
+    padding-top: 0.625rem;
+    padding-bottom: 0.625rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    vertical-align: middle;
+    /* Never wrap cell text — keep every column on a single line and let the
+     * container scroll horizontally (scrollbar hidden) when it overflows. */
+    white-space: nowrap;
+  }
+  /* Comfortable breathing room at the table's left/right edges. */
+  .table-scroll table th:first-child,
+  .table-scroll table td:first-child { padding-left: 1.25rem; }
+  .table-scroll table th:last-child,
+  .table-scroll table td:last-child { padding-right: 1.25rem; }
+
+  /* Truncate to N lines */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Text gradient — for hero copy + brand callouts */
+  .text-gradient {
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--brand-navy)) 0%,
+      hsl(var(--brand-cyan)) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* Number / tabular contexts */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Glassmorphism premium card styling */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.45);
+    backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 32px 0 rgba(31, 61, 59, 0.04);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .dark .glass-card {
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2);
+  }
+  .glass-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(42, 128, 121, 0.35);
+    box-shadow: 0 12px 40px 0 rgba(42, 128, 121, 0.10);
+  }
+
+  /* Hover glow styling */
+  .hover-glow-cyan:hover {
+    box-shadow: 0 0 20px 2px rgba(42, 128, 121, 0.18);
+    border-color: rgba(42, 128, 121, 0.4);
+  }
+  .hover-glow-emerald:hover {
+    box-shadow: 0 0 20px 2px rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+
+  /* Animated pulse indicators for SLA / Attention items */
+  .pulse-danger-dot {
+    position: relative;
+    display: inline-flex;
+    height: 8px;
+    width: 8px;
+    border-radius: 9999px;
+    background-color: #ef4444;
+  }
+  .pulse-danger-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background-color: rgba(239, 68, 68, 0.65);
+    animation: pulse-glow-ring 2.0s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  }
+
+  .pulse-warning-dot {
+    position: relative;
+    display: inline-flex;
+    height: 8px;
+    width: 8px;
+    border-radius: 9999px;
+    background-color: #f59e0b;
+  }
+  .pulse-warning-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background-color: rgba(245, 158, 11, 0.65);
+    animation: pulse-glow-ring 2.0s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+  }
+
+  @keyframes pulse-glow-ring {
+    0% {
+      transform: scale(0.95);
+      opacity: 0.85;
+    }
+    50% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+  }
+
+  /* Auth screen — smooth swap when toggling login ↔ signup (keyed re-mount) */
+  @keyframes authSwap {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .auth-swap {
+    animation: authSwap 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Interactive smooth scale utility */
+  .hover-lift {
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Landing — featured (Premium) pricing card: animated red glow border + badge */
+  @keyframes premiumGlowRed {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55), 0 12px 32px -12px rgba(239, 68, 68, 0.35); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12), 0 18px 44px -12px rgba(239, 68, 68, 0.5); }
+  }
+  .animate-premium-glow {
+    animation: premiumGlowRed 2.2s ease-in-out infinite;
+  }
+  @keyframes premiumBadgePulse {
+    0%, 100% { transform: translateX(-50%) scale(1); box-shadow: 0 2px 10px rgba(220, 38, 38, 0.5); }
+    50% { transform: translateX(-50%) scale(1.09); box-shadow: 0 5px 18px rgba(220, 38, 38, 0.75); }
+  }
+  .animate-premium-badge {
+    animation: premiumBadgePulse 1.6s ease-in-out infinite;
+  }
+
+  /* Featured (Premium) — RED-only animated glow border + slow float. */
+  @keyframes premiumAurora {
+    0%   { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5), 0 14px 40px -14px rgba(220, 38, 38, 0.45); transform: translateY(-0.4rem); }
+    50%  { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.14), 0 22px 52px -14px rgba(220, 38, 38, 0.55); transform: translateY(-0.8rem); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5), 0 14px 40px -14px rgba(220, 38, 38, 0.45); transform: translateY(-0.4rem); }
+  }
+  .animate-premium-aurora {
+    animation: premiumAurora 4s ease-in-out infinite;
+  }
+  /* Featured badge — moving sheen sweep across a red gradient + gentle bob. */
+  @keyframes premiumBadgeShine {
+    0%   { transform: translateX(-50%) translateY(0); background-position: -160% 0; }
+    50%  { transform: translateX(-50%) translateY(-2px); }
+    100% { transform: translateX(-50%) translateY(0); background-position: 260% 0; }
+  }
+  .animate-premium-badge-shine {
+    background-image: linear-gradient(110deg, #dc2626 0%, #dc2626 42%, #fecaca 50%, #dc2626 58%, #dc2626 100%);
+    background-size: 260% 100%;
+    animation: premiumBadgeShine 3s ease-in-out infinite;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Wide-screen fill — dashboard pages cap their root container at max-w-5xl/6xl/7xl
+   (left-aligned), which leaves a large empty gutter on the right on big monitors.
+   Widen those "wide layout" caps progressively as the viewport grows so the app
+   uses the available space. Narrow form/detail pages (max-w-3xl/4xl) are left
+   untouched — those stay narrow on purpose for readability.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 1280px) {
+  .dashboard-content .max-w-5xl { max-width: 72rem; }   /* 64 → 72  */
+  .dashboard-content .max-w-6xl { max-width: 82rem; }   /* 72 → 82  */
+  .dashboard-content .max-w-7xl { max-width: 90rem; }   /* 80 → 90  */
+}
+@media (min-width: 1600px) {
+  .dashboard-content .max-w-5xl { max-width: 80rem; }
+  .dashboard-content .max-w-6xl { max-width: 92rem; }
+  .dashboard-content .max-w-7xl { max-width: 104rem; }
+}
+@media (min-width: 1920px) {
+  .dashboard-content .max-w-5xl { max-width: 88rem; }
+  .dashboard-content .max-w-6xl { max-width: 104rem; }
+  .dashboard-content .max-w-7xl { max-width: 120rem; }
+}
+
+/* nav-link-icon base — PLAIN top-level CSS (NOT @layer components, where a bare
+   single-class rule gets tree-shaken and never ships → invisible icons). Sets the
+   glyph size + resting colour; the hover / active / ai-assistant rules override
+   the colour on their states via higher specificity. */
+.nav-link-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: hsl(var(--muted-foreground));
+  transition: color 150ms ease;
+}
+
+/* Chips sitting INSIDE the solid brand pill. Without these, the amber Beta chip
+   and the rose count badge sit on brand-red and read as broken/invisible.
+   Deliberately PLAIN top-level CSS, not @layer components: a bare single-class
+   rule in that layer gets tree-shaken by Tailwind and silently never ships
+   (this repo has been bitten by exactly that — see the note above). */
+.nav-link-active .nav-link-beta {
+  background-color: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.nav-link-active .nav-link-badge {
+  background-color: rgba(255, 255, 255, 0.25);
+  color: #fff;
+}
+.nav-link-active button {
+  color: rgba(255, 255, 255, 0.85);
+}
+.nav-link-active button:hover {
+  color: #fff;
+}
+
+/* Collapsed icon rail: a full-width solid pill reads as a heavy block, so keep
+   the active pill a neat centred square. */
+.sidebar-collapsed .nav-link-active {
+  width: 2.5rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Collapsed desktop sidebar (icon rail) — see DesktopSidebar.tsx.
+   When the panel is in its slim resting state it carries `.sidebar-collapsed`;
+   hide every text label and centre the icons so only the glyphs show. Hovering
+   removes the class (the panel expands), so labels return automatically.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sidebar-collapsed nav { padding-left: 0.5rem; padding-right: 0.5rem; }
+.sidebar-collapsed .nav-link {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+.sidebar-collapsed .nav-link > span { display: none; }
+/* The pin/unpin star is a <button>, not a <span>, so the label rule above never
+   caught it — it kept its width in the rail and shoved every icon off-centre.
+   Hide it here, and mark a pinned row with a small dot above the glyph instead
+   (same amber as the star, so the meaning carries over). */
+.sidebar-collapsed .nav-link > button { display: none; }
+.sidebar-collapsed .nav-link[data-pinned="true"]::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 4px;
+  width: 4px;
+  border-radius: 9999px;
+  background-color: #fbbf24; /* amber-400 — matches the pinned star */
+}
+.sidebar-collapsed .sidebar-section-title { display: none; }
+/* Folder-item indent + guide line would push the centred rail icons off-centre;
+   strip it in the collapsed icon rail. */
+.sidebar-collapsed .nav-sec-body { margin-left: 0; padding-left: 0; border-left: 0; }
+.sidebar-collapsed .sidebar-brand-text { display: none; }
+.sidebar-collapsed .sidebar-brand-row {
+  padding-left: 0;
+  padding-right: 0;
+  justify-content: center;
+}
+/* Search box + Customize toolbar make no sense in the icon rail — hide them
+   when collapsed (the nav itself still shows icons). */
+.sidebar-collapsed .sidebar-when-expanded { display: none; }
+.sidebar-collapsed nav { padding-top: 0.5rem; }
+
+/* Collapsible nav sections (the per-group dropdowns). The body animates open /
+   shut via max-height + opacity — but only in the expanded sidebar / mobile
+   drawer. In the slim icon-rail the section headers are hidden, so we force
+   every section open (no animation) to keep all icons visible. */
+.nav-sec-body {
+  overflow: hidden;
+  max-height: 60rem;
+  opacity: 1;
+  transition: max-height 300ms ease, opacity 250ms ease;
+}
+.nav-sec-body.nav-sec-collapsed { max-height: 0; opacity: 0; }
+.sidebar-collapsed .nav-sec-body.nav-sec-collapsed { max-height: none; opacity: 1; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Custom checkbox — ONE consistent look across the whole app.
+   Restyles every native <input type="checkbox"> (appearance:none) to match the
+   brand, with a clean checkmark and no ugly default focus outline (a subtle
+   on-brand ring shows only on keyboard focus). Opt a checkbox out with the
+   `data-native` attribute if it ever needs the OS rendering.
+   ────────────────────────────────────────────────────────────────────────── */
+input[type="checkbox"]:not([data-native]) {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  border: 1.5px solid hsl(var(--border));
+  border-radius: 5px;
+  background-color: hsl(var(--background));
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+input[type="checkbox"]:not([data-native])::before {
+  content: "";
+  width: 0.625rem;
+  height: 0.625rem;
+  transform: scale(0);
+  transition: transform 120ms ease-in-out;
+  box-shadow: inset 1rem 1rem hsl(var(--primary-foreground));
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+input[type="checkbox"]:not([data-native]):checked {
+  background-color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+input[type="checkbox"]:not([data-native]):checked::before { transform: scale(1); }
+input[type="checkbox"]:not([data-native]):hover:not(:disabled) { border-color: hsl(var(--ring)); }
+input[type="checkbox"]:not([data-native]):focus { outline: none; }
+input[type="checkbox"]:not([data-native]):focus-visible {
+  outline: 2px solid hsl(var(--ring) / 0.5);
+  outline-offset: 1px;
+}
+input[type="checkbox"]:not([data-native]):disabled { opacity: 0.5; cursor: not-allowed; }
+/* Indeterminate (e.g. "select all" partially checked) → a dash, not a tick. */
+input[type="checkbox"]:not([data-native]):indeterminate {
+  background-color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+input[type="checkbox"]:not([data-native]):indeterminate::before {
+  transform: scale(1);
+  clip-path: none;
+  width: 0.5rem;
+  height: 2px;
+  border-radius: 1px;
+}

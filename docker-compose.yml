@@ -1,0 +1,54 @@
+# Local dev infrastructure.
+#
+# Bring up:    docker compose up -d
+# Tear down:   docker compose down
+# Logs:        docker compose logs -f
+# Reset data:  docker compose down -v   (NB: destroys all DB data)
+#
+# After it's up:
+#   1. Copy `.env.example` to `.env` if you haven't (DATABASE_URL + REDIS_URL match the defaults below)
+#   2. `npm run db:push`   — materialize the schema
+#   3. `psql $env:DATABASE_URL -f drizzle/migrations/0001_rls_policies.sql`  (PowerShell)
+#      or `psql $DATABASE_URL -f drizzle/migrations/0001_rls_policies.sql`   (bash)
+#   4. `npm run seed`      — install the 24 pre-built workflow recipes
+#   5. `npm run dev` + `npm run worker`
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mfd-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mfd
+    ports:
+      # Host 5544 (not 5432) to avoid a clash with a native Windows Postgres that
+      # otherwise shadows this container on 5432. Connect via localhost:5544.
+      - "5544:5432"
+    volumes:
+      - mfd_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mfd"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: mfd-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - mfd_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mfd_pgdata:
+  mfd_redisdata:

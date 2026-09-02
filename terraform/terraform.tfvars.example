@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and fill in. Only ssh_cidr is required.
+ssh_cidr        = "YOUR.PUBLIC.IP.HERE/32"
+public_key_path = "~/.ssh/mfd-deploy.pub"
+
+# Optional overrides:
+# region            = "ap-south-1"
+# instance_type     = "t4g.medium"
+# db_instance_class = "db.t4g.micro"
+
+# Cost + data-safety guardrails (all optional):
+# db_max_allocated_storage = 200          # RDS storage autoscaling ceiling (GB)
+# monthly_budget_usd       = "60"         # AWS Budgets monthly limit
+# budget_alert_email       = "you@firm.in" # set to enable budget email alerts

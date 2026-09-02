@@ -1,0 +1,131 @@
+# Production stack for the cheap single-box path (one EC2 instance).
+#
+#   web (blue/green) + worker + redis + caddy(auto-HTTPS)  all on one VM.
+#   Postgres = managed RDS by default (durable, backed up).
+#
+# ZERO-DOWNTIME DEPLOYS (blue-green):
+#   The app runs as two interchangeable web services — web-blue / web-green.
+#   Only ONE serves at a time (the "active" colour, tracked in ~/app/.active-color).
+#   A deploy builds the new image, starts the IDLE colour, waits until it is
+#   healthy, then stops the old colour. Caddy load-balances across both colours
+#   with request-retry, so users never hit the cold-start gap. The orchestration
+#   lives in ~/run-deploy.sh — DO NOT `docker compose up -d` web by hand; it
+#   won't start a colour (they're behind profiles). Migrations are additive, so
+#   the old colour keeps serving safely while the new colour boots.
+#
+# First run on a FRESH database (order matters):
+#   1. real values in .env.production  2. APP_DOMAIN set  3. compose build
+#   4. compose run --rm web-blue npm run db:push
+#   5. compose run --rm web-blue npm run db:provision-app-role
+#   6. bash ~/run-deploy.sh
+
+x-web-common: &web-common
+  image: mfd-app:latest
+  build:
+    context: .
+    args:
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+      NEXT_PUBLIC_S3_PUBLIC_URL: ${NEXT_PUBLIC_S3_PUBLIC_URL}
+  restart: unless-stopped
+  env_file:
+    - .env.production
+  volumes:
+    - uploads_data:/app/node-local/uploads
+  expose:
+    - "3000"
+  # Health gate for blue-green cutover: deploy waits for this to read "healthy"
+  # before switching traffic. Lightweight — /api/health is force-dynamic.
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 45s
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_started
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  web-blue:
+    <<: *web-common
+    container_name: app-web-blue
+    profiles: ["blue"]
+
+  web-green:
+    <<: *web-common
+    container_name: app-web-green
+    profiles: ["green"]
+
+  # One-shot: applies pending DB migrations. Idempotent (skips already-applied).
+  # Run explicitly by ~/run-deploy.sh BEFORE the new colour starts, so the old
+  # colour keeps serving against the (additively) migrated schema.
+  migrate:
+    image: mfd-app:latest
+    env_file:
+      - .env.production
+    command: ["npm", "run", "migrate:all"]
+    restart: "no"
+    healthcheck:
+      disable: true
+
+  worker:
+    image: mfd-app:latest
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    command: ["npm", "run", "worker:prod"]
+    volumes:
+      - uploads_data:/app/node-local/uploads
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["db-onbox"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: mfd
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mfd"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:
+  pg_data:
+  uploads_data:

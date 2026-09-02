@@ -1,0 +1,61 @@
+# Caddy = reverse proxy + automatic HTTPS (free Let's Encrypt certs, auto-renew).
+#
+# ZERO-DOWNTIME: we proxy to BOTH blue and green web containers. Only one is
+# running at a time (the active colour); the other's hostname doesn't resolve and
+# is marked down by the active health check, so traffic flows to the live one.
+# During a deploy both run briefly — Caddy round-robins, and `lb_try_duration`
+# transparently RETRIES a request against the other colour if the one it picked
+# is mid-shutdown. Net effect: users never see the cold-start gap.
+#
+# WHITE-LABEL: besides the base domain, we serve every tenant vanity subdomain
+# (<firm>.<APP_DOMAIN>) and custom domain (crm.theirfirm.in) via ON-DEMAND TLS.
+# Caddy mints a cert for a new hostname only after the app's /api/tls/allowed
+# endpoint confirms it's a real tenant host — so nobody can point a random
+# domain at us and make us issue unlimited certs.
+
+{
+	on_demand_tls {
+		ask https://{$APP_DOMAIN}/api/tls/allowed
+	}
+}
+
+# Shared proxy + security headers for every host (base domain and tenant hosts).
+(app) {
+	encode gzip zstd
+	log {
+		output stdout
+		format console
+	}
+	reverse_proxy web-blue:3000 web-green:3000 {
+		lb_policy round_robin
+		# If the chosen colour refuses the connection (mid-cutover), retry the
+		# other colour within this window instead of erroring to the user.
+		lb_try_duration 12s
+		lb_try_interval 250ms
+		# Active health probing so a stopped/booting colour is excluded fast.
+		health_uri /api/health
+		health_interval 5s
+		health_timeout 4s
+		health_status 200
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+# Base domain — managed Let's Encrypt cert (unchanged behaviour).
+{$APP_DOMAIN} {
+	import app
+}
+
+# Every other host — tenant vanity subdomains + custom domains — served with
+# on-demand TLS, gated by the ask endpoint above.
+https:// {
+	tls {
+		on_demand
+	}
+	import app
+}

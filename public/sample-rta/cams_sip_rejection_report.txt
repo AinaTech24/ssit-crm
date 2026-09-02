@@ -1,0 +1,8 @@
+AMC|Folio|PAN|SchemeName|RejectDate|Amount|ReasonCode|ReasonDesc
+ICICI|2345678/90|ABCKK5235F|ICICI Prudential Value Discovery|25-05-2026|5000.00|001|Insufficient funds
+HDFC|3456789/01|ABCKK5234E|HDFC Mid-Cap Opportunities|25-05-2026|10000.00|003|Mandate inactive
+SBIMF|4567890/12|ABCDD9234E|SBI Bluechip Fund|25-05-2026|7500.00|001|Insufficient funds
+AXIS|5678901/23|ABCMM3234E|Axis Long Term Equity|25-05-2026|2500.00|004|Signature mismatch
+KOTAK|6789012/34|ABCII4235F|Kotak Standard Multicap|25-05-2026|3000.00|002|Account closed
+NIPPON|7890123/45|ABCSH1534E|Nippon India Growth Fund|25-05-2026|12000.00|005|Mandate amount exceeded
+DSP|8901234/56|ABCPN1634E|DSP Tax Saver Fund|25-05-2026|5000.00|003|Mandate inactive

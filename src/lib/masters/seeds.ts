@@ -1,0 +1,199 @@
+/**
+ * System defaults for the master_values table. Seeded into every new tenant
+ * on signup (tenantId = the new tenant). Tenants can disable defaults and add
+ * their own.
+ */
+
+export type SeedRow = { key: string; label: string; sortOrder?: number; meta?: any };
+
+export const MASTER_SEEDS: Record<string, SeedRow[]> = {
+  lead_source: [
+    { key: "website", label: "Website" },
+    { key: "referral", label: "Referral" },
+    { key: "social_media", label: "Social Media" },
+    { key: "webinar", label: "Webinar" },
+    { key: "seminar", label: "Seminar" },
+    { key: "walk_in", label: "Walk-in" },
+    { key: "existing_client", label: "Existing Client Reference" },
+    { key: "google", label: "Google" },
+    { key: "meta_ads", label: "Meta Ads" },
+    { key: "google_ads", label: "Google Ads" },
+    { key: "cold_call", label: "Cold Call" },
+    { key: "linkedin", label: "LinkedIn" },
+    { key: "youtube", label: "YouTube" },
+    { key: "event", label: "Event" },
+    { key: "other", label: "Other" },
+  ],
+
+  campaign_type: [
+    { key: "social_media", label: "Social Media" },
+    { key: "whatsapp", label: "WhatsApp" },
+    { key: "email", label: "Email" },
+    { key: "webinar", label: "Webinar" },
+    { key: "seminar", label: "Seminar" },
+    { key: "referral", label: "Referral" },
+    { key: "google_business", label: "Google Business" },
+    { key: "paid_ads", label: "Paid Ads" },
+    { key: "event", label: "Event" },
+    { key: "drip", label: "Drip Campaign" },
+  ],
+
+  service_request_type: [
+    { key: "nominee_update", label: "Nominee Update", meta: { slaHours: 24 * 14 } },
+    { key: "bank_update", label: "Bank Update", meta: { slaHours: 24 * 7 } },
+    { key: "mobile_update", label: "Mobile Update", meta: { slaHours: 24 * 3 } },
+    { key: "email_update", label: "Email Update", meta: { slaHours: 24 * 3 } },
+    { key: "kyc_update", label: "KYC Update", meta: { slaHours: 24 * 7 } },
+    { key: "minor_to_major", label: "Minor → Major Transition", meta: { slaHours: 24 * 14 } },
+    { key: "capital_gain_report", label: "Capital Gain Report", meta: { slaHours: 24 * 3 } },
+    { key: "statement_request", label: "Statement Request", meta: { slaHours: 24 * 2 } },
+    { key: "redemption_request", label: "Redemption Request", meta: { slaHours: 24 } },
+    { key: "switch_request", label: "Switch Request", meta: { slaHours: 24 * 3 } },
+    { key: "transmission", label: "Transmission Case", meta: { slaHours: 24 * 14 } },
+    { key: "folio_correction", label: "Folio Correction", meta: { slaHours: 24 * 7 } },
+    { key: "complaint", label: "Complaint", meta: { slaHours: 24 * 21, isComplaint: true } },
+    { key: "other", label: "Other", meta: { slaHours: 24 * 7 } },
+  ],
+
+  task_priority: [
+    { key: "low", label: "Low", sortOrder: 1 },
+    { key: "normal", label: "Normal", sortOrder: 2 },
+    { key: "high", label: "High", sortOrder: 3 },
+    { key: "urgent", label: "Urgent", sortOrder: 4 },
+  ],
+
+  client_category: [
+    { key: "individual", label: "Individual" },
+    { key: "huf", label: "HUF" },
+    { key: "nri", label: "NRI" },
+    { key: "corporate", label: "Corporate" },
+    { key: "trust", label: "Trust" },
+    { key: "minor", label: "Minor" },
+    { key: "partnership", label: "Partnership Firm" },
+  ],
+
+  goal_type: [
+    { key: "retirement", label: "Retirement" },
+    { key: "child_education", label: "Child Education" },
+    { key: "child_marriage", label: "Child Marriage" },
+    { key: "house", label: "House Purchase" },
+    { key: "car", label: "Car Purchase" },
+    { key: "vacation", label: "Vacation" },
+    { key: "emergency_fund", label: "Emergency Fund" },
+    { key: "wealth_creation", label: "Wealth Creation" },
+    { key: "tax_saving", label: "Tax Saving" },
+    { key: "other", label: "Other" },
+  ],
+
+  risk_profile_level: [
+    { key: "conservative", label: "Conservative", sortOrder: 1 },
+    { key: "moderately_conservative", label: "Moderately Conservative", sortOrder: 2 },
+    { key: "moderate", label: "Moderate", sortOrder: 3 },
+    { key: "moderately_aggressive", label: "Moderately Aggressive", sortOrder: 4 },
+    { key: "aggressive", label: "Aggressive", sortOrder: 5 },
+    { key: "very_aggressive", label: "Very Aggressive", sortOrder: 6 },
+  ],
+
+  ddq_checklist_item: [
+    { key: "arn_validity", label: "ARN Validity Confirmed" },
+    { key: "euin_validity", label: "EUIN Validity Confirmed" },
+    { key: "nism_validity", label: "NISM Validity Confirmed" },
+    { key: "kyd_records", label: "KYD Documentation Up-to-date" },
+    { key: "amc_empanelment", label: "AMC Empanelment Documents" },
+    { key: "employee_certs", label: "Employee Certifications Current" },
+    { key: "client_consent", label: "Client Consent Records" },
+    { key: "risk_profile_records", label: "Risk Profile Records Maintained" },
+    { key: "complaint_register", label: "Complaint Register Updated" },
+    { key: "marketing_approvals", label: "Marketing Material Approvals" },
+    { key: "website_disclaimer", label: "Website Disclaimer Check" },
+    { key: "social_disclaimer", label: "Social Media Disclaimer Check" },
+    { key: "sop_documents", label: "SOP Documents Current" },
+    { key: "data_backup", label: "Data Backup Process Documented" },
+    { key: "evidence_vault", label: "DDQ Evidence Vault Populated" },
+  ],
+
+  document_type: [
+    { key: "pan", label: "PAN Card" },
+    { key: "aadhaar", label: "Aadhaar (masked)" },
+    { key: "bank_proof", label: "Bank Proof" },
+    { key: "cancelled_cheque", label: "Cancelled Cheque" },
+    { key: "risk_profile", label: "Risk Profile Form" },
+    { key: "consent_form", label: "Consent Form" },
+    { key: "mandate_form", label: "Mandate Form" },
+    { key: "ucc_can", label: "UCC / CAN" },
+    { key: "nominee_form", label: "Nominee Form" },
+    { key: "ddq", label: "DDQ Document" },
+    { key: "amc_empanelment", label: "AMC Empanelment" },
+    { key: "marketing_approval", label: "Marketing Approval" },
+    { key: "sop", label: "SOP Document" },
+    { key: "complaint_doc", label: "Complaint Document" },
+    { key: "service_request_doc", label: "Service Request Document" },
+    { key: "other", label: "Other" },
+  ],
+
+  user_role: [
+    { key: "owner", label: "MFD Owner / Admin" },
+    { key: "rm", label: "Relationship Manager" },
+    { key: "back_office", label: "Back Office Executive" },
+    { key: "marketing", label: "Marketing Executive" },
+    { key: "compliance", label: "Compliance / DDQ Executive" },
+    { key: "team_member", label: "Team Member (Limited)" },
+    { key: "branch_head", label: "Branch Head" },
+  ],
+
+  interest_product: [
+    { key: "sip", label: "SIP" },
+    { key: "lumpsum", label: "Lumpsum" },
+    { key: "retirement", label: "Retirement Planning" },
+    { key: "child_education", label: "Child Education" },
+    { key: "tax_planning", label: "Tax Planning (ELSS)" },
+    { key: "pms", label: "Portfolio Management Services" },
+    { key: "insurance", label: "Insurance" },
+    { key: "financial_planning", label: "Financial Planning" },
+    { key: "nps", label: "NPS" },
+    { key: "fd", label: "Fixed Deposits" },
+    { key: "other", label: "Other" },
+  ],
+
+  occupation: [
+    { key: "salaried", label: "Salaried" },
+    { key: "self_employed", label: "Self-Employed" },
+    { key: "business_owner", label: "Business Owner" },
+    { key: "professional", label: "Professional (Doctor/CA/Lawyer)" },
+    { key: "retired", label: "Retired" },
+    { key: "homemaker", label: "Homemaker" },
+    { key: "student", label: "Student" },
+    { key: "other", label: "Other" },
+  ],
+
+  income_range: [
+    { key: "below_5l", label: "Below ₹5L" },
+    { key: "5l_to_15l", label: "₹5L – ₹15L" },
+    { key: "15l_to_50l", label: "₹15L – ₹50L" },
+    { key: "50l_to_1cr", label: "₹50L – ₹1Cr" },
+    { key: "1cr_to_5cr", label: "₹1Cr – ₹5Cr" },
+    { key: "above_5cr", label: "Above ₹5Cr" },
+  ],
+
+  meeting_type: [
+    { key: "portfolio_review", label: "Portfolio Review" },
+    { key: "goal_review", label: "Goal Review" },
+    { key: "new_investment", label: "New Investment Discussion" },
+    { key: "service_discussion", label: "Service Discussion" },
+    { key: "family_review", label: "Family Review" },
+    { key: "complaint_discussion", label: "Complaint Discussion" },
+    { key: "introduction", label: "Introduction Meeting" },
+  ],
+
+  relationship: [
+    { key: "self", label: "Self" },
+    { key: "spouse", label: "Spouse" },
+    { key: "father", label: "Father" },
+    { key: "mother", label: "Mother" },
+    { key: "son", label: "Son" },
+    { key: "daughter", label: "Daughter" },
+    { key: "sibling", label: "Sibling" },
+    { key: "huf", label: "HUF Member" },
+    { key: "other", label: "Other" },
+  ],
+};
