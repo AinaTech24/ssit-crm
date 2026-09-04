@@ -57,6 +57,10 @@ jobs:
 
       # The box holds a plain source tree (NOT a git checkout), so we ship the
       # tree rather than pulling on the far side.
+      # NOTE: next-env.d.ts is deliberately NOT listed. Next generates it and it is
+      # gitignored, so it does not exist in a fresh CI checkout - listing it made
+      # tar exit 2 and killed the whole deploy. `next build` recreates it inside
+      # the image.
       - name: Package the tree
         run: |
           tar czf /tmp/app.tgz \
@@ -64,7 +68,7 @@ jobs:
             src public drizzle scripts certs \
             package.json package-lock.json next.config.ts tsconfig.json \
             drizzle.config.ts postcss.config.js tailwind.config.ts \
-            next-env.d.ts vitest.config.ts
+            vitest.config.ts
           ls -lh /tmp/app.tgz
 
       - name: Copy to the box
