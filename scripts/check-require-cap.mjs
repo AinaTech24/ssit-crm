@@ -44,6 +44,12 @@ const SKIP_FILES = new Set([
   "transactions/import/parse/route.ts",
   // Invite acceptance — the invite token is the credential, no session yet
   "employees/accept-invite/route.ts",
+  // Investor portal — the signed portal TOKEN is the credential; there is no
+  // session and no firm user, so requireCap(session.roles, …) is meaningless.
+  // Gated instead by resolvePortalAccess(token) plus an explicit per-request
+  // scope check (access.scopes.includes("service_requests")), and every write is
+  // hard-scoped to the investor that token resolves to.
+  "portal/[token]/service-requests/route.ts",
   // Notifications mark-read — user can only touch their own (scoped to session.userId)
   "notifications/mark-read/route.ts",
   // Support tickets — any logged-in user can raise an internal support ticket

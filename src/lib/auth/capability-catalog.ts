@@ -115,6 +115,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "segments.view": { group: "Workflows & Marketing", label: "View segments & filters" },
   "segments.manage": { group: "Workflows & Marketing", label: "Manage segments & filters" },
   "template.view": { group: "Workflows & Marketing", label: "View comms templates" },
+  "template.create": { group: "Workflows & Marketing", label: "Create comms templates" },
   "template.edit": { group: "Workflows & Marketing", label: "Edit comms templates" },
   "template.approve": { group: "Workflows & Marketing", label: "Approve comms templates" },
   "campaign.send": { group: "Workflows & Marketing", label: "Send marketing campaigns" },

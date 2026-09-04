@@ -67,8 +67,19 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Apply migrations
-        run: npm run migrate:all
+      # The numbered migrations cannot build a database on their own: nothing
+      # creates the baseline tables (0001_sleepy_joseph.sql ALTERs events_outbox,
+      # which no migration creates), so `migrate:all` against an empty Postgres
+      # dies on the first file. That is why this job was red on every run.
+      #
+      # Mirror what production actually does: push the authoritative schema from
+      # src/db/schema, then replay the migrations for their RLS policies and seed
+      # data, tolerating "push already created this". check:rls below is the real
+      # assertion - it fails if any tenant_id table lacks a policy.
+      - name: Build schema from the ORM definitions
+        run: npx drizzle-kit push --force
+      - name: Replay migrations (RLS policies + seeds)
+        run: node scripts/migrate-replay.js
       - name: RLS coverage guard (every tenant table has a policy)
         run: npm run check:rls
       - name: DB-backed unit tests (RLS isolation · share-token · webhook sigs)

@@ -63,7 +63,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "template.edit", session.permissions);
+    // Creation is firm-admin only (see template.create in rbac.ts). Editing an
+    // existing template still runs on template.edit.
+    requireCap(session.roles, "template.create", session.permissions);
     const parse = CreateBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {
       return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });

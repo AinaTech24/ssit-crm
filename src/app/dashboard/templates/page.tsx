@@ -12,6 +12,7 @@ import {
 import { withTenant } from "@/db/client";
 import { templates, templateVersions } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { formatRelative } from "@/lib/utils";
 import { RowActions } from "@/components/common/RowActions";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -60,6 +61,9 @@ export default async function TemplatesPage({
   const activeStatus = sp.status ?? "";
   const q = (sp.q ?? "").trim();
   const session = await requireSession();
+  // Firm admins only — mirrors the server check on POST /api/templates so we
+  // never render a button that comes back 403.
+  const canCreate = can(session.roles, "template.create", session.permissions);
 
   const all = await withTenant(session.tenantId, async (tx) =>
     tx
@@ -114,9 +118,11 @@ export default async function TemplatesPage({
         </div>
         <div className="flex items-center gap-2">
           <FetchWhatsappTemplatesButton />
-          <Link href="/dashboard/templates/new" className="btn-primary">
-            <Plus className="size-4" /> New template
-          </Link>
+          {canCreate && (
+            <Link href="/dashboard/templates/new" className="btn-primary">
+              <Plus className="size-4" /> New template
+            </Link>
+          )}
         </div>
       </div>
 
@@ -201,7 +207,7 @@ export default async function TemplatesPage({
                 title="No templates yet — let's create the first"
                 description="Templates are reusable WhatsApp, Email and SMS messages with merge fields like {{investor.name}}. Build once, send everywhere — each one is compliance-checked before approval."
                 tip="Email templates use a block designer (header, text, button, footer). WhatsApp templates sync to Meta for approval automatically."
-                primary={{ href: "/dashboard/templates/new", label: "+ New template" }}
+                primary={canCreate ? { href: "/dashboard/templates/new", label: "+ New template" } : undefined}
               />
             </div>
           ) : (

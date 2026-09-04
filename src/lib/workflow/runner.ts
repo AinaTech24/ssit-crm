@@ -4,6 +4,7 @@ import { db, withTenant, type Tx } from "@/db/client";
 import {
   investors,
   leads,
+  users,
   tasks as tasksTable,
   tenants,
   workflowRuns,
@@ -391,7 +392,23 @@ async function loadSubject(tx: Tx, type: string, id: string, tenantId: string): 
     }
     case "lead": {
       const [r] = await tx.select().from(leads).where(and(eq(leads.id, id), eq(leads.tenantId, tenantId)));
-      return r as any;
+      if (!r) return null;
+      // Enrich with the merge tokens templates offer but that are not columns —
+      // the same treatment loadInvestor() gives an investor subject:
+      //   lead.rm_name    the owning RM's NAME (the row only has owner_id, a uuid)
+      //   lead.event_name friendly alias for source_campaign, which is where the
+      //                   Event source stores the event a lead came from
+      //   lead.first_name first word, for "Hi Anita" style greetings
+      const enriched: any = { ...(r as any) };
+      enriched.first_name = String((r as any).name ?? "").trim().split(/\s+/)[0] ?? "";
+      enriched.event_name = (r as any).sourceCampaign ?? "";
+      if ((r as any).ownerId) {
+        const [rm] = await tx.select({ name: users.name }).from(users).where(eq(users.id, (r as any).ownerId));
+        enriched.rm_name = rm?.name ?? "";
+      } else {
+        enriched.rm_name = "";
+      }
+      return enriched;
     }
     case "task": {
       const [r] = await tx.select().from(tasksTable).where(and(eq(tasksTable.id, id), eq(tasksTable.tenantId, tenantId)));

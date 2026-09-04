@@ -114,6 +114,7 @@ export type Capability =
   | "workflow.publish"
   // Templates + broadcasts + campaigns
   | "template.view"
+  | "template.create"
   | "template.edit"
   | "template.approve"
   | "campaign.send"
@@ -236,6 +237,17 @@ const MATRIX: Record<Capability, Role[]> = {
 
   // Templates + campaigns + content calendar
   "template.view": ["marketing", "compliance"],
+  // Creating a template is firm-admin only: an approved template is what the
+  // firm is allowed to say to investors, so authoring one is a compliance
+  // decision rather than day-to-day work. No role grants it - the empty list
+  // means only `owner` passes (via the short-circuit above). An owner can still
+  // delegate it per-person by ticking it under Customize Access Permissions.
+  //
+  // Kept SEPARATE from template.edit deliberately: template.edit also gates
+  // content-library uploads, the email-designer test send and the WhatsApp
+  // template sync, so restricting that instead would quietly strip Marketing of
+  // unrelated abilities.
+  "template.create": [],
   "template.edit": ["marketing"],
   "template.approve": ["compliance"],
   "campaign.send": ["marketing"],

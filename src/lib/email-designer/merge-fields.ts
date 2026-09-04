@@ -41,6 +41,8 @@ export const MERGE_FIELDS: MergeField[] = [
   { token: "lead.email", label: "Lead email", example: "anita@example.com", category: "Lead" },
   { token: "lead.stage", label: "Lead stage", example: "Proposal Shared", category: "Lead" },
   { token: "lead.source", label: "Lead source", example: "Referral", category: "Lead" },
+  { token: "lead.event_name", label: "Lead event name", example: "Diwali Investor Meet", category: "Lead" },
+  { token: "lead.rm_name", label: "Lead relationship manager", example: "Priya Mehta", category: "Lead" },
 
   // ── Family ────────────────────────────────────────────────────────────────
   { token: "family.family_name", label: "Family name", example: "Sharma Family", category: "Family" },
