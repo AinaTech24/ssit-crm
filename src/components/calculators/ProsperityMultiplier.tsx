@@ -108,7 +108,7 @@ export function ProsperityMultiplier() {
           height={210}
           xLabels={res.series.map((p) => `Yr ${p.year}`)}
           fmtY={(v) => inrShort(v)}
-          lines={[{ label: "Corpus", color: "#B71A20", values: res.series.map((p) => p.value) }]}
+          lines={[{ label: "Corpus", color: "#0E2557", values: res.series.map((p) => p.value) }]}
         />
         <p className="text-[10px] text-muted-foreground mt-1">
           Years 1–{investYears} are the SIP phase; from year {investYears + 1} the corpus pays the monthly income.

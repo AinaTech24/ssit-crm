@@ -134,7 +134,7 @@ export function AssetAllocationReview() {
           </div>
           <div>
             <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Suggested mix</div>
-            <BarsChart bars={bucketBars(s)} fmtV={(v) => `${v.toFixed(0)}%`} accent="#B71A20" />
+            <BarsChart bars={bucketBars(s)} fmtV={(v) => `${v.toFixed(0)}%`} accent="#0E2557" />
           </div>
         </div>
       </Section>
@@ -144,7 +144,7 @@ export function AssetAllocationReview() {
           xLabels={e.growth.map((g) => g.year)}
           lines={[
             { label: "Existing", color: "#94a3b8", values: e.growth.map((g) => g.value) },
-            { label: "Suggested", color: "#B71A20", values: s.growth.map((g) => g.value) },
+            { label: "Suggested", color: "#0E2557", values: s.growth.map((g) => g.value) },
           ]}
           fmtY={inrShort}
           ariaLabel="Projected portfolio value: existing vs suggested"

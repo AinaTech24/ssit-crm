@@ -1,13 +1,13 @@
--- Vartify replaces Wapi/WAina as the WhatsApp provider.
+-- Vartify replaces the two legacy WhatsApp providers.
 --
 -- `tenant_integrations.provider` is a plain text column with the enum enforced
 -- in the Drizzle schema (not a Postgres enum type), so there is no type to ALTER
 -- — adding "vartify" to the TS enum is sufficient for new rows. This migration
--- carries the DATA move: any firm that had a WAina/AiSensy WhatsApp integration
+-- carries the DATA move: any firm that had a legacy WhatsApp integration
 -- row is re-pointed at the new provider id so their connection keeps working
 -- rather than silently reverting to "not connected".
 --
--- The api_key stored against the old row is a WAina key and will NOT authenticate
+-- The api_key stored against the old row is a legacy key and will NOT authenticate
 -- against Vartify, so the row is carried over DISABLED: the firm must paste their
 -- Vartify token in Settings → Integrations. Disabling (rather than deleting) keeps
 -- the audit trail of what was previously configured.

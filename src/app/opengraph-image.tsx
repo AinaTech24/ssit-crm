@@ -11,7 +11,7 @@ export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 export default function OpengraphImage() {
-  const red = "#B71A20";
+  const brand = "#0E2557";
   return new ImageResponse(
     (
       <div
@@ -29,7 +29,7 @@ export default function OpengraphImage() {
         {/* top: wordmark + eyebrow */}
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "baseline" }}>
-            <span style={{ fontSize: 64, fontWeight: 800, color: red, letterSpacing: -1 }}>SSIT</span>
+            <span style={{ fontSize: 64, fontWeight: 800, color: brand, letterSpacing: -1 }}>SSIT</span>
             <span style={{ fontSize: 64, fontWeight: 800, color: "#1a1f2b", letterSpacing: -1, marginLeft: 14 }}>CRM</span>
           </div>
           <div style={{ fontSize: 22, fontWeight: 600, color: "#5b6472", marginTop: 8, letterSpacing: 2, textTransform: "uppercase" }}>
@@ -41,7 +41,7 @@ export default function OpengraphImage() {
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0 16px", fontSize: 58, fontWeight: 800, color: "#11151c", lineHeight: 1.15, maxWidth: 1000 }}>
             <span>Run your MFD practice with</span>
-            <span style={{ color: red }}>more control, less manual work.</span>
+            <span style={{ color: brand }}>more control, less manual work.</span>
           </div>
           <div style={{ display: "flex", gap: 16, marginTop: 36, flexWrap: "wrap" }}>
             {["Compliance & DDQ", "Client servicing", "Automation & AI", "60+ calculators"].map((t) => (
@@ -66,7 +66,7 @@ export default function OpengraphImage() {
 
         {/* bottom: footer bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ fontSize: 24, fontWeight: 700, color: red }}>crm.ssit.com</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: brand }}>crm.ssit.com</div>
           <div style={{ fontSize: 20, color: "#7a828f" }}>AMFI &amp; SEBI-aware · DPDP-ready · Live in a day</div>
         </div>
       </div>

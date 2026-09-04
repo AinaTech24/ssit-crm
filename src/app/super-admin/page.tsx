@@ -43,7 +43,7 @@ export default async function SuperAdminOverview() {
 
       {/* Hero summary band */}
       <div className="rounded-2xl border border-border overflow-hidden shadow-sm">
-        <div className="px-6 py-5 text-white" style={{ background: "linear-gradient(135deg, hsl(358 75% 41%) 0%, hsl(358 78% 28%) 100%)" }}>
+        <div className="px-6 py-5 text-white" style={{ background: "linear-gradient(135deg, hsl(221 72% 20%) 0%, hsl(221 76% 12%) 100%)" }}>
           <div className="flex items-end justify-between flex-wrap gap-4">
             <div>
               <div className="text-xs uppercase tracking-wider text-white/70 font-semibold">Platform health</div>

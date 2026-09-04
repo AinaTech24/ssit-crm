@@ -422,7 +422,7 @@ function DontUpdateEmptyRow({ checked, onChange }: { checked: boolean; onChange:
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="size-4 rounded accent-[#B71A20]"
+        className="size-4 rounded accent-[#0E2557]"
       />
       Don&apos;t update empty values for existing Client Contacts
       <span className="text-muted-foreground" title="When ticked, a blank cell in the file leaves the existing value untouched. Untick to let blanks clear the field.">

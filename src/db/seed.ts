@@ -316,7 +316,7 @@ async function seedDemoTenant() {
       { name: "Pooja Shah", pan: "ABCSS2234E", phone: "+919812345610", segment: "HNI", aum: 12500000, sip: 28000, family: 1 },
       { name: "Sneha Shah", pan: "ABCSS2235F", phone: "+919812345611", segment: "Affluent", aum: 3200000, sip: 8000, family: 1 },
       { name: "Hardik Mehta", pan: "ABCMM3234E", phone: "+919812345620", segment: "HNI", aum: 32000000, sip: 75000, family: 2 },
-      { name: "Naina Mehta", pan: "ABCMM3235F", phone: "+919812345621", segment: "Affluent", aum: 5600000, sip: 18000, family: 2 },
+      { name: "Meera Mehta", pan: "ABCMM3235F", phone: "+919812345621", segment: "Affluent", aum: 5600000, sip: 18000, family: 2 },
       { name: "Suresh Iyer", pan: "ABCII4234E", phone: "+919812345630", segment: "HNI", aum: 21000000, sip: 50000, family: 3 },
       { name: "Lakshmi Iyer", pan: "ABCII4235F", phone: "+919812345631", segment: "Affluent", aum: 4200000, sip: 15000, family: 3 },
       { name: "Arvind Kumar", pan: "ABCKK5234E", phone: "+919812345640", segment: "Retail", aum: 850000, sip: 3000, family: 4 },

@@ -1,7 +1,7 @@
 /**
  * Vartify WhatsApp Business Platform adapter — https://vartify.in/api/v1
  *
- * Replaces the previous Wapi/WAina adapter. Two things differ materially from
+ * Replaces the previous WhatsApp adapter. Two things differ materially from
  * the provider it replaces, and both shape this file:
  *
  *  1. Vartify is CONTACT-BASED, not phone-based. `POST /messages/send` takes a
@@ -173,8 +173,7 @@ export function buildVartifySendBody(
   const templateName =
     body.vartifyTemplateName ??
     body.metaTemplateName ??
-    args.templateVersion.externalRef ??
-    body.wainaTemplateName; // legacy stored value — still resolvable
+    args.templateVersion.externalRef;
 
   if (!templateName) {
     // Free-form: only valid inside the 24-hour customer-care window.

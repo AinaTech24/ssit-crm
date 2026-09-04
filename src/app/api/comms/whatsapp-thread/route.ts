@@ -124,9 +124,7 @@ export async function GET(req: NextRequest) {
       // A Meta-approved (Vartify-fetched) template can be sent to anyone, anytime.
       // A CRM-authored one goes as free-form text → delivers only inside the 24h
       // session window.
-      // `wainaTemplateName` is the pre-Vartify key — still read so templates stored
-      // before the provider switch keep resolving.
-      const isMetaTemplate = !!(b.vartifyTemplateName || b.wainaTemplateName || b.metaTemplateName);
+      const isMetaTemplate = !!(b.vartifyTemplateName || b.metaTemplateName);
       const { body: _omit, ...rest } = t;
       return { ...rest, mediaBroken, isMetaTemplate };
     });

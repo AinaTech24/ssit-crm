@@ -87,7 +87,7 @@ export function actionEmailHtml(opts: {
       <h1 style="margin:0 0 12px;font-size:20px;color:#16242b;">${escapeHtml(opts.heading)}</h1>
       <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#48585f;">${escapeHtml(opts.intro)}</p>
       <a href="${escapeHtml(opts.buttonUrl)}"
-         style="display:inline-block;background:#C5202A;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 22px;border-radius:9px;">
+         style="display:inline-block;background:#0E2557;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:11px 22px;border-radius:9px;">
         ${escapeHtml(opts.buttonLabel)}
       </a>
       <p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#8a979d;">

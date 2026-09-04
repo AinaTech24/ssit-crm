@@ -77,7 +77,7 @@ export function EarlyStartChildSip() {
           height={200}
           xLabels={res.series.map((p) => `Age ${p.age}`)}
           fmtY={(v) => inrShort(v)}
-          lines={[{ label: "Corpus", color: "#B71A20", values: res.series.map((p) => p.value) }]}
+          lines={[{ label: "Corpus", color: "#0E2557", values: res.series.map((p) => p.value) }]}
         />
       </Section>
 

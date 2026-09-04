@@ -40,7 +40,7 @@ const NAV: NavItem[] = [
 
 function initialsOf(name?: string | null) {
   const p = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  return ((p[0]?.[0] ?? "A") + (p[1]?.[0] ?? "")).toUpperCase();
+  return ((p[0]?.[0] ?? "S") + (p[1]?.[0] ?? "")).toUpperCase();
 }
 
 export function AdminShell({
@@ -85,14 +85,14 @@ export function AdminShell({
     <div className="h-screen flex overflow-hidden bg-muted/30">
       {/* ---------------------------------------------------------------- Sidebar */}
       <aside className="w-64 shrink-0 h-full flex flex-col text-white relative overflow-hidden"
-        style={{ background: "linear-gradient(180deg, hsl(358 78% 24%) 0%, hsl(358 80% 16%) 55%, hsl(358 82% 12%) 100%)" }}>
+        style={{ background: "linear-gradient(180deg, hsl(221 70% 18%) 0%, hsl(221 76% 12%) 55%, hsl(221 80% 9%) 100%)" }}>
         {/* subtle brand glow */}
         <div className="pointer-events-none absolute -top-24 -right-16 size-56 rounded-full opacity-30 blur-3xl"
-          style={{ background: "hsl(358 85% 50%)" }} />
+          style={{ background: "hsl(199 89% 48%)" }} />
 
         <div className="relative px-4 py-4 flex items-center gap-2.5 border-b border-white/10">
           <div className="size-9 rounded-xl grid place-items-center font-black shadow-lg shadow-black/30"
-            style={{ background: "linear-gradient(135deg,#fff, #ffd9da)", color: "#B71A20" }}>A</div>
+            style={{ background: "linear-gradient(135deg,#fff, #dbe6ff)", color: "#0E2557" }}>S</div>
           <div className="leading-tight">
             <div className="font-bold tracking-tight">SSIT</div>
             <div className="text-[10px] text-white/55 font-medium uppercase tracking-wider">Platform Admin</div>
@@ -109,11 +109,11 @@ export function AdminShell({
                 onClick={() => router.push(n.href)}
                 className={`group w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                   active
-                    ? "bg-white text-[#B71A20] shadow-md shadow-black/20"
+                    ? "bg-white text-[#0E2557] shadow-md shadow-black/20"
                     : "text-white/75 hover:text-white hover:bg-white/10"
                 }`}
               >
-                <n.icon className={`size-4 shrink-0 ${active ? "text-[#B71A20]" : "text-white/60 group-hover:text-white"}`} />
+                <n.icon className={`size-4 shrink-0 ${active ? "text-[#0E2557]" : "text-white/60 group-hover:text-white"}`} />
                 <span className="truncate">{n.label}</span>
               </button>
             );
@@ -128,7 +128,7 @@ export function AdminShell({
         >
           {menuOpen && (
             <div
-              className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-white/10 bg-[hsl(358_30%_14%)] shadow-2xl shadow-black/50 overflow-hidden animate-scale-in origin-bottom"
+              className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-white/10 bg-[hsl(221_30%_14%)] shadow-2xl shadow-black/50 overflow-hidden animate-scale-in origin-bottom"
               onMouseEnter={openMenu}
               onMouseLeave={scheduleClose}
             >
@@ -154,7 +154,7 @@ export function AdminShell({
             className="w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 hover:bg-white/10 transition-colors text-left"
           >
             <div className="size-8 rounded-full grid place-items-center text-xs font-bold shrink-0"
-              style={{ background: "linear-gradient(135deg,#fff,#ffd9da)", color: "#B71A20" }}>
+              style={{ background: "linear-gradient(135deg,#fff,#dbe6ff)", color: "#0E2557" }}>
               {initialsOf(name)}
             </div>
             <div className="min-w-0 flex-1">

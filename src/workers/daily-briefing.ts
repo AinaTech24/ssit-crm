@@ -78,7 +78,7 @@ function briefingHtml(userName: string, groups: ActionGroup[], totalCount: numbe
     <p style="margin:0 0 8px;color:#475569;font-size:13px;">${totalCount} thing${totalCount === 1 ? "" : "s"} need${totalCount === 1 ? "s" : ""} you today. Here's your day at a glance:</p>
     ${sections}
     <p style="margin:24px 0 0;">
-      <a href="${url}" style="display:inline-block;background:#B71A20;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:8px;">Open your Command Center</a>
+      <a href="${url}" style="display:inline-block;background:#0E2557;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:8px;">Open your Command Center</a>
     </p>
     <p style="font-size:11px;color:#94a3b8;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;">You're receiving this daily briefing because you're an active user of your firm's Growth OS.</p>
   </div>`;

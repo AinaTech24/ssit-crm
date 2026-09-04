@@ -5,10 +5,10 @@
 @layer base {
   :root {
     /* ═══════════════════════════════════════════════════════════════════════
-       SSIT CRM palette — SSIT red primary (#C5202A), dark-teal accent (#1F3D3B).
-       Derived from the SSIT logo. The brand token names below keep their legacy
-       spelling (`--brand-navy` = red, `--brand-cyan` = teal) so the hundreds of
-       existing `bg-brand-navy` / `text-brand-cyan` consumers re-theme in place.
+       SSIT CRM palette — deep navy primary (#0E2557), electric cyan accent
+       (#0EA5E9). The `--brand-navy` / `--brand-cyan` token names below mean
+       exactly what they say, so the hundreds of existing `bg-brand-navy` /
+       `text-brand-cyan` consumers theme correctly with no component changes.
        ═══════════════════════════════════════════════════════════════════════ */
     --background: 195 24% 98.6%;             /* paper-white with a faint teal tint */
     --foreground: 200 30% 12%;               /* near-black charcoal-teal */
@@ -17,7 +17,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 200 30% 12%;
 
-    --primary: 358 75% 41%;                  /* SSIT red #B71A20 */
+    --primary: 221 72% 20%;                  /* SSIT navy #0E2557 */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 200 20% 95.5%;              /* soft neutral for hovers / chips */
@@ -26,10 +26,10 @@
     --muted: 200 18% 95%;
     --muted-foreground: 200 12% 44%;
 
-    --accent: 358 70% 96%;                   /* light brand tint — hover surface */
-    --accent-foreground: 358 60% 30%;        /* deep red text on the tint */
+    --accent: 199 89% 95%;                   /* light cyan tint — hover surface */
+    --accent-foreground: 221 60% 26%;        /* deep navy text on the tint */
 
-    --destructive: 4 80% 52%;                /* warmer red, distinct from brand crimson */
+    --destructive: 4 80% 52%;                /* error red — no longer near the brand hue */
     --destructive-foreground: 0 0% 100%;
     --success: 151 55% 35%;
     --success-foreground: 151 62% 22%;
@@ -40,24 +40,24 @@
 
     --border: 200 20% 90%;
     --input: 200 20% 90%;
-    --ring: 358 75% 41%;                     /* SSIT-red focus ring — one accent */
+    --ring: 199 89% 48%;                     /* cyan focus ring — visible on navy */
 
     --radius: 0.75rem;                       /* 12px base; xl utilities give 16/20px */
 
     /* Extended brand tokens (consumed by gradients, badges, hero strips).
        Names are legacy; values are the SSIT palette. */
-    --brand-navy: 358 75% 41%;               /* = SSIT red #B71A20 */
-    --brand-navy-deep: 358 78% 32%;          /* deep red */
-    --brand-navy-light: 358 70% 96%;         /* red tint */
-    --brand-cyan: 358 75% 41%;               /* re-pointed: = SSIT red (one accent) */
-    --brand-cyan-deep: 358 78% 32%;          /* deep red */
-    --brand-cyan-light: 358 70% 96%;         /* red tint */
-    --brand-violet: 356 60% 55%;
-    --brand-mint: 358 75% 41%;              /* re-pointed: = SSIT red (one accent) */
-    /* Sidebar active-item tint — theme-aware (see .nav-link-active). Soft brand
-       red on light; a muted deep red on dark (brand-navy-light would be near
-       white in dark, so it gets its own value below). */
-    --nav-active-bg: 358 75% 41%;            /* solid SSIT red pill */
+    --brand-navy: 221 72% 20%;               /* SSIT navy #0E2557 */
+    --brand-navy-deep: 221 76% 13%;          /* deeper navy */
+    --brand-navy-light: 221 60% 95%;         /* navy tint */
+    --brand-cyan: 199 89% 48%;               /* SSIT cyan #0EA5E9 */
+    --brand-cyan-deep: 199 90% 36%;          /* deep cyan */
+    --brand-cyan-light: 199 89% 95%;         /* cyan tint */
+    --brand-violet: 258 60% 58%;
+    --brand-mint: 168 66% 40%;
+    /* Sidebar active-item tint — theme-aware (see .nav-link-active). Solid
+       brand navy on light; a lighter navy on dark (brand-navy-light would be
+       near white in dark, so it gets its own value below). */
+    --nav-active-bg: 221 72% 20%;            /* solid SSIT navy pill */
     --nav-active-fg: 0 0% 100%;              /* white label + icon on the pill */
   }
 
@@ -68,13 +68,13 @@
     --card-foreground: 200 20% 96%;
     --popover: 200 30% 10%;
     --popover-foreground: 200 20% 96%;
-    --primary: 358 72% 52%;                  /* brighter SSIT red (#B71A20) for dark bg */
+    --primary: 217 68% 58%;                  /* lifted SSIT navy for dark backgrounds */
     --primary-foreground: 0 0% 100%;
     --secondary: 200 22% 15%;
     --secondary-foreground: 200 20% 96%;
     --muted: 200 22% 15%;
     --muted-foreground: 200 14% 64%;
-    --accent: 358 24% 22%;                   /* dark red-tinted hover surface */
+    --accent: 217 26% 22%;                   /* dark navy-tinted hover surface */
     --accent-foreground: 0 0% 98%;
     --destructive: 4 70% 52%;
     --destructive-foreground: 0 0% 100%;
@@ -86,13 +86,13 @@
     --info-foreground: 199 82% 84%;
     --border: 200 22% 19%;
     --input: 200 22% 19%;
-    --ring: 358 72% 52%;
+    --ring: 199 85% 55%;
     /* brand aliases for dark mode */
-    --brand-navy: 358 72% 52%;
-    --brand-navy-deep: 358 74% 38%;
-    --brand-cyan: 358 72% 52%;
-    --brand-cyan-deep: 358 74% 38%;
-    --nav-active-bg: 358 72% 52%;
+    --brand-navy: 217 68% 58%;
+    --brand-navy-deep: 221 70% 38%;
+    --brand-cyan: 199 85% 55%;
+    --brand-cyan-deep: 199 88% 38%;
+    --nav-active-bg: 217 68% 58%;
     --nav-active-fg: 0 0% 100%;
   }
 
@@ -110,8 +110,8 @@
     --foreground: 220 18% 91%;
     --border: 220 14% 22%;
     --input: 220 14% 24%;
-    --ring: 358 72% 52%;
-    --nav-active-bg: 358 72% 52%;
+    --ring: 199 85% 55%;
+    --nav-active-bg: 217 68% 58%;
     --nav-active-fg: 0 0% 100%;
   }
 

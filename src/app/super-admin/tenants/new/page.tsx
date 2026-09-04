@@ -50,7 +50,7 @@ export default function NewTenantPage() {
 
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         {/* Branded header */}
-        <div className="px-6 py-5 text-white" style={{ background: "linear-gradient(135deg, hsl(358 75% 41%) 0%, hsl(358 78% 30%) 100%)" }}>
+        <div className="px-6 py-5 text-white" style={{ background: "linear-gradient(135deg, hsl(221 72% 20%) 0%, hsl(221 76% 13%) 100%)" }}>
           <div className="flex items-center gap-3">
             <div className="size-11 rounded-xl bg-white/15 grid place-items-center"><Building2 className="size-5" /></div>
             <div>
