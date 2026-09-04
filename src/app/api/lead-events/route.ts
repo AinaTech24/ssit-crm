@@ -73,6 +73,43 @@ export async function GET() {
   }
 }
 
+/**
+ * Remove one event from the firm's list.
+ *
+ * Soft delete (is_active = false), not a row delete. A lead stores the event
+ * LABEL in source_campaign rather than a foreign key, so past leads keep their
+ * attribution either way — but keeping the row means re-adding the same name
+ * later reactivates it instead of silently creating a duplicate key.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await requireSession();
+    requireAny(session.roles, ["lead.edit.all", "lead.edit.assigned"], session.permissions);
+    const key = new URL(req.url).searchParams.get("key")?.trim();
+    if (!key) return NextResponse.json({ error: "key required" }, { status: 400 });
+
+    const updated = await withTenant(session.tenantId, async (tx) =>
+      tx
+        .update(masterValues)
+        .set({ isActive: false })
+        .where(
+          and(
+            eq(masterValues.tenantId, session.tenantId),
+            eq(masterValues.masterType, MASTER_TYPE),
+            eq(masterValues.key, key)
+          )
+        )
+        .returning({ key: masterValues.key })
+    );
+    if (updated.length === 0) {
+      return NextResponse.json({ error: "event not found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return handleApiError(err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();

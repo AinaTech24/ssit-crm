@@ -23,6 +23,12 @@ const Body = z.object({
   ownerName: z.string().min(2),
   ownerEmail: z.string().email(),
   ownerPassword: z.string().min(8),
+  // Optional SECOND login for the same firm. This creates a second USER row in
+  // the same tenant with identical access — two people, two passwords, one
+  // firm. It is not a shared credential, so either can be disabled or have its
+  // password changed without touching the other.
+  additionalEmail: z.union([z.string().email(), z.literal("")]).default(""),
+  additionalPassword: z.union([z.string().min(8), z.literal("")]).default(""),
   // The packages module was removed from the admin console; a tenant is
   // provisioned with no plan and is never license-gated. These stay optional
   // so existing API callers keep working.
@@ -39,11 +45,59 @@ export async function POST(req: NextRequest) {
     if (!parse.success) return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
     const body = parse.data;
 
+    const ownerEmail = body.ownerEmail.trim().toLowerCase();
+    const addEmail = body.additionalEmail.trim().toLowerCase();
+    const addPassword = body.additionalPassword;
+
+    // Both or neither — a password with no address (or vice versa) is a typo,
+    // and silently ignoring it would leave the second person unable to log in
+    // with no indication why.
+    if (Boolean(addEmail) !== Boolean(addPassword)) {
+      return NextResponse.json(
+        { error: "Additional email and additional password must be filled in together." },
+        { status: 400 }
+      );
+    }
+    if (addEmail && addEmail === ownerEmail) {
+      return NextResponse.json(
+        { error: "The additional email must be different from the owner email." },
+        { status: 400 }
+      );
+    }
+
+    // Login resolves an address GLOBALLY — see the query in
+    // src/app/api/auth/login/route.ts, which is "WHERE lower(email) = $1 ORDER BY
+    // created_at DESC LIMIT 1" with no tenant scope. So reusing an address that
+    // already exists anywhere means the NEWER row wins and the older account
+    // becomes unreachable: onboarding a firm with a platform admin's address
+    // would lock that admin out of /super-admin. Refuse instead.
+    const taken = await withPlatformAdmin(session.userId, async (tx) => {
+      const r = await tx.execute(
+        addEmail
+          ? sql`SELECT lower(email) AS email FROM users WHERE lower(email) IN (${ownerEmail}, ${addEmail})`
+          : sql`SELECT lower(email) AS email FROM users WHERE lower(email) = ${ownerEmail}`
+      );
+      return (r.rows as Array<{ email: string }>).map((x) => x.email);
+    });
+    if (taken.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            `Already in use: ${taken.join(", ")}. Sign-in matches an email across the whole platform, so reusing one would shadow the existing account.`,
+        },
+        { status: 409 }
+      );
+    }
+
     const tenantId = uuid();
     const branchId = uuid();
     const userId = uuid();
+    const additionalUserId = uuid();
     const subId = uuid();
     const passwordHash = await bcrypt.hash(body.ownerPassword, 12);
+    const additionalHash = addEmail ? await bcrypt.hash(addPassword, 12) : null;
+    // Display name only — the person renames themselves in Settings → Profile.
+    const additionalName = addEmail ? addEmail.split("@")[0] : "";
     const trialEnds = new Date(Date.now() + body.trialDays * 24 * 60 * 60 * 1000);
     // Normalise ARN: empty string → null (optional column, unique index treats
     // NULLs as distinct so multiple ARN-less tenants coexist).
@@ -88,6 +142,15 @@ export async function POST(req: NextRequest) {
         VALUES (${userId}, ${tenantId}, ${branchId}, ${body.ownerEmail.toLowerCase()}, ${body.ownerName},
                 ${passwordHash}, ARRAY['owner','rm','compliance']::text[], 'active', now(), now(), now())
       `);
+
+      // Second login for the same firm, same roles as the owner.
+      if (addEmail && additionalHash) {
+        await tx.execute(sql`
+          INSERT INTO users (id, tenant_id, branch_id, email, name, password_hash, roles, status, activated_at, created_at, updated_at)
+          VALUES (${additionalUserId}, ${tenantId}, ${branchId}, ${addEmail}, ${additionalName},
+                  ${additionalHash}, ARRAY['owner','rm','compliance']::text[], 'active', now(), now(), now())
+        `);
+      }
 
       // Subscription — only when a package still exists to point at.
       if (pkg) {

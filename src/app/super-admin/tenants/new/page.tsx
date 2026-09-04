@@ -13,6 +13,8 @@ export default function NewTenantPage() {
     ownerName: "",
     ownerEmail: "",
     ownerPassword: "",
+    additionalEmail: "",
+    additionalPassword: "",
   });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,6 +78,18 @@ export default function NewTenantPage() {
               <Field label="Owner email" value={form.ownerEmail} setValue={(v) => set("ownerEmail", v)} required type="email" />
             </div>
             <Field label="Temporary password (8+)" value={form.ownerPassword} setValue={(v) => set("ownerPassword", v)} required type="password" />
+          </Section>
+
+          {/* Optional second login — two people, two passwords, one firm. */}
+          <Section icon={UserCog} title="Additional login (optional)">
+            <p className="text-xs text-muted-foreground -mt-1 mb-1">
+              Creates a second account in this same firm with the same access. Leave blank to add
+              team members later from Settings → Team.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Field label="Additional email" value={form.additionalEmail} setValue={(v) => set("additionalEmail", v)} type="email" placeholder="second.user@firm.com" />
+              <Field label="Additional password (8+)" value={form.additionalPassword} setValue={(v) => set("additionalPassword", v)} type="password" />
+            </div>
           </Section>
 
           {err && <div className="rounded-lg border border-rose-300 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 px-3 py-2 text-sm">{err}</div>}

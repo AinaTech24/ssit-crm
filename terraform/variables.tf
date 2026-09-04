@@ -8,11 +8,20 @@ variable "project" {
   default = "ssit-crm"
 }
 
-# Web/worker box. t4g.medium = 2 vCPU / 4 GB ARM (Graviton) — cheap + ample
-# headroom for Next.js + worker + redis + caddy on one host.
+# Web/worker box. t4g.large = 2 vCPU / 8 GB ARM (Graviton).
+#
+# NOT t4g.medium (4 GB), which this stack outgrew in practice: the deploy builds
+# the image ON the box while it is serving traffic, and Dockerfile gives the
+# build stage --max-old-space-size=4096 — more heap than a 4 GB host has. The
+# result was swap thrashing, 503s from Caddy while the container itself stayed
+# "healthy", and eventually a hard reboot mid-deploy. 8 GB builds alongside live
+# traffic without touching swap.
+#
+# The real fix is to stop building on the serving box (build in CI, push to ECR,
+# have the box pull). Until then, do not size this down.
 variable "instance_type" {
   type    = string
-  default = "t4g.medium"
+  default = "t4g.large"
 }
 
 variable "root_volume_gb" {

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, UserPlus, Loader2, AlertTriangle, ExternalLink, Camera, Trash2 } from "lucide-react";
+import { ChevronLeft, UserPlus, Loader2, AlertTriangle, ExternalLink, Camera, Trash2, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
@@ -105,6 +105,20 @@ export default function NewLeadPage() {
       .catch(() => {});
     return () => { alive = false; };
   }, []);
+
+  /** Drop the selected event from the firm's list (soft delete server-side). */
+  const removeSelectedEvent = useCallback(async () => {
+    const ev = (events ?? []).find((e) => e.label === form.eventName);
+    if (!ev) return;
+    if (!confirm(`Remove "${ev.label}" from the event list?\n\nLeads already tagged with it keep their attribution.`)) return;
+    const res = await fetch(`/api/lead-events?key=${encodeURIComponent(ev.key)}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert((await res.json().catch(() => ({})))?.error ?? "Could not remove the event.");
+      return;
+    }
+    setEvents((list) => (list ?? []).filter((e) => e.key !== ev.key));
+    setForm((s) => ({ ...s, eventName: "" }));
+  }, [events, form.eventName]);
 
   /** Load the firm's event list once, the first time it is needed. */
   const loadEvents = useCallback(async () => {
@@ -317,14 +331,12 @@ export default function NewLeadPage() {
           setValue={(v) => set("phone", v)}
         // placeholder="+919XXXXXXXXX"
         />
-        <div className={showAll ? "contents" : "hidden"}>
-          <Row
-            label="Email"
-            value={form.email}
-            setValue={(v) => set("email", v)}
-            type="email"
-          />
-        </div>
+        <Row
+          label="Email"
+          value={form.email}
+          setValue={(v) => set("email", v)}
+          type="email"
+        />
 
         {/* Live duplicate warning — shown when /check-duplicate returns matches.
             Doesn't block submission; just nudges the RM to confirm or open the
@@ -454,6 +466,7 @@ export default function NewLeadPage() {
                 </button>
               </div>
             ) : (
+              <div className="flex items-center gap-2">
               <SelectField
                 value={form.eventName}
                 onChange={(e) => set("eventName", e.target.value)}
@@ -469,6 +482,18 @@ export default function NewLeadPage() {
                   <option key={ev.key} value={ev.label}>{ev.label}</option>
                 ))}
               </SelectField>
+              {form.eventName && (
+                <button
+                  type="button"
+                  onClick={removeSelectedEvent}
+                  title={`Remove "${form.eventName}" from the event list`}
+                  aria-label={`Remove ${form.eventName} from the event list`}
+                  className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+              </div>
             )}
             <p className="text-[10px] text-muted-foreground mt-1">
               Saved against the lead so you can measure which events actually produce business.

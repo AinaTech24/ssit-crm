@@ -16,7 +16,18 @@ COMPOSE="docker compose -f docker-compose.prod.yml"
 STATE=~/app/.active-color
 
 echo "=== prune $(date) ==="
-docker builder prune -af 2>&1 | tail -1
+# Keep the layer cache. `builder prune -af` discarded it on EVERY run, turning a
+# two-line change into a full ~12-minute cold Next.js build. Evict only cache
+# older than a week instead - and fall back to the full wipe when the disk is
+# genuinely tight, which is the problem -a was really guarding against on a 40 GB
+# root volume.
+DISK_PCT=$(df --output=pcent / | tail -1 | tr -dc "0-9")
+if [ "${DISK_PCT:-0}" -ge 85 ]; then
+  echo "disk at ${DISK_PCT}% - full builder prune"
+  docker builder prune -af 2>&1 | tail -1
+else
+  docker builder prune -f --filter until=168h 2>&1 | tail -1
+fi
 docker image prune -f 2>&1 | tail -1
 echo "--- mem ---"; free -m | grep -E "Mem|Swap"
 

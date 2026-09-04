@@ -19,6 +19,7 @@ import { withPlatformAdmin } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requirePlatform } from "@/lib/auth/rbac";
 import { tenants, subscriptions, subscriptionEvents, users, packages } from "@/db/schema";
+import { PLATFORM_TENANT_ID } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
 
@@ -129,6 +130,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const session = await requireSession();
     requirePlatform(session.roles, "platform.tenant.delete");
+
+    // The platform tenant is a sentinel that owns every platform_admin user. It
+    // is not a customer firm and must never be deletable. Soft-deleting it does
+    // not remove those users - they stay active - but login joins users to
+    // tenants and rejects a session whose tenant is deleted, so EVERY admin gets
+    // "account inactive" and nobody can reach /super-admin to undo it. Recovery
+    // requires direct database access (scripts/restore-platform-tenant.js).
+    if (tenantId === PLATFORM_TENANT_ID) {
+      return NextResponse.json(
+        { error: "The platform tenant cannot be deleted - it owns every admin account." },
+        { status: 400 }
+      );
+    }
     const parse = Del.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) return NextResponse.json({ error: "confirmArn required" }, { status: 400 });
     const confirmArn = parse.data.confirmArn.trim();
