@@ -19,7 +19,8 @@
  *   - `verb`: override "Delete" label (e.g. "Archive", "Deactivate")
  */
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { MoreHorizontal, Pencil, Trash2, Loader2, type LucideIcon } from "lucide-react";
@@ -59,6 +60,8 @@ export function RowActions({
   const router = useRouter();
   const toast = useToast();
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [coords, setCoords] = useState<{ left: number; top: number; bottom: number; openUp: boolean } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -132,19 +135,59 @@ export function RowActions({
     );
   }
 
+  // The menu used to be `absolute` inside the row. Every table wraps its rows in
+  // a `card-surface overflow-hidden` (and often an overflow-x-auto scroller), and
+  // an absolutely-positioned child is ALWAYS clipped by an ancestor's overflow —
+  // no z-index or table height escapes that, which is why the menu appeared cut
+  // off at the card edge. Rendering it in a portal with fixed coordinates takes
+  // it out of every clipping context.
+  const openMenu = useCallback(() => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const MENU_W = 192; // w-48
+    const ESTIMATED_H = 180;
+    // Flip upward near the bottom of the viewport so the last row's menu is not
+    // pushed off-screen — the common case, since menus live on the last column.
+    const openUp = window.innerHeight - r.bottom < ESTIMATED_H;
+    setCoords({
+      left: Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)),
+      top: r.bottom + 4,
+      bottom: window.innerHeight - r.top + 4,
+      openUp,
+    });
+    setOpen(true);
+  }, []);
+
+  // Fixed coordinates are a snapshot — once the page scrolls they no longer point
+  // at the button, so close rather than let the menu drift away from its row.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
   return (
     <div className="relative inline-block">
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? setOpen(false) : openMenu())}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         className="rounded-md p-1 hover:bg-accent text-muted-foreground hover:text-foreground"
         aria-label={`Actions for ${itemLabel}`}
       >
         {busy ? <Loader2 className="size-4 animate-spin" /> : <MoreHorizontal className="size-4" />}
       </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-10 w-48 rounded-md border bg-popover shadow-md py-1 text-sm">
+      {open && coords && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed z-50 w-48 rounded-md border bg-popover shadow-md py-1 text-sm"
+          style={coords.openUp ? { left: coords.left, bottom: coords.bottom } : { left: coords.left, top: coords.top }}
+        >
           {items?.map((it) => (
             <Link
               key={it.href}
@@ -179,7 +222,8 @@ export function RowActions({
               <Trash2 className="size-3.5" /> {verb}
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
       <ConfirmDialog

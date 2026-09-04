@@ -63,13 +63,13 @@ jobs:
       # the image.
       - name: Package the tree
         run: |
-          tar czf /tmp/app.tgz \
+          tar czf app.tgz \
             --exclude='node_modules' --exclude='.next' --exclude='.git' \
             src public drizzle scripts certs \
             package.json package-lock.json next.config.ts tsconfig.json \
             drizzle.config.ts postcss.config.js tailwind.config.ts \
             vitest.config.ts
-          ls -lh /tmp/app.tgz
+          ls -lh app.tgz
 
       - name: Copy to the box
         uses: appleboy/scp-action@v0.1.7
@@ -78,9 +78,11 @@ jobs:
           username: ${{ secrets.DEPLOY_SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
-          source: /tmp/app.tgz
+          # Workspace-relative, NOT /tmp: scp-action runs in its own container
+          # which mounts $GITHUB_WORKSPACE but not the runner's /tmp, so a file
+          # written to /tmp is invisible to it and it uploads an empty archive.
+          source: app.tgz
           target: /tmp
-          strip_components: 1
 
       - name: Deploy (blue-green) and wait for the result
         uses: appleboy/ssh-action@v1.2.0

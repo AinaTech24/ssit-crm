@@ -91,3 +91,6 @@ schema.zip
 # can verify the RDS TLS chain (sslmode=verify-full); without it a fresh clone
 # builds an image that cannot connect to the database.
 !certs/rds-global-bundle.pem
+
+# Deploy tarball built in CI inside the workspace (see .github/workflows/deploy.yml)
+app.tgz
