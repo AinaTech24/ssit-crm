@@ -63,15 +63,21 @@ function nextCron(cron: string | undefined, tz: string): Date | null {
  *
  * Returns the materialized trigger kind (for logging/asserting).
  */
-export async function materializeTriggers(
-  tx: Tx,
-  opts: { tenantId: string; workflowId: string; graph: any; enabled: boolean }
-): Promise<string> {
-  const { tenantId, workflowId, graph, enabled } = opts;
+export type DerivedTrigger = {
+  kind: string;
+  config: Record<string, unknown>;
+  criteria: unknown;
+  cronExpression: string | null;
+  nextRunAt: Date | null;
+};
 
-  // Republish replaces — a changed trigger node must not leave a stale row.
-  await tx.delete(workflowTriggers).where(and(eq(workflowTriggers.workflowId, workflowId), eq(workflowTriggers.tenantId, tenantId)));
-
+/**
+ * Pure derivation of a workflow's trigger row from its graph. Split out of
+ * materializeTriggers so a caller that must not delete the existing row —
+ * workflow_runs.trigger_id references it, so a delete fails once the workflow
+ * has ever run — can update it in place instead.
+ */
+export function deriveTrigger(graph: any): DerivedTrigger {
   const triggerNode = (graph?.nodes ?? []).find((n: any) => n?.type === "trigger");
   const cfg: TriggerNodeConfig = (triggerNode?.config ?? {}) as TriggerNodeConfig;
   const kind = (cfg.kind ?? "").trim();
@@ -106,18 +112,74 @@ export async function materializeTriggers(
     };
   }
 
+  return { kind: rowKind, config, criteria, cronExpression, nextRunAt };
+}
+
+export async function materializeTriggers(
+  tx: Tx,
+  opts: { tenantId: string; workflowId: string; graph: any; enabled: boolean }
+): Promise<string> {
+  const { tenantId, workflowId, graph, enabled } = opts;
+  const d = deriveTrigger(graph);
+
+  // Republish replaces — a changed trigger node must not leave a stale row.
+  await tx.delete(workflowTriggers).where(and(eq(workflowTriggers.workflowId, workflowId), eq(workflowTriggers.tenantId, tenantId)));
+
   await tx.insert(workflowTriggers).values({
     workflowId,
     tenantId,
-    kind: rowKind as any,
-    config: config as any,
-    criteria: criteria as any,
+    kind: d.kind as any,
+    config: d.config as any,
+    criteria: d.criteria as any,
     enabled,
-    cronExpression,
-    nextRunAt,
+    cronExpression: d.cronExpression,
+    nextRunAt: d.nextRunAt,
   } as any);
 
-  return rowKind;
+  return d.kind;
+}
+
+/**
+ * Bring a workflow's trigger row in line with its graph WITHOUT deleting it.
+ * Inserts when none exists, updates in place when one does — safe on a
+ * workflow that already has runs pointing at the trigger.
+ */
+export async function upsertTrigger(
+  tx: Tx,
+  opts: { tenantId: string; workflowId: string; graph: any; enabled: boolean }
+): Promise<string> {
+  const { tenantId, workflowId, graph, enabled } = opts;
+  const d = deriveTrigger(graph);
+  const scope = and(eq(workflowTriggers.workflowId, workflowId), eq(workflowTriggers.tenantId, tenantId));
+  const existing = await tx.select({ id: workflowTriggers.id }).from(workflowTriggers).where(scope).limit(1);
+
+  if (existing.length === 0) {
+    await tx.insert(workflowTriggers).values({
+      workflowId,
+      tenantId,
+      kind: d.kind as any,
+      config: d.config as any,
+      criteria: d.criteria as any,
+      enabled,
+      cronExpression: d.cronExpression,
+      nextRunAt: d.nextRunAt,
+    } as any);
+    return d.kind;
+  }
+
+  await tx
+    .update(workflowTriggers)
+    .set({
+      kind: d.kind as any,
+      config: d.config as any,
+      criteria: d.criteria as any,
+      enabled,
+      cronExpression: d.cronExpression,
+      nextRunAt: d.nextRunAt,
+      updatedAt: new Date(),
+    } as any)
+    .where(scope);
+  return d.kind;
 }
 
 /**

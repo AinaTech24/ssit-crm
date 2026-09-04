@@ -10,12 +10,10 @@ import { v4 as uuid } from "uuid";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
-import { pickAssignee } from "@/lib/assignment/engine";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense, assertModuleEnabled } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
-import { pickRmForNewLead } from "@/lib/leads/assign";
 import { canEditAllLeads, leadScopeCondition, leadScopeSql, requireLeadView } from "@/lib/leads/access";
 import { users } from "@/db/schema";
 import {
@@ -47,7 +45,8 @@ const CreateBody = z.object({
       "meta_ads", "google_ads", "linkedin", "youtube", "event", "manual",
     ])
     .default("manual"),
-  sourceCampaign: z.string().optional(),
+  /** Free-text campaign / event name. Carries the event when source="event". */
+  sourceCampaign: z.string().max(160).optional(),
   intendedAmount: z.string().optional(),
   /** Canonical pipeline value in rupees (preferred over the free-text amount). */
   expectedBusinessAmount: z.number().min(0).max(1e12).optional(),
@@ -170,42 +169,21 @@ export async function POST(req: NextRequest) {
     const id = uuid();
     const clientMeta = clientMetaFromHeaders(req.headers);
     let assignedOwnerId: string | null = null;
-    let assignedVia: "manual" | "round_robin" | "creator" = "creator";
+    let assignedVia: "manual" | "creator" = "creator";
 
     await withTenant(session.tenantId, async (tx) => {
-      // Resolve owner: explicit body.ownerId wins; otherwise auto-assign to an
-      // RM via least-loaded round-robin; otherwise fall back to the creator.
+      // Owner: whoever CREATES the lead owns it. Round-robin / assignment-rule
+      // auto-assignment was removed here at the firm's request — a lead typed in
+      // by an RM is that RM's lead. A user who can manage every lead may still
+      // hand it to someone else explicitly via body.ownerId.
+      // (The public lead-capture forms have no creator, so those still
+      //  round-robin — see /api/public/lead-forms/[slug].)
       if (body.ownerId && canEditAllLeads(session)) {
         assignedOwnerId = body.ownerId;
         assignedVia = "manual";
-      } else if (!canEditAllLeads(session)) {
+      } else {
         assignedOwnerId = session.userId;
         assignedVia = "creator";
-      } else {
-        // Configurable Assignment Rules win when defined; else the built-in
-        // least-loaded picker; else the creator.
-        const rulePick = await pickAssignee(tx, {
-          tenantId: session.tenantId,
-          subjectType: "lead",
-          record: { source: body.source },
-        });
-        if (rulePick) {
-          assignedOwnerId = rulePick;
-          assignedVia = "round_robin";
-        } else {
-          const picked = await pickRmForNewLead(tx, {
-            branchId: session.branchId ?? null,
-            strategy: "least_loaded",
-            excludeUserId: session.roles.includes("rm") ? null : session.userId,
-          });
-          if (picked) {
-            assignedOwnerId = picked;
-            assignedVia = "round_robin";
-          } else {
-            assignedOwnerId = session.userId;
-            assignedVia = "creator";
-          }
-        }
       }
 
       // Canonical pipeline value wins; keep intended_amount populated (from it)

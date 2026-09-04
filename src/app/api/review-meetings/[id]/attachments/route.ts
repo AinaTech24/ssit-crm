@@ -29,8 +29,10 @@ import { putObject } from "@/lib/storage/s3";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Per-file ceiling. Matches task attachments so the two feel the same. */
-export const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+// Per-file ceiling. Matches task attachments so the two feel the same.
+// NOT exported — a Next route module may only export route handlers and the
+// known config keys, and anything else fails the generated route type check.
+const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 /** Guards a single request from being used to bulk-dump into the bucket. */
 const MAX_FILES_PER_REQUEST = 20;
 

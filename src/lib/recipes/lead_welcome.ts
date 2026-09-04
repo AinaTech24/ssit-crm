@@ -7,7 +7,9 @@ import type { RecipeDef } from ".";
  * Fires on event `lead.created`.
  *
  * Branch:
- *   - Always: WhatsApp + email welcome to the lead
+ *   - Always: WhatsApp + email welcome to the lead. Each send is marked
+ *     continueOnError so an unconfigured channel (no WhatsApp token yet)
+ *     never stops the other one going out.
  *   - If source === "referral" OR "existing_client" AND referredByInvestorId
  *     is set: WhatsApp + email "thank-you for referring" to the referrer
  */
@@ -21,7 +23,7 @@ export const leadWelcomeRecipe: RecipeDef = {
   graph: graph({
     start: "trigger",
     nodes: [
-      n("trigger", "trigger", {}),
+      n("trigger", "trigger", { kind: "lead.created", subjectType: "lead" }),
 
       // Branch 1 — to lead (always)
       n("welcome_wa", "send_whatsapp", {
@@ -32,6 +34,7 @@ export const leadWelcomeRecipe: RecipeDef = {
           rm_name: "subject.owner_name",
         },
         category: "utility",
+        continueOnError: true,
       }),
       n("welcome_email", "send_email", {
         templateKey: "lead_welcome_email",
@@ -41,6 +44,7 @@ export const leadWelcomeRecipe: RecipeDef = {
           rm_name: "subject.owner_name",
         },
         category: "transactional",
+        continueOnError: true,
       }),
 
       // Branch 2 — referrer thank-you (if applicable)
@@ -63,6 +67,7 @@ export const leadWelcomeRecipe: RecipeDef = {
         },
         category: "utility",
         recipient: { source: "context", value: "referrer_phone" },
+        continueOnError: true,
       }),
       n("thank_referrer_email", "send_email", {
         templateKey: "referrer_thank_you_email",
@@ -73,6 +78,7 @@ export const leadWelcomeRecipe: RecipeDef = {
         },
         category: "transactional",
         recipient: { source: "context", value: "referrer_email" },
+        continueOnError: true,
       }),
 
       n("end", "end", {}),

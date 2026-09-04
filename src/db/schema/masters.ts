@@ -19,7 +19,7 @@ import { id, tenantId, timestamps } from "./_shared";
 
 /**
  * Single master_values table covers:
- *   - lead_source, campaign_type, service_request_type, task_priority,
+ *   - lead_source, lead_event, campaign_type, service_request_type, task_priority,
  *     client_category, goal_type, risk_profile_level, ddq_checklist_item,
  *     document_type, user_role, branch (when not first-class), rm (alias of users)
  *
@@ -34,6 +34,9 @@ export const masterValues = pgTable(
     masterType: text("master_type", {
       enum: [
         "lead_source",
+        // Named events a lead can be attributed to when source="event".
+        // Managed inline from the New-lead form via /api/lead-events.
+        "lead_event",
         "campaign_type",
         "service_request_type",
         "task_priority",

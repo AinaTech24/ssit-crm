@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, UserPlus, Loader2, AlertTriangle, ExternalLink, Camera, Trash2 } from "lucide-react";
@@ -57,6 +57,8 @@ export default function NewLeadPage() {
     phone: "",
     city: "",
     source: "manual",
+    // Set only when source === "event" — sent as sourceCampaign.
+    eventName: "",
     expectedBusinessAmount: "",
     leadType: "",
     aumPotential: "",
@@ -83,6 +85,64 @@ export default function NewLeadPage() {
   const [dupChecking, setDupChecking] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  // Firm-managed event list (master_values / lead_event), loaded lazily the
+  // first time the Event source is chosen.
+  const [events, setEvents] = useState<Array<{ key: string; label: string }> | null>(null);
+  const [addingEvent, setAddingEvent] = useState(false);
+  const [newEvent, setNewEvent] = useState("");
+  const [savingEvent, setSavingEvent] = useState(false);
+
+  // The creator owns the lead they enter. Pre-select them so the field shows
+  // what will actually happen (the API defaults to the creator regardless).
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/me")
+      .then((r) => r.json())
+      .then((j) => {
+        const meId = j?.user?.id;
+        if (alive && meId) setForm((f) => (f.ownerId ? f : { ...f, ownerId: meId }));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  /** Load the firm's event list once, the first time it is needed. */
+  const loadEvents = useCallback(async () => {
+    if (events !== null) return;
+    try {
+      const j = await fetch("/api/lead-events").then((r) => r.json());
+      setEvents(Array.isArray(j.events) ? j.events : []);
+    } catch {
+      setEvents([]);
+    }
+  }, [events]);
+
+  /** Persist a new event so it is in the dropdown for everyone next time. */
+  async function saveEvent() {
+    const label = newEvent.trim();
+    if (label.length < 2) return;
+    setSavingEvent(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/lead-events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ label }),
+      });
+      const j = await res.json();
+      if (!res.ok) { setErr(j.error ?? "Could not add the event"); return; }
+      const ev = j.event as { key: string; label: string };
+      setEvents((prev) => {
+        const rest = (prev ?? []).filter((e) => e.key !== ev.key);
+        return [...rest, ev].sort((a, b) => a.label.localeCompare(b.label));
+      });
+      setForm((f) => ({ ...f, eventName: ev.label }));
+      setNewEvent("");
+      setAddingEvent(false);
+    } finally {
+      setSavingEvent(false);
+    }
+  }
 
   async function onPickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -167,6 +227,8 @@ export default function NewLeadPage() {
         phone: form.phone || undefined,
         city: form.city || undefined,
         source: form.source,
+        // The event a lead was met at rides along as the campaign string.
+        sourceCampaign: form.source === "event" && form.eventName ? form.eventName : undefined,
         notes: form.notes || undefined,
         leadType: form.leadType || undefined,
         aumPotential: form.aumPotential || undefined,
@@ -323,6 +385,8 @@ export default function NewLeadPage() {
               if (!REFERRAL_SOURCES.has(v)) {
                 setForm((s) => ({ ...s, referredByInvestorId: "", referredByName: "" }));
               }
+              if (v === "event") loadEvents();
+              else setForm((s) => ({ ...s, eventName: "" }));
             }}
           >
             <option value="referral">Client Referral</option>
@@ -331,6 +395,7 @@ export default function NewLeadPage() {
             <option value="social_media">Social Media</option>
             <option value="webinar">Webinar</option>
             <option value="seminar">Seminar</option>
+            <option value="event">Event</option>
             <option value="walk_in">Walk-in</option>
             <option value="google">Google</option>
             <option value="cold_call">Cold Call</option>
@@ -338,6 +403,78 @@ export default function NewLeadPage() {
             <option value="manual">Manual entry</option>
           </SelectField>
         </div>
+
+        {/* Event picker — sits in the grid cell NEXT TO Source, and only when
+            the source is Event. Choose one the firm already ran, or add a new
+            one inline; added events persist and appear here for everyone. */}
+        {form.source === "event" && (
+          <div className="animate-fade-in">
+            <div className="text-xs font-medium mb-1 flex items-center justify-between gap-2">
+              <span>
+                Event<span className="text-rose-600 ml-0.5">*</span>
+              </span>
+              {!addingEvent && (
+                <button
+                  type="button"
+                  onClick={() => { setAddingEvent(true); setNewEvent(""); }}
+                  className="text-[11px] font-semibold text-brand-cyan hover:underline"
+                >
+                  + Add event
+                </button>
+              )}
+            </div>
+
+            {addingEvent ? (
+              <div className="flex gap-2">
+                <input
+                  autoFocus
+                  value={newEvent}
+                  onChange={(e) => setNewEvent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); saveEvent(); }
+                    if (e.key === "Escape") { setAddingEvent(false); setNewEvent(""); }
+                  }}
+                  placeholder="e.g. Andheri Investor Meet 2026"
+                  className="input-base flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={saveEvent}
+                  disabled={savingEvent || newEvent.trim().length < 2}
+                  className="btn-primary text-xs px-3 whitespace-nowrap disabled:opacity-50"
+                >
+                  {savingEvent ? <Loader2 className="size-3.5 animate-spin" /> : null} Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAddingEvent(false); setNewEvent(""); }}
+                  className="btn-secondary text-xs px-3"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <SelectField
+                value={form.eventName}
+                onChange={(e) => set("eventName", e.target.value)}
+              >
+                <option value="">
+                  {events === null
+                    ? "Loading events…"
+                    : events.length === 0
+                      ? "No events yet — use “Add event”"
+                      : "Select the event…"}
+                </option>
+                {(events ?? []).map((ev) => (
+                  <option key={ev.key} value={ev.label}>{ev.label}</option>
+                ))}
+              </SelectField>
+            )}
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Saved against the lead so you can measure which events actually produce business.
+            </p>
+          </div>
+        )}
 
         {/* Conditional referrer lookup — appears only for referral / existing-client sources */}
         {showReferrerLookup && (
@@ -403,15 +540,17 @@ export default function NewLeadPage() {
           <div className="text-xs font-medium mb-1">
             Assign RM
             <span className="ml-1 text-[10px] text-muted-foreground font-normal">
-              · leave blank for auto round-robin
+              · defaults to you
             </span>
           </div>
           <RmSelector
             value={form.ownerId || null}
             onChange={(id) => setForm((s) => ({ ...s, ownerId: id ?? "" }))}
-            role="rm"
-            placeholder="Auto-assign via round-robin"
+            placeholder="You (the person creating this lead)"
           />
+          <p className="text-[10px] text-muted-foreground mt-1">
+            You own every lead you create. Change this only to hand it to a colleague.
+          </p>
         </div>
 
         {/* Essential: "call me next week" is the whole job half the time. */}
@@ -529,7 +668,8 @@ export default function NewLeadPage() {
             disabled={
               busy ||
               !form.name ||
-              (showReferrerLookup && !form.referredByInvestorId)
+              (showReferrerLookup && !form.referredByInvestorId) ||
+              (form.source === "event" && !form.eventName)
             }
             className="btn-primary"
           >

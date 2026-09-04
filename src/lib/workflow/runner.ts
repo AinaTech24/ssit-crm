@@ -303,6 +303,29 @@ export async function executeStep(input: {
         .update(workflowRunSteps)
         .set({ status: "failed", error: message, completedAt: new Date(), latencyMs })
         .where(and(eq(workflowRunSteps.id, stepId), eq(workflowRunSteps.tenantId, tenantId)));
+
+      // `continueOnError` — the step is still recorded as failed (so the run
+      // timeline and the Control Tower show it), but the run walks on to the
+      // next node instead of dying. This exists for multi-channel fan-outs:
+      // a firm with no WhatsApp token yet must still get the welcome EMAIL,
+      // and one missing integration must not silently cancel the rest of an
+      // automation. Opt-in per node, so nothing else changes behaviour.
+      if ((node.config as { continueOnError?: boolean } | undefined)?.continueOnError) {
+        const nextNodeId = pickNextNode(graph, node.id);
+        if (!nextNodeId) {
+          await tx
+            .update(workflowRuns)
+            .set({ status: "completed", completedAt: new Date(), currentNodeId: null })
+            .where(and(eq(workflowRuns.id, run.id), eq(workflowRuns.tenantId, tenantId)));
+          return { status: "completed" };
+        }
+        await tx
+          .update(workflowRuns)
+          .set({ currentNodeId: nextNodeId })
+          .where(and(eq(workflowRuns.id, run.id), eq(workflowRuns.tenantId, tenantId)));
+        return { status: "running", nextNodeId };
+      }
+
       await markRunFailed(tx, run.id, tenantId, message);
       return { status: "failed" };
     }

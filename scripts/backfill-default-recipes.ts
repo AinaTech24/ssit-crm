@@ -1,5 +1,5 @@
 /**
- * One-off: install the 9 default workflow recipes into every existing
+ * One-off: install the default workflow recipes into every existing
  * tenant that doesn't yet have them. Idempotent — skips any recipe
  * already installed per tenant.
  *

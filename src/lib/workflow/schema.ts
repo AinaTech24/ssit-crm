@@ -32,6 +32,10 @@ const SendWhatsappConfig = z.object({
   category: z.enum(["transactional", "utility", "marketing"]).default("transactional"),
   /** Whether to bypass the 24-hour session window check (utility templates only) */
   outsideSession: z.boolean().default(true),
+  /** Record the failure and carry on to the next node instead of failing the
+   *  whole run. For multi-channel fan-outs where one unconfigured channel
+   *  must not cancel the others. */
+  continueOnError: z.boolean().optional(),
 });
 
 const SendEmailConfig = z.object({
@@ -50,6 +54,8 @@ const SendEmailConfig = z.object({
   /** Cc / Bcc */
   cc: z.array(z.string().email()).default([]),
   bcc: z.array(z.string().email()).default([]),
+  /** See SendWhatsappConfig.continueOnError. */
+  continueOnError: z.boolean().optional(),
 });
 
 const SendSmsConfig = z.object({
@@ -61,6 +67,8 @@ const SendSmsConfig = z.object({
       value: z.string().optional(),
     })
     .default({ source: "subject" }),
+  /** See SendWhatsappConfig.continueOnError. */
+  continueOnError: z.boolean().optional(),
 });
 
 const CreateTaskConfig = z.object({
