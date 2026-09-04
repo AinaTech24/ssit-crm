@@ -129,7 +129,12 @@ export default async function ReviewMeetingsPage({
              m.discussion_points, m.meeting_notes, m.next_review_date,
              m.follow_up_task_created,
              jsonb_array_length(COALESCE(m.action_items, '[]'::jsonb)) AS action_count,
-             jsonb_array_length(COALESCE(m.attachments, '[]'::jsonb)) AS attach_count,
+             -- Uploaded documents PLUS any legacy pasted-URL entries still in
+             -- the jsonb column, so the paperclip count matches what the detail
+             -- page shows.
+             (jsonb_array_length(COALESCE(m.attachments, '[]'::jsonb))
+              + (SELECT count(*) FROM review_meeting_attachments rma
+                  WHERE rma.meeting_id = m.id AND rma.deleted_at IS NULL)) AS attach_count,
              m.created_at,
              -- A meeting is tied to EITHER an investor or a lead (pre-conversion).
              -- Surface whichever name exists so the Client column is never blank.

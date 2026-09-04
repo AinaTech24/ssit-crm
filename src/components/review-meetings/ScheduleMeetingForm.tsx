@@ -6,6 +6,7 @@ import { Calendar, Loader2, Save, Users, Sparkles, Home, ChevronsUpDown, Video, 
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
+import { MeetingAttachmentPicker, uploadMeetingAttachments } from "./MeetingAttachments";
 
 /** 15-minute time slots across the day, labelled in 12-hour form. */
 const TIME_SLOTS: Array<{ value: string; label: string }> = (() => {
@@ -113,6 +114,10 @@ export function ScheduleMeetingForm({
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Documents picked before the meeting exists. They are POSTed to
+  // /api/review-meetings/<id>/attachments as soon as the meeting is created.
+  const [docs, setDocs] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
   // RM double-booking: when the API returns 409, hold the clashing meetings so
   // the user can confirm "Schedule anyway".
   const [conflicts, setConflicts] = useState<MeetingConflict[] | null>(null);
@@ -178,6 +183,23 @@ export function ScheduleMeetingForm({
         setErr(j.error ?? `Save failed (${res.status})`);
         return;
       }
+      if (docs.length && j?.id) {
+        setUploading(true);
+        try {
+          await uploadMeetingAttachments(j.id, docs);
+        } catch (e: any) {
+          // The meeting IS saved; only the documents failed. Say so plainly
+          // and stay on the form so the user can retry the upload.
+          setErr(
+            (e?.message ?? "Attachment upload failed") +
+              " — the meeting was scheduled, but its documents were not attached. Open the meeting to add them."
+          );
+          return;
+        } finally {
+          setUploading(false);
+        }
+      }
+
       if (onSuccess) onSuccess({ id: j?.id, day: form.meetingDay, time: form.meetingTime, subject: form.subject });
       else router.push("/dashboard/review-meetings");
     } finally {
@@ -354,6 +376,8 @@ export function ScheduleMeetingForm({
         />
       </Field>
 
+      <MeetingAttachmentPicker files={docs} onChange={setDocs} disabled={busy || uploading} />
+
       {err && (
         <div className="border border-destructive/30 bg-destructive/5 text-destructive rounded-lg px-3 py-2 text-sm">{err}</div>
       )}
@@ -392,9 +416,15 @@ export function ScheduleMeetingForm({
       )}
 
       <div className="flex justify-end pt-2 border-t border-border">
-        <button onClick={() => save()} disabled={!canSave || busy} className="btn-primary">
-          {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          {busy ? "Scheduling…" : "Schedule meeting"}
+        <button onClick={() => save()} disabled={!canSave || busy || uploading} className="btn-primary">
+          {busy || uploading ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+          {uploading
+            ? `Uploading ${docs.length} document${docs.length === 1 ? "" : "s"}…`
+            : busy
+              ? "Scheduling…"
+              : docs.length
+                ? `Schedule meeting + ${docs.length} document${docs.length === 1 ? "" : "s"}`
+                : "Schedule meeting"}
         </button>
       </div>
 

@@ -42,6 +42,7 @@ export * from "./risk_profiles";
 export * from "./sip_rejections";
 export * from "./sip_installment_marks";
 export * from "./review_meetings";
+export * from "./review_meeting_attachments";
 export * from "./leave";
 export * from "./leave_settings";
 export * from "./attendance";

@@ -8,7 +8,8 @@
  *   - Discussion points / agenda
  *   - Meeting notes
  *   - Action items (add / remove rows; on save → server fans out to tasks)
- *   - Attachments (URL-pasted; in a future turn we add a real S3 upload)
+ *   - Attachments (real S3-backed document uploads; legacy pasted URLs are
+ *     still listed read-only underneath)
  *   - Next review date
  *
  * "Mark completed" runs the full automation chain server-side:
@@ -23,6 +24,7 @@ import { Loader2, Save, Plus, Trash2, CheckCircle2, X, Sparkles, ListChecks, Cal
 import { renderReviewAgendaTemplate } from "@/lib/review-meetings/agenda";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
+import { MeetingAttachments } from "./MeetingAttachments";
 
 /** 15-minute time slots across the day, labelled in 12-hour form. */
 const TIME_SLOTS: Array<{ value: string; label: string }> = (() => {
@@ -285,12 +287,6 @@ export function ReviewMeetingDetailEditor({
     setItems((s) => s.filter((_, idx) => idx !== i));
   }
 
-  function addAttachment() {
-    setAtts((s) => [...s, { name: "", url: "" }]);
-  }
-  function patchAttachment(i: number, k: keyof Attachment, v: string) {
-    setAtts((s) => s.map((it, idx) => (idx === i ? { ...it, [k]: v } : it)));
-  }
   function removeAttachment(i: number) {
     setAtts((s) => s.filter((_, idx) => idx !== i));
   }
@@ -829,43 +825,38 @@ export function ReviewMeetingDetailEditor({
         )}
       </div>
 
-      {/* Attachments */}
-      <div className="card-surface p-5 space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold">Attachments ({atts.length})</h3>
-          <button onClick={addAttachment} className="btn-ghost text-xs">
-            <Plus className="size-3.5" /> Add link
-          </button>
-        </div>
-        {atts.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-3">
-            Paste a link to a presentation, report, or signed document.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {atts.map((a, i) => (
-              <li key={i} className="flex items-center gap-2">
-                <input
-                  value={a.name}
-                  onChange={(e) => patchAttachment(i, "name", e.target.value)}
-                  placeholder="Display name"
-                  className="input-base w-1/3"
-                />
-                <input
-                  value={a.url}
-                  onChange={(e) => patchAttachment(i, "url", e.target.value)}
-                  placeholder="https://…"
-                  className="input-base flex-1"
-                />
-                <button
-                  onClick={() => removeAttachment(i)}
-                  className="p-2 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 rounded-md"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
+      {/* Attachments — real uploads (S3). */}
+      <div className="card-surface p-5 space-y-3">
+        <MeetingAttachments meetingId={meeting.id} label="Documents" />
+
+        {atts.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <div className="text-[10px] uppercase font-bold text-muted-foreground">Linked URLs</div>
+            <ul className="space-y-1">
+              {atts.map((a, i) => (
+                <li key={i} className="flex items-center gap-2 text-xs">
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-cyan hover:underline truncate flex-1"
+                  >
+                    {a.name || a.url}
+                  </a>
+                  <button
+                    onClick={() => removeAttachment(i)}
+                    className="p-1 text-muted-foreground hover:text-destructive rounded"
+                    aria-label="Remove link"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[10px] text-muted-foreground">
+              Links saved before document uploads existed. Remove one and save to drop it.
+            </p>
+          </div>
         )}
       </div>
 
