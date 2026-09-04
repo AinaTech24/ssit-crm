@@ -48,7 +48,7 @@ const SPECS: Record<ClientFormKind, {
       "Hello {{client.name}}, before we recommend anything we need your risk profile on record. " +
       "It takes about 3 minutes: {{form.link}}",
     linkLabel: "Risk profile link",
-    linkExample: "https://crm.ssit.com/r/abc123",
+    linkExample: "https://crm.equitywala.com/r/abc123",
   },
   financial_discovery: {
     key: "financial_discovery_request",
@@ -58,7 +58,7 @@ const SPECS: Record<ClientFormKind, {
     bodyText:
       "Hello {{client.name}}, a few quick questions before we meet, so our time is about you and not paperwork: {{form.link}}",
     linkLabel: "Health check link",
-    linkExample: "https://crm.ssit.com/fd/abc123",
+    linkExample: "https://crm.equitywala.com/fd/abc123",
   },
   portfolio_view: {
     key: "portfolio_view_link",
@@ -68,7 +68,7 @@ const SPECS: Record<ClientFormKind, {
     bodyText:
       "Hello {{client.name}}, here is your live portfolio view — secure and read-only, no login needed: {{form.link}}",
     linkLabel: "Portfolio link",
-    linkExample: "https://crm.ssit.com/portfolio/abc123",
+    linkExample: "https://crm.equitywala.com/portfolio/abc123",
   },
 };
 

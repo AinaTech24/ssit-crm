@@ -1,5 +1,5 @@
 /**
- * Operational metrics for the SSIT Admin → AWS Monitoring dashboard — the
+ * Operational metrics for the Equitywala Admin → AWS Monitoring dashboard — the
  * application-level signals that complement the infra metrics: user activity,
  * email throughput, background-job queues, security, an audit feed, the Node
  * process health, and per-tenant analytics.

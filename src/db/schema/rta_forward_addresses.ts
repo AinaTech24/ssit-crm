@@ -21,7 +21,7 @@ export const rtaForwardAddresses = pgTable(
   {
     id,
     tenantId: tenantId.references(() => tenants.id),
-    /** Full unique inbound address, e.g. rta-a1b2c3d4e5@in.crm.ssit.com */
+    /** Full unique inbound address, e.g. rta-a1b2c3d4e5@in.crm.equitywala.com */
     address: text("address").notNull(),
     /** Unguessable local-part token (the part after "rta-"). */
     token: text("token").notNull(),

@@ -105,7 +105,7 @@ export function EmailSettingsForm({ initial }: { initial: Status }) {
         <span className={`px-2 py-1 rounded-full ${status.configured ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
           {status.configured ? "Configured" : "Not configured"}
         </span>
-        <span className="px-2 py-1 rounded-full bg-muted">Source: {status.source === "db" ? "SSIT Admin" : status.source === "env" ? "env var" : "none"}</span>
+        <span className="px-2 py-1 rounded-full bg-muted">Source: {status.source === "db" ? "Equitywala Admin" : status.source === "env" ? "env var" : "none"}</span>
         {status.host && <span className="px-2 py-1 rounded-full bg-muted">{status.host}:{status.port}</span>}
       </div>
 
@@ -153,7 +153,7 @@ export function EmailSettingsForm({ initial }: { initial: Status }) {
       {/* From */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium">From address</label>
-        <input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="SSIT CRM <connect@ssit.com>" className={inputCls} />
+        <input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Equitywala <connect@ssit.com>" className={inputCls} />
         <p className="text-[11px] text-muted-foreground">Many providers require the From to match the authenticated mailbox/domain.</p>
       </div>
 

@@ -4,7 +4,7 @@ import { ForgotPasswordForm } from "@/components/auth/ForgotPasswordForm";
 import { resolveLoginBrandingByHost } from "@/lib/tenant/host";
 
 // Same host-based white-label resolution as /login — a firm on its own domain
-// kept seeing the SSIT wordmark the moment it clicked "Forgot?", which broke the
+// kept seeing the Equitywala wordmark the moment it clicked "Forgot?", which broke the
 // illusion mid-flow.
 export const dynamic = "force-dynamic";
 

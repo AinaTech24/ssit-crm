@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → AWS Monitoring (live tile). Real-time host metrics read from
+ * Equitywala Admin → AWS Monitoring (live tile). Real-time host metrics read from
  * /proc — CPU, memory, swap, disk, load, network rate, uptime. Lightweight
  * (no AWS calls), so the dashboard can poll it every second. Platform-admin only.
  */

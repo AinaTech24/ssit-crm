@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 const ALLOWED = ["owner", "branch_head", "ops"];
 
 /**
- * Copilot Insights — how the team uses SSIT CRM Copilot and, crucially, the
+ * Copilot Insights — how the team uses Equitywala Copilot and, crucially, the
  * "miss queue": questions it couldn't answer yet, so you know what to teach it
  * next. Read-only aggregates over ai_copilot_interactions (PII already redacted
  * at write time). Owner / branch-head / ops only.
@@ -81,7 +81,7 @@ export default async function CopilotInsightsPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="text-xl font-semibold">Copilot Insights</div>
-          <p className="text-sm text-muted-foreground">How your team uses SSIT CRM Copilot — and what to teach it next.</p>
+          <p className="text-sm text-muted-foreground">How your team uses Equitywala Copilot — and what to teach it next.</p>
         </div>
         <Link href="/dashboard/ai-assistant" className="inline-flex items-center gap-1.5 text-sm text-brand-cyan-deep font-medium hover:underline">
           <ArrowLeft className="size-4" /> Back to Copilot

@@ -88,7 +88,7 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
       { key: "/dashboard/workflows/runs", label: "Automation Monitor", module: "automation_workflows" },
       { key: "/dashboard/templates", label: "Templates", module: "broadcasts" },
       { key: "/dashboard/campaigns", label: "Marketing Campaigns", module: "marketing_campaigns" },
-      { key: "/dashboard/ssit-library", label: "SSIT Content Library" },
+      { key: "/dashboard/ssit-library", label: "Equitywala Content Library" },
       { key: "/dashboard/communications", label: "Communications", module: "broadcasts" },
     ],
   },
@@ -155,7 +155,7 @@ export function areKnownNavKeys(keys: string[] | null | undefined): boolean {
  * The sidebar hrefs a TENANT can access. Resolution order (first that applies):
  *   1. explicit admin grant — subscriptions.allowed_nav
  *   2. package GRANULAR feature set — packages.enabled_features (per-feature
- *      Off/Included chosen in the SSIT package editor)
+ *      Off/Included chosen in the Equitywala package editor)
  *   3. package COARSE module default (legacy) — items with no module, or whose
  *      module the package enables (the original `i.module` sidebar gate)
  *

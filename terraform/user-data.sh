@@ -15,4 +15,4 @@ curl -sSL "https://github.com/docker/compose/releases/latest/download/docker-com
   -o /usr/libexec/docker/cli-plugins/docker-compose
 chmod +x /usr/libexec/docker/cli-plugins/docker-compose
 
-echo "cloud-init complete" > /var/log/mfd-bootstrap.done
+echo "cloud-init complete" > /var/log/ssit-crm-bootstrap.done

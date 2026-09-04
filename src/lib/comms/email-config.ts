@@ -1,6 +1,6 @@
 /**
  * Platform email configuration — the operator sets their own SMTP server from
- * SSIT Admin (no redeploy / env edit). Powers system/transactional email:
+ * Equitywala Admin (no redeploy / env edit). Powers system/transactional email:
  * password resets, team invites, staff alerts.
  *
  * Stored in platform_settings('email'); the SMTP password is encrypted at rest
@@ -31,7 +31,7 @@ export type ResolvedEmailConfig = {
   source: "db" | "env" | "none";
 };
 
-const DEFAULT_FROM = "SSIT CRM <connect@ssit.com>";
+const DEFAULT_FROM = "Equitywala <connect@ssit.com>";
 const TTL_MS = 60_000;
 let _cache: { cfg: ResolvedEmailConfig; at: number } | null = null;
 

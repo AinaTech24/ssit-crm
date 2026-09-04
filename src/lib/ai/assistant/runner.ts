@@ -1,5 +1,5 @@
 /**
- * SSIT Assistant — the agentic runner.
+ * Equitywala Assistant — the agentic runner.
  *
  * Runs a bounded tool-use loop against Anthropic Claude: the model answers from
  * the live firm snapshot when it can, and calls our read-only tools (tools.ts)

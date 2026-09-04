@@ -17,9 +17,9 @@ function configured(name: string, fallback: string): string {
 
 export const LEGAL = {
   /** Product / brand name shown to users. */
-  brand: configured("LEGAL_BRAND_NAME", "SSIT"),
+  brand: configured("LEGAL_BRAND_NAME", "Equitywala"),
   /** Registered legal entity that operates the platform. */
-  legalEntity: configured("LEGAL_ENTITY_NAME", "SSIT"),
+  legalEntity: configured("LEGAL_ENTITY_NAME", "Equitywala"),
   /** Registered office address (single line is fine). */
   address: configured("LEGAL_REGISTERED_ADDRESS", "India"),
   /** Public support / contact email. */
@@ -39,7 +39,7 @@ export const LEGAL = {
   /** Governing-law city for dispute jurisdiction. */
   jurisdiction: configured("LEGAL_JURISDICTION", "Mumbai, Maharashtra, India"),
   /** Canonical product URL. */
-  url: configured("LEGAL_PRODUCT_URL", "https://crm.ssit.com"),
+  url: configured("LEGAL_PRODUCT_URL", "https://crm.equitywala.com"),
   /**
    * Shown as "Last updated" on each legal page. This is intentionally a fixed
    * string (not the render date): a legal document's effective date should
@@ -50,7 +50,7 @@ export const LEGAL = {
 
 export function commercialLegalReadiness() {
   const checks = [
-    { key: "entity", label: "Registered legal entity", ok: LEGAL.legalEntity !== "SSIT" },
+    { key: "entity", label: "Registered legal entity", ok: LEGAL.legalEntity !== "Equitywala" },
     { key: "address", label: "Registered office address", ok: LEGAL.address !== "India" && LEGAL.address.length >= 12 },
     { key: "support", label: "Support contact", ok: !!LEGAL.email && !!LEGAL.phone },
     { key: "gstin", label: "GSTIN", ok: /^[0-9A-Z]{15}$/.test(LEGAL.gstin) },

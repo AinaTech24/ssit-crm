@@ -9,20 +9,20 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://crm.ssit.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://crm.equitywala.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "SSIT CRM — CRM & Automation for Mutual Fund Distributors",
-    template: "%s · SSIT CRM",
+    default: "Equitywala — CRM & Automation for Mutual Fund Distributors",
+    template: "%s · Equitywala",
   },
   description:
-    "SSIT CRM — the all-in-one CRM and automation platform for Indian Mutual Fund Distributors. SEBI-compliant WhatsApp & email automation, live portfolio XIRR, AI churn prediction, SIP tracking, and a guided lead-to-client pipeline — built for ARN-holding firms.",
-  applicationName: "SSIT CRM",
-  authors: [{ name: "SSIT Technologies" }],
-  creator: "SSIT Technologies",
-  publisher: "SSIT Technologies",
+    "Equitywala — the all-in-one CRM and automation platform for Indian Mutual Fund Distributors. SEBI-compliant WhatsApp & email automation, live portfolio XIRR, AI churn prediction, SIP tracking, and a guided lead-to-client pipeline — built for ARN-holding firms.",
+  applicationName: "Equitywala",
+  authors: [{ name: "Equitywala Technologies" }],
+  creator: "Equitywala Technologies",
+  publisher: "Equitywala Technologies",
   category: "Business Software",
   keywords: [
     "MFD CRM",
@@ -43,16 +43,16 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    siteName: "SSIT CRM",
-    title: "SSIT CRM — CRM & Automation for Mutual Fund Distributors",
+    siteName: "Equitywala",
+    title: "Equitywala — CRM & Automation for Mutual Fund Distributors",
     description:
-      "Run your entire MFD practice on autopilot with SSIT CRM — compliant WhatsApp/email automation, live XIRR, AI churn prediction, SIP tracking and more. Built for Indian ARN holders.",
+      "Run your entire MFD practice on autopilot with Equitywala — compliant WhatsApp/email automation, live XIRR, AI churn prediction, SIP tracking and more. Built for Indian ARN holders.",
     url: SITE_URL,
     locale: "en_IN",
   },
   twitter: {
     card: "summary_large_image",
-    title: "SSIT CRM — CRM & Automation for Mutual Fund Distributors",
+    title: "Equitywala — CRM & Automation for Mutual Fund Distributors",
     description:
       "The practice operating system for Indian MFDs. SEBI-compliant automation, live XIRR, AI churn prediction, SIP tracking and more.",
   },

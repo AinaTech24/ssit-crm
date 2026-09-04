@@ -1,3 +1,8 @@
+-- FILENAME NOTE: the "z" is load-bearing. migrate-all.ts applies files in
+-- filename sort order, and this migration ALTERs tables that 0001_sleepy_joseph.sql
+-- creates. Named 0001_rls_policies.sql it sorted BEFORE that file ("r" < "s") and
+-- a fresh database could never be bootstrapped: it died on ALTER TABLE branches.
+-- Do not rename it back without re-checking the sort order.
 -- Row-Level Security policies for multi-tenant isolation.
 -- This migration MUST run after the Drizzle-generated schema migration.
 --

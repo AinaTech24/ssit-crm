@@ -51,6 +51,16 @@ echo "=== schema guard $(date) ==="
 $COMPOSE run --rm migrate npm run check:schema
 RC=$?; [ $RC -ne 0 ] && { echo "DEPLOY_DONE_EXIT=$RC (schema drift — code expects DB objects that don't exist; old colour still serving)"; exit $RC; }
 
+# Shared services. The colour containers below start with --no-deps (so a
+# deploy never restarts Caddy or Redis and drops connections), which means
+# NOTHING starts them on a FIRST deploy: the run finishes DEPLOY_DONE_EXIT=0
+# with a healthy web container and a site that answers on no port at all,
+# because there is no reverse proxy and no queue backend. Idempotent - on a
+# redeploy these are already up and compose leaves them alone.
+echo "=== ensure shared services (caddy, redis) $(date) ==="
+$COMPOSE up -d --no-deps caddy redis
+RC=$?; [ $RC -ne 0 ] && { echo "DEPLOY_DONE_EXIT=$RC (could not start caddy/redis)"; exit $RC; }
+
 ACTIVE=$(cat $STATE 2>/dev/null)
 if [ "$ACTIVE" = "blue" ]; then TARGET=green; else TARGET=blue; fi
 echo "=== active=${ACTIVE:-none} target=$TARGET $(date) ==="

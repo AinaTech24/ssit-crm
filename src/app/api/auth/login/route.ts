@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   if (userRow.user_deleted_at) {
     return NextResponse.json({ error: "account inactive" }, { status: 403 });
   }
-  // A soft-deleted tenant's users can't sign in (the tenant was removed by SSIT).
+  // A soft-deleted tenant's users can't sign in (the tenant was removed by Equitywala).
   if (userRow.tenant_deleted_at) {
     return NextResponse.json({ error: "account inactive" }, { status: 403 });
   }

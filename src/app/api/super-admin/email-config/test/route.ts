@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → Email → "Send test email". Sends a real transactional email to
+ * Equitywala Admin → Email → "Send test email". Sends a real transactional email to
  * the given address using the saved config, so the operator can confirm delivery
  * end-to-end before relying on it for resets/invites. Platform-admin only.
  */
@@ -28,9 +28,9 @@ export async function POST(req: NextRequest) {
     const res = await sendSystemEmail({
       tenantId: session.tenantId,
       to: parsed.data.to,
-      subject: "SSIT CRM — test email",
-      text: "This is a test email from SSIT Admin. If you received it, your email sending is configured correctly.",
-      html: "<p>This is a <strong>test email</strong> from SSIT Admin.</p><p>If you received it, your email sending is configured correctly. 🎉</p>",
+      subject: "Equitywala — test email",
+      text: "This is a test email from Equitywala Admin. If you received it, your email sending is configured correctly.",
+      html: "<p>This is a <strong>test email</strong> from Equitywala Admin.</p><p>If you received it, your email sending is configured correctly. 🎉</p>",
     });
     if (!res.sent) {
       const msg =

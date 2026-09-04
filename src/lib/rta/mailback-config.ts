@@ -100,7 +100,7 @@ export function listPasswordEntries(pw: MailbackPasswords, source: string): Pass
   return out;
 }
 
-// The inbound mailbox/domain config now lives in SSIT Admin (platform_settings,
+// The inbound mailbox/domain config now lives in Equitywala Admin (platform_settings,
 // env fallback) — see src/lib/rta/inbox-config.ts (getInboundDomain /
 // loadRtaInboxConfig / isInboxConfigured).
 

@@ -47,7 +47,7 @@ export default async function OrganisationProfilePage() {
           <Building2 className="size-5" /> Organisation profile
         </h1>
         <p className="text-muted-foreground text-sm">
-          Identity, branding, AUM range. ARN, EUIN, package, and license are managed by SSIT.
+          Identity, branding, AUM range. ARN, EUIN, package, and license are managed by Equitywala.
         </p>
       </div>
 

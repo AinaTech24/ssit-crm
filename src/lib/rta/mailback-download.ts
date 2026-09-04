@@ -190,7 +190,7 @@ export async function fetchRtaDownload(
       res = await fetch(current.toString(), {
         redirect: "manual", // re-validate every hop against the allowlist
         signal: controller.signal,
-        headers: { accept: "*/*", "user-agent": "SSITCRM-RTA-Mailback/1.0" },
+        headers: { accept: "*/*", "user-agent": "EquitywalaCRM-RTA-Mailback/1.0" },
       });
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get("location");

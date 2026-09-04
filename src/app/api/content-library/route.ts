@@ -1,10 +1,10 @@
 import { handleApiError } from "@/lib/api/error-handler";
 /**
- * SSIT Content Library — platform-shared and tenant-specific.
+ * Equitywala Content Library — platform-shared and tenant-specific.
  *
  *   GET  /api/content-library         — list active assets (any logged-in user)
- *   POST /api/content-library         — register an asset (SSIT platform admins and MFD admins/marketing)
- *   POST /api/content-library/upload-url — presigned S3 PUT (SSIT and MFD admins/marketing)
+ *   POST /api/content-library         — register an asset (Equitywala platform admins and MFD admins/marketing)
+ *   POST /api/content-library/upload-url — presigned S3 PUT (Equitywala and MFD admins/marketing)
  */
 
 import { NextRequest, NextResponse } from "next/server";

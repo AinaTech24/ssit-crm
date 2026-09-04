@@ -1,6 +1,6 @@
 /**
  * AI provider abstraction — lets the platform run on Anthropic Claude OR Google
- * Gemini, switchable live from SSIT Admin (no redeploy). Every AI helper in
+ * Gemini, switchable live from Equitywala Admin (no redeploy). Every AI helper in
  * src/lib/ai/assistant.ts calls `aiMessagesClient().messages.create(...)` with
  * an Anthropic-shaped request; this module dispatches to the configured provider
  * and always returns the Anthropic-shaped `{ content: [{ type:'text', text }] }`
@@ -12,7 +12,7 @@
  * Models are addressed by TIER, not concrete name:
  *   "fast"      → quick/cheap classify+draft (Haiku / Gemini Flash)
  *   "reasoning" → higher-quality compose      (Opus  / Gemini Pro)
- * The concrete model per tier is configurable per provider in SSIT Admin.
+ * The concrete model per tier is configurable per provider in Equitywala Admin.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -205,7 +205,7 @@ export function aiMessagesClient() {
       create: async (params: CreateParams): Promise<AiResponse> => {
         const cfg = await loadAiConfig();
         if (!cfg.apiKey) {
-          throw new Error("AI is not configured. Set the provider and API key in SSIT Admin → AI & Models.");
+          throw new Error("AI is not configured. Set the provider and API key in Equitywala Admin → AI & Models.");
         }
         const tier: AiTier = params.model === "reasoning" ? "reasoning" : "fast";
         const modelName = tier === "reasoning" ? cfg.reasoningModel : cfg.fastModel;
@@ -281,7 +281,7 @@ function aiHttpError(status: number, raw: string): Error & { status?: number; re
   } else if (status === 429) {
     msg = "The AI service is rate-limited right now. Please wait a moment and try again.";
   } else if (status === 401 || status === 403) {
-    msg = "The AI API key was rejected. Check the key in SSIT Admin → AI & Models.";
+    msg = "The AI API key was rejected. Check the key in Equitywala Admin → AI & Models.";
   } else if (status === 400) {
     msg = `The AI request was rejected (400). ${raw.slice(0, 160)}`.trim();
   } else {

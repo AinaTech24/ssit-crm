@@ -232,7 +232,7 @@ function eventLabel(t: string): string {
 /** Turn a raw actor token ("ssit_admin:<uuid>", "system:self_serve_signup") into a name. */
 function actorLabel(a: string | null): string {
   if (!a) return "System";
-  if (a.startsWith("ssit_admin")) return "SSIT Admin";
+  if (a.startsWith("ssit_admin")) return "Equitywala Admin";
   if (a.includes("self_serve_signup")) return "Self-serve signup";
   if (a.startsWith("razorpay")) return "Razorpay";
   if (a.startsWith("system")) return "System";

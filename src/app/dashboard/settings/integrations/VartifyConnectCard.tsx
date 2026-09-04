@@ -237,7 +237,7 @@ export default function VartifyConnectCard() {
                 type="password"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="e.g. SSIT@001"
+                placeholder="e.g. Equitywala@001"
                 autoComplete="off"
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm font-mono bg-background"
               />
@@ -259,7 +259,7 @@ export default function VartifyConnectCard() {
                   className="mt-1 w-full rounded-md border px-3 py-2 text-sm bg-background"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Only set this if SSIT gives you a custom host. The API path is added automatically.
+                  Only set this if Equitywala gives you a custom host. The API path is added automatically.
                 </p>
               </div>
               <div>

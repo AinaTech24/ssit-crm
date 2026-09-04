@@ -2,7 +2,7 @@ import { handleApiError } from "@/lib/api/error-handler";
 /**
  * GET  /api/super-admin/kb-articles — list every KB article (published or not)
  * POST /api/super-admin/kb-articles — create one
- * Gated by platform.package.manage (SSIT Super Admin / Admin).
+ * Gated by platform.package.manage (Equitywala Super Admin / Admin).
  */
 
 import { NextRequest, NextResponse } from "next/server";

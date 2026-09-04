@@ -209,7 +209,7 @@ export function KbArticleForm({ initial }: { initial?: KbInitial }) {
         <L label="Title" required>
           <input className={input} value={title} onChange={(e) => onTitle(e.target.value)} placeholder="A SIP bounced and nobody noticed for three months" />
         </L>
-        <L label="URL slug" required hint={`crm.ssit.com/knowledge-base/${slug || "…"}`}>
+        <L label="URL slug" required hint={`crm.equitywala.com/knowledge-base/${slug || "…"}`}>
           <div className="flex gap-2">
             <input className={input} value={slug} onChange={(e) => { setSlug(slugify(e.target.value)); setSlugLocked(true); }} />
             {!editing && (
@@ -262,7 +262,7 @@ export function KbArticleForm({ initial }: { initial?: KbInitial }) {
         <div className="text-sm font-semibold text-primary inline-flex items-center gap-1.5">
           <Lock className="size-4" /> GATED — only a logged-in reader gets this
         </div>
-        <L label="How SSIT CRM handles it" hint="Step-by-step. Markdown supported — numbered steps and tables work well here.">
+        <L label="How Equitywala handles it" hint="Step-by-step. Markdown supported — numbered steps and tables work well here.">
           <textarea className={input} rows={14} value={solutionMd} onChange={(e) => setSolutionMd(e.target.value)}
             placeholder={"1. The rejection lands automatically from the RTA file…"} />
         </L>

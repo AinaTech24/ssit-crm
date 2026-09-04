@@ -57,7 +57,7 @@ export const loadTenantLicense = cache(loadTenantLicenseImpl);
 
 async function loadTenantLicenseImpl(tenantId: string, roles?: string[]): Promise<LicenseState> {
   // Licensing was removed along with the packages / subscriptions / billing
-  // modules — SSIT CRM is provisioned directly, not sold by plan. Every tenant
+  // modules — Equitywala is provisioned directly, not sold by plan. Every tenant
   // therefore resolves to a single unrestricted, unlimited license.
   //
   // The shape below is deliberately unchanged so the ~160 call sites of

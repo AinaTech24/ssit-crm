@@ -148,7 +148,7 @@ async function renderReport(
   }
 
   doc.setTitle(ascii(`${opts.title} - ${c.clientName || "Client"} - ${c.firmName}`));
-  doc.setProducer("SSIT CRM");
+  doc.setProducer("Equitywala");
 
   const W = A4[0], H = A4[1];
   const contentW = W - MARGIN * 2;

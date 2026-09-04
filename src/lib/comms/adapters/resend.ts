@@ -73,8 +73,8 @@ export const emailAdapter = {
     const baseFrom =
       args.fromOverride ??
       (args.category === "marketing"
-        ? process.env.EMAIL_FROM_MARKETING ?? "SSIT CRM <connect@ssit.com>"
-        : process.env.EMAIL_FROM_TRANSACTIONAL ?? "SSIT CRM <connect@ssit.com>");
+        ? process.env.EMAIL_FROM_MARKETING ?? "Equitywala <connect@ssit.com>"
+        : process.env.EMAIL_FROM_TRANSACTIONAL ?? "Equitywala <connect@ssit.com>");
 
     const from = args.fromNameOverride ? `${args.fromNameOverride} <${baseFrom}>` : baseFrom;
 

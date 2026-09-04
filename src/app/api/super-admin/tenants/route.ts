@@ -1,5 +1,5 @@
 /**
- * SSIT tenant management — create new MFD tenant + owner user + subscription
+ * Equitywala tenant management — create new MFD tenant + owner user + subscription
  * in one transaction.
  */
 
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
         actor: `ssit_admin:${session.userId}`,
         toStatus: "trial",
         toPackage: pkg.key,
-        notes: "Tenant created by SSIT",
+        notes: "Tenant created by Equitywala",
       } as any);
       }
 
@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
     }
     console.error("[create-tenant]", err);
     // Platform-admin-only tool → surface the real error (instead of an opaque
-    // "internal") so SSIT staff can act on it. A thrown 4xx status is preserved.
+    // "internal") so Equitywala staff can act on it. A thrown 4xx status is preserved.
     const status = typeof err?.status === "number" ? err.status : 500;
     return NextResponse.json({ error: msg || "internal", code: code || undefined }, { status });
   }

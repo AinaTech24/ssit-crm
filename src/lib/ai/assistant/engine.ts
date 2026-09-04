@@ -1,5 +1,5 @@
 /**
- * SSIT Assistant — LOCAL engine (no external AI).
+ * Equitywala Assistant — LOCAL engine (no external AI).
  *
  * Answers the common questions entirely on our own server: it classifies the
  * message (greeting / metric / list / breakdown / period) and pulls the numbers
@@ -132,7 +132,7 @@ const MATCHERS: Matcher[] = [
   },
   (_ctx, q, m) => {
     if (!/\b(who\s+are\s+you|what\s+are\s+you|what\s+can\s+you\s+do|what\s+do\s+you\s+do|help\b|what\s+do\s+you\s+know|how\s+do\s+you\s+work|capabilities)\b/i.test(q)) return null;
-    return `I'm **SSIT CRM Copilot**, the copilot for **${m.firmName}**. Two things I do:\n\n**1. Answer from your live CRM data**\n- **Clients** — filter by segment, city, KYC, SIP, AUM, dormancy; top clients; breakdowns by segment / RM / city\n- **Business** — booked business by period, month-by-month trend\n- **Ops** — leads, tasks, review meetings, insurance renewals, client birthdays\n- **Data quality** — missing KYC / nominee / RM / city, dormant clients\n\n**2. Explain how SSIT CRM works** — *"how do I convert a lead to a client?"*, *"how do I import from CAMS?"*, *"how do I set up an automation?"*\n\nI can also **draft** a client email / WhatsApp / SMS. Try *"top 10 clients by AUM"*, *"business trend last 6 months"*, or *"how do I risk-profile a client?"*.`;
+    return `I'm **Equitywala Copilot**, the copilot for **${m.firmName}**. Two things I do:\n\n**1. Answer from your live CRM data**\n- **Clients** — filter by segment, city, KYC, SIP, AUM, dormancy; top clients; breakdowns by segment / RM / city\n- **Business** — booked business by period, month-by-month trend\n- **Ops** — leads, tasks, review meetings, insurance renewals, client birthdays\n- **Data quality** — missing KYC / nominee / RM / city, dormant clients\n\n**2. Explain how Equitywala works** — *"how do I convert a lead to a client?"*, *"how do I import from CAMS?"*, *"how do I set up an automation?"*\n\nI can also **draft** a client email / WhatsApp / SMS. Try *"top 10 clients by AUM"*, *"business trend last 6 months"*, or *"how do I risk-profile a client?"*.`;
   },
 
   // ---- HOW-TO / process questions — must beat every data matcher, otherwise

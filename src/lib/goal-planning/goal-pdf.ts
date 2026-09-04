@@ -88,7 +88,7 @@ export async function renderGoalPdf(args: {
   const primary = hexToRgb(brand.primaryColor);
   const secondary = brand.secondaryColor ? hexToRgb(brand.secondaryColor) : ACCENT;
   doc.setTitle(ascii(`Goal plan — ${goal.name ?? "Goal"}`));
-  doc.setProducer("SSIT CRM");
+  doc.setProducer("Equitywala");
   if (brand.legalName || brand.displayName) doc.setAuthor(ascii(brand.legalName ?? brand.displayName ?? ""));
 
   const usable = PW - 2 * MARGIN;

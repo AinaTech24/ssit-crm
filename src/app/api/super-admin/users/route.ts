@@ -1,6 +1,6 @@
 import { handleApiError } from "@/lib/api/error-handler";
 /**
- * SSIT platform-staff CRUD.
+ * Equitywala platform-staff CRUD.
  * Only platform_admin can create new platform users.
  */
 

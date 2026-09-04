@@ -347,7 +347,7 @@ const MERGE_FIELD_RE = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
 const APP_URL = (
   process.env.NEXT_PUBLIC_APP_URL ||
   process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://crm.ssit.com"
+  "https://crm.equitywala.com"
 ).replace(/\/+$/, "");
 
 export function substituteVariables(input: string, ctx: RenderContext, htmlEscapeValues = false): string {

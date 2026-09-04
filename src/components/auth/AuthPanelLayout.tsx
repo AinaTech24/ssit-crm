@@ -5,7 +5,7 @@
  *
  * These pages used to be a bare centred box on a white page — nothing like the
  * split-screen login, and they ignored white-label branding entirely, so a firm
- * on its own domain saw the SSIT wordmark the moment it clicked "Forgot?".
+ * on its own domain saw the Equitywala wordmark the moment it clicked "Forgot?".
  * This mirrors AuthScreen's shell so the whole flow looks like one product.
  *
  * AuthScreen is deliberately left alone: it carries the live login + signup +
@@ -44,12 +44,12 @@ export function AuthPanelLayout({
         <Link
           href="/"
           className="relative z-10 inline-flex w-fit items-center"
-          aria-label={`${brandName ?? "SSIT CRM"} home`}
+          aria-label={`${brandName ?? "Equitywala"} home`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={brandLogoUrl || "/ssit-logo.png"}
-            alt={brandName ?? "SSIT CRM"}
+            src={brandLogoUrl || "/equitywala-logo.png"}
+            alt={brandName ?? "Equitywala"}
             className="h-11 w-auto bg-white rounded-xl px-3 py-2 shadow-lg object-contain"
           />
         </Link>
@@ -94,8 +94,8 @@ export function AuthPanelLayout({
             <div className="lg:hidden mb-8 flex justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={brandLogoUrl || "/ssit-wordmark.png"}
-                alt={brandName ?? "SSIT CRM"}
+                src={brandLogoUrl || "/equitywala-wordmark.png"}
+                alt={brandName ?? "Equitywala"}
                 className="h-9 w-auto object-contain"
               />
             </div>

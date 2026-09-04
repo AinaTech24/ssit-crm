@@ -51,7 +51,7 @@ export default function ProfileForm({
       setVerifyMsg(
         data.emailSent
           ? "Verification email sent — open it and click “Confirm email”, then refresh this page."
-          : "Email isn't configured for your firm yet. Ask your owner to set up email (Settings → Integrations), or contact SSIT."
+          : "Email isn't configured for your firm yet. Ask your owner to set up email (Settings → Integrations), or contact Equitywala."
       );
     } catch {
       toast.error("Network error — please try again.", "Failed");

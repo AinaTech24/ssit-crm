@@ -4,7 +4,7 @@
  * The spec defines 7 roles (one platform + six tenant):
  *
  *   PLATFORM (lives under tenant_id = PLATFORM_TENANT_ID)
- *     1. platform_admin  — SSIT super admin. Cross-tenant. Uses withPlatformAdmin().
+ *     1. platform_admin  — Equitywala super admin. Cross-tenant. Uses withPlatformAdmin().
  *
  *   TENANT-SCOPED (every MFD organisation)
  *     2. owner            — full access inside their MFD
@@ -38,8 +38,8 @@ export type Role =
   | "investor";
 
 export const ROLE_LABELS: Record<string, string> = {
-  platform_admin: "Super Admin (SSIT)",
-  platform_support: "Admin (SSIT)",
+  platform_admin: "Super Admin (Equitywala)",
+  platform_support: "Admin (Equitywala)",
   owner: "MFD Owner / Admin",
   rm: "Relationship Manager",
   back_office: "Back Office Executive",
@@ -348,7 +348,7 @@ export function areKnownCapabilities(caps: string[] | undefined | null): boolean
 }
 
 /**
- * Platform-level (SSIT) capabilities. Held only by `platform_admin`.
+ * Platform-level (Equitywala) capabilities. Held only by `platform_admin`.
  * These actions hit /super-admin/* routes; they bypass tenant RLS via
  * `withPlatformAdmin()` in src/db/client.ts.
  */

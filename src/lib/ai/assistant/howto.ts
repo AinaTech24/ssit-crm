@@ -1,7 +1,7 @@
 /**
- * SSIT CRM Copilot — PROCESS knowledge ("how do I …?").
+ * Equitywala Copilot — PROCESS knowledge ("how do I …?").
  *
- * The copilot knows the firm's DATA (tools.ts) but was blind to how SSIT CRM
+ * The copilot knows the firm's DATA (tools.ts) but was blind to how Equitywala
  * itself works, so "how do I convert a lead?" got answered with a lead COUNT.
  * This is the procedural half: step-by-step guides for the real workflows,
  * grounded in the actual routes and the actual stage machine — not invented.
@@ -214,7 +214,7 @@ export function findHowTo(q: string): HowTo | null {
 
 /** Shown when it's clearly a how-to but no specific guide matched. */
 export function howToIndex(): string {
-  return `I can walk you through how SSIT CRM works. Pick one:
+  return `I can walk you through how Equitywala works. Pick one:
 
 - *"How do I convert a lead to a client?"*
 - *"How do I add a client?"* · *"How do I import from CAMS/KFintech?"*

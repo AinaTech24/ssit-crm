@@ -1,7 +1,7 @@
 /**
  * Package master + subscription tracking.
  *
- * SSIT (platform admin) defines packages. Each tenant has a subscription
+ * Equitywala (platform admin) defines packages. Each tenant has a subscription
  * pointing at one package + a license status. The subscription drives
  * module gating, seat limits, storage limits, and billing state.
  *
@@ -13,7 +13,7 @@ import { boolean, decimal, index, integer, jsonb, pgTable, text, timestamp, uniq
 import { id, tenantId, timestamps } from "./_shared";
 
 /**
- * Platform-scoped (no tenant_id). Created and edited by SSIT super admin.
+ * Platform-scoped (no tenant_id). Created and edited by Equitywala super admin.
  */
 export const packages = pgTable(
   "packages",
@@ -94,7 +94,7 @@ export const packages = pgTable(
 );
 
 /**
- * One subscription per tenant. SSIT suspends/activates via the status field.
+ * One subscription per tenant. Equitywala suspends/activates via the status field.
  */
 export const subscriptions = pgTable(
   "subscriptions",
@@ -136,14 +136,14 @@ export const subscriptions = pgTable(
     /**
      * Admin → MFD sidebar access (Module-19). The exact set of sidebar nav
      * hrefs this firm can open (see src/config/nav-access.ts). NULL = the
-     * package-module default (legacy behaviour). Set by SSIT platform admins.
+     * package-module default (legacy behaviour). Set by Equitywala platform admins.
      */
     allowedNav: jsonb("allowed_nav").$type<string[]>(),
     /**
      * Admin → MFD dashboard-widget access. The exact set of dashboard home
      * cards/sections this firm can see (see src/config/dashboard-widgets.ts).
      * NULL = all widgets visible (default). An array = exactly these widget
-     * keys are shown, everything else hidden. Set by SSIT platform admins.
+     * keys are shown, everything else hidden. Set by Equitywala platform admins.
      */
     allowedDashboardWidgets: jsonb("allowed_dashboard_widgets").$type<string[]>(),
 
@@ -158,13 +158,13 @@ export const subscriptions = pgTable(
     lastPaymentAt: timestamp("last_payment_at", { withTimezone: true }),
     lastPaymentPaise: integer("last_payment_paise"),
 
-    /** Set by SSIT when manually intervening */
+    /** Set by Equitywala when manually intervening */
     suspendedAt: timestamp("suspended_at", { withTimezone: true }),
     suspendedReason: text("suspended_reason"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledReason: text("cancelled_reason"),
 
-    /** Free-form notes from SSIT */
+    /** Free-form notes from Equitywala */
     notes: text("notes"),
 
     ...timestamps,
@@ -178,7 +178,7 @@ export const subscriptions = pgTable(
 
 /**
  * Append-only license event log — every status change is recorded.
- * Used for audit + SSIT's tenant-history view.
+ * Used for audit + Equitywala's tenant-history view.
  */
 export const subscriptionEvents = pgTable(
   "subscription_events",
@@ -222,7 +222,7 @@ export const subscriptionEvents = pgTable(
 );
 
 /**
- * Support tickets raised by MFDs to SSIT. Different from service_requests
+ * Support tickets raised by MFDs to Equitywala. Different from service_requests
  * (which are inside an MFD between client and firm).
  */
 export const supportTickets = pgTable(

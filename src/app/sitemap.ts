@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { loadKbSlugs } from "@/lib/kb/articles";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://crm.ssit.com";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://crm.equitywala.com";
 
 /** Sitemap for the public marketing pages + every published KAIZEN article. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

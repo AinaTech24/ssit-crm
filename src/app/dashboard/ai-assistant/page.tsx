@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * AI Assistant — a modern chat over the firm's live CRM data. Read-only and
- * scoped strictly to SSIT CRM. History / archive / delete + model selection all
+ * scoped strictly to Equitywala. History / archive / delete + model selection all
  * live inside <AssistantChat/>.
  */
 export default async function AiAssistantPage() {

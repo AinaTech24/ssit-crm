@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
     // and the RM needs to see why a send didn't go out.
     const msg = String(err?.message ?? "");
     if (/whatsapp|ssit|template|phone|contact/i.test(msg)) {
-      return NextResponse.json({ error: msg.replace(/^SSIT WhatsApp send failed:\s*/i, "WhatsApp: ") }, { status: 502 });
+      return NextResponse.json({ error: msg.replace(/^Equitywala WhatsApp send failed:\s*/i, "WhatsApp: ") }, { status: 502 });
     }
     return handleApiError(err);
   }

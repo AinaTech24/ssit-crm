@@ -131,7 +131,7 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
         <span className={`px-2 py-1 rounded-full ${status.configured ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
           {status.configured ? "Configured" : "Not configured"}
         </span>
-        <span className="px-2 py-1 rounded-full bg-muted">Source: {status.source === "db" ? "SSIT Admin" : status.source === "env" ? "env var" : "none"}</span>
+        <span className="px-2 py-1 rounded-full bg-muted">Source: {status.source === "db" ? "Equitywala Admin" : status.source === "env" ? "env var" : "none"}</span>
         {status.host && <span className="px-2 py-1 rounded-full bg-muted">{status.host}:{status.port}</span>}
         <span className="px-2 py-1 rounded-full bg-muted">Addresses: rta-…@{status.domain}</span>
       </div>
@@ -157,7 +157,7 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Mailbox (username)</label>
-          <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="rta@crm.ssit.com" className={inputCls} autoComplete="off" />
+          <input value={user} onChange={(e) => setUser(e.target.value)} placeholder="rta@crm.equitywala.com" className={inputCls} autoComplete="off" />
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium flex items-center gap-1.5"><KeyRound className="size-3.5" /> Password</label>
@@ -191,9 +191,9 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
       {/* Domain */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium">Forwarding domain</label>
-        <input value={domain} onChange={(e) => setDomain(e.target.value.trim())} placeholder="crm.ssit.com" className={inputCls} />
+        <input value={domain} onChange={(e) => setDomain(e.target.value.trim())} placeholder="crm.equitywala.com" className={inputCls} />
         <p className="text-[11px] text-muted-foreground">
-          Each firm gets <code className="bg-background px-1 rounded">rta-&lt;token&gt;@{domain || "crm.ssit.com"}</code>. A catch-all on this domain must deliver into the mailbox above.
+          Each firm gets <code className="bg-background px-1 rounded">rta-&lt;token&gt;@{domain || "crm.equitywala.com"}</code>. A catch-all on this domain must deliver into the mailbox above.
         </p>
       </div>
 

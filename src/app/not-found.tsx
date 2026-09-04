@@ -12,7 +12,7 @@ export default function NotFound() {
       <div className="text-center max-w-md animate-fade-in">
         <Link href="/" className="inline-flex items-center mb-8">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/ssit-wordmark.png" alt="SSIT CRM" className="h-8 w-auto" />
+          <img src="/equitywala-wordmark.png" alt="Equitywala" className="h-8 w-auto" />
         </Link>
 
         <div className="size-20 mx-auto rounded-2xl bg-card border shadow-sm grid place-items-center">

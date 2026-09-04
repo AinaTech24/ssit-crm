@@ -1,5 +1,5 @@
 /**
- * SSIT CRM Copilot — business-communication drafting (P4).
+ * Equitywala Copilot — business-communication drafting (P4).
  *
  * Produces ready-to-send DRAFTS for the common MFD outreach scenarios across
  * email / WhatsApp / SMS. Strictly a drafting aid: the copilot never sends —

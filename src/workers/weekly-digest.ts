@@ -43,7 +43,7 @@ function appBaseUrl(): string {
   return (
     process.env.APP_URL ??
     process.env.NEXT_PUBLIC_APP_URL ??
-    "https://crm.ssit.com"
+    "https://crm.equitywala.com"
   ).replace(/\/+$/, "");
 }
 

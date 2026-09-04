@@ -27,8 +27,22 @@ function region(): string {
   return process.env.S3_REGION || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "ap-south-1";
 }
 
+/**
+ * Explicit opt-in for credential-less operation. On EC2/ECS the SDK can get
+ * credentials from the attached IAM role, which is how the Terraform stack is
+ * built (no long-lived keys on the box). We require a FLAG rather than probing
+ * the SDK chain so a genuinely unconfigured environment still fails loudly
+ * instead of hanging on an IMDS lookup that will never succeed.
+ */
+function useInstanceRole(): boolean {
+  return process.env.S3_USE_INSTANCE_ROLE === "1";
+}
+
 export function isS3Configured(): boolean {
-  return !!(accessKeyId() && secretAccessKey());
+  if (accessKeyId() && secretAccessKey()) return true;
+  // Instance-role mode still needs an explicit bucket — falling through to the
+  // stale default bucket name would write documents into a bucket we do not own.
+  return useInstanceRole() && !!(process.env.S3_BUCKET || process.env.AWS_S3_BUCKET);
 }
 
 /**
@@ -45,7 +59,7 @@ function s3Required(): boolean {
 function assertS3OrLocalAllowed(): void {
   if (!isS3Configured() && s3Required()) {
     throw new Error(
-      "S3 storage is required in production but is not configured — set S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY (a matching pair) in .env.production. Refusing to store the document on local disk."
+      "S3 storage is required in production but is not configured — set S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY (a matching pair), or set S3_USE_INSTANCE_ROLE=1 with S3_BUCKET when running on EC2/ECS with an IAM role attached. Refusing to store the document on local disk."
     );
   }
 }
@@ -78,7 +92,7 @@ export function storageStatus(): {
   bucket: string;
   region: string;
   accessKeyIdMasked: string | null;
-  source: "S3_*" | "AWS_*" | "none";
+  source: "S3_*" | "AWS_*" | "instance-role" | "none";
 } {
   const akid = accessKeyId();
   const configured = isS3Configured();
@@ -92,7 +106,9 @@ export function storageStatus(): {
       ? "S3_*"
       : process.env.AWS_ACCESS_KEY_ID
         ? "AWS_*"
-        : "none",
+        : useInstanceRole()
+          ? "instance-role"
+          : "none",
   };
 }
 

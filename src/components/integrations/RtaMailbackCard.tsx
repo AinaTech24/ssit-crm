@@ -241,7 +241,7 @@ export function RtaMailbackCard() {
       {!loading && status && !status.inboxReady && (
         <div className="flex items-start gap-2 text-xs rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2">
           <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
-          <span>The auto-import inbox is still being set up by SSIT. You can save your passwords now; forwarding will start working once it&apos;s live.</span>
+          <span>The auto-import inbox is still being set up by Equitywala. You can save your passwords now; forwarding will start working once it&apos;s live.</span>
         </div>
       )}
 

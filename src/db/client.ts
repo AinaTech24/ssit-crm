@@ -157,10 +157,10 @@ export async function withTenant<T>(
 
 /**
  * Platform admin transaction — sets `app.is_platform_admin = true` so RLS
- * policies grant cross-tenant access. Used by SSIT super admins to manage
+ * policies grant cross-tenant access. Used by Equitywala super admins to manage
  * all MFD tenants from the /super-admin section.
  *
- * adminUserId is the SSIT staff user id; recorded in audit_log for every
+ * adminUserId is the Equitywala staff user id; recorded in audit_log for every
  * cross-tenant write.
  */
 export async function withPlatformAdmin<T>(

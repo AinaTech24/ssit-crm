@@ -109,7 +109,7 @@ const SECTIONS = [
   {
     icon: MessageCircle,
     title: "WhatsApp connection",
-    desc: "Your SSIT WhatsApp number and Meta template approvals.",
+    desc: "Your Equitywala WhatsApp number and Meta template approvals.",
     href: "/dashboard/settings/whatsapp",
     group: "Billing & connections",
   },

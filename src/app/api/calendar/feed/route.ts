@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//SSIT//SSITCRM//EN",
+      "PRODID:-//Equitywala//EquitywalaCRM//EN",
       "CALSCALE:GREGORIAN",
       "METHOD:PUBLISH",
     ];

@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → AWS Monitoring. Returns a live snapshot of EC2 / RDS / S3 / IAM
+ * Equitywala Admin → AWS Monitoring. Returns a live snapshot of EC2 / RDS / S3 / IAM
  * metrics + app counts. Platform-admin only. Polled by the dashboard.
  */
 import { handleApiError } from "@/lib/api/error-handler";

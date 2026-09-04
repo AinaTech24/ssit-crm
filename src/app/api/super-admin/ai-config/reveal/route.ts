@@ -1,7 +1,7 @@
 /**
  * GET /api/super-admin/ai-config/reveal — return the FULL decrypted AI API key.
  * Platform-admin only (same gate as saving it). Used by the "Show key" toggle in
- * SSIT Admin → AI & Models so the operator can verify / copy the saved key.
+ * Equitywala Admin → AI & Models so the operator can verify / copy the saved key.
  * Never logged; force-dynamic + no-store so it isn't cached.
  */
 

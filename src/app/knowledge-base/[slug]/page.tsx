@@ -22,12 +22,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   // Metadata is public-only — never include gated content here.
   const a = await loadArticle(slug);
-  if (!a) return { title: "Not found | SSIT CRM" };
-  const t = a.seoTitle || `${a.title} | KAIZEN — SSIT CRM`;
+  if (!a) return { title: "Not found | Equitywala" };
+  const t = a.seoTitle || `${a.title} | KAIZEN — Equitywala`;
   const d =
     a.seoDescription ||
     a.hook ||
-    `A real MFD scenario and how SSIT CRM handles it — ${a.title}.`;
+    `A real MFD scenario and how Equitywala handles it — ${a.title}.`;
   return {
     title: t,
     description: d,
@@ -115,7 +115,7 @@ export default async function KbArticlePage({ params }: { params: Promise<{ slug
         {/* ── The answer — PUBLIC, no login required ── */}
         <section className="mt-10">
           <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground inline-flex items-center gap-1.5">
-            <CheckCircle2 className="size-4 text-emerald-600" /> How SSIT CRM handles it
+            <CheckCircle2 className="size-4 text-emerald-600" /> How Equitywala handles it
           </h2>
           <div className="mt-3 text-[15px] leading-relaxed text-foreground/90">
             <Markdown text={a.solutionMd} />

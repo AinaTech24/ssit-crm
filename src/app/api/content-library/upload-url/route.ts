@@ -1,6 +1,6 @@
 import { handleApiError } from "@/lib/api/error-handler";
 /**
- * POST /api/content-library/upload-url     (SSIT platform admins and MFD admins/marketing)
+ * POST /api/content-library/upload-url     (Equitywala platform admins and MFD admins/marketing)
  *
  * Body: { filename, contentType }
  * Returns: { url, key, publicUrl }

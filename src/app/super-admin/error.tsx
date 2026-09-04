@@ -1,6 +1,6 @@
 "use client";
 
-/** Error boundary for the SSIT platform-admin section. */
+/** Error boundary for the Equitywala platform-admin section. */
 
 import { useEffect } from "react";
 import Link from "next/link";

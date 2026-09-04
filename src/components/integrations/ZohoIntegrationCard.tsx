@@ -22,7 +22,7 @@ const DATA_CENTERS = [
 // Modules pushed to Zoho. NATIVE modules already exist in every Zoho org; the
 // CUSTOM ones the MFD must create (Setup → Modules and Fields → New Module)
 // with the matching API name before they sync. Every target also needs the
-// SSIT_Record_ID single-line field. Keep in sync with ZOHO_MAPPINGS.
+// Equitywala_Record_ID single-line field. Keep in sync with ZOHO_MAPPINGS.
 const SYNCED_MODULES: { label: string; zoho: string; native?: boolean }[] = [
   { label: "Clients", zoho: "Contacts", native: true },
   { label: "Leads", zoho: "Leads", native: true },
@@ -172,7 +172,7 @@ export function ZohoIntegrationCard() {
             Each module below pushes to the named Zoho module. <strong>Native</strong> modules already exist; the
             others are <strong>custom modules you create</strong> in Zoho (Setup → Modules and Fields → New Module)
             using the exact API name shown. Add a single-line{" "}
-            <code className="px-1 rounded bg-secondary">SSIT_Record_ID</code> field to every one — that&rsquo;s what
+            <code className="px-1 rounded bg-secondary">Equitywala_Record_ID</code> field to every one — that&rsquo;s what
             keeps the sync idempotent (no duplicate records). Create the other custom fields as single-line text,
             number or date (avoid picklists, so values are never rejected). Until a custom module exists, that
             module&rsquo;s rows are simply skipped.
@@ -289,7 +289,7 @@ export function ZohoIntegrationCard() {
 
           <div className="text-[11px] text-muted-foreground leading-relaxed rounded-lg border border-border bg-secondary/40 px-3 py-2 inline-flex items-start gap-2">
             <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
-            In Zoho, add a single-line custom field named <code className="px-1 rounded bg-secondary">SSIT_Record_ID</code> to
+            In Zoho, add a single-line custom field named <code className="px-1 rounded bg-secondary">Equitywala_Record_ID</code> to
             every synced module — see the <strong>Synced modules</strong> list above. That&rsquo;s what stops the sync from
             creating duplicates.
           </div>

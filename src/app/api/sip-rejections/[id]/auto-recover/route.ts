@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const session = await requireSession();
     requireAny(
       session.roles,
-      ["transactions.manage", "rm", "branch_head", "ops", "owner", "compliance"],
+      ["transactions.execute"],
       session.permissions
     );
 

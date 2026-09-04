@@ -1,7 +1,7 @@
 /**
  * Server-side PDF co-branding.
  *
- * Takes a source PDF (uploaded by an SSIT platform admin) and returns a new
+ * Takes a source PDF (uploaded by an Equitywala platform admin) and returns a new
  * PDF that is white-labelled for the calling MFD:
  *
  *   1. A branded COVER PAGE is prepended (logo, firm name, ARN, asset title)
@@ -83,7 +83,7 @@ export async function composeBrandedPdf(
   const helvBold = await out.embedFont(StandardFonts.HelveticaBold);
 
   out.setTitle(ascii(opts.title || "Shared update"));
-  out.setProducer("SSIT CRM");
+  out.setProducer("Equitywala");
   if (brand.legalName || brand.displayName) {
     out.setAuthor(ascii(brand.legalName ?? brand.displayName ?? ""));
   }

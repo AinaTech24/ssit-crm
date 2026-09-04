@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* ═══════════════════════════════════════════════════════════════════════
-       SSIT CRM palette — deep navy primary (#0E2557), electric cyan accent
+       Equitywala palette — deep navy primary (#0E2557), electric cyan accent
        (#0EA5E9). The `--brand-navy` / `--brand-cyan` token names below mean
        exactly what they say, so the hundreds of existing `bg-brand-navy` /
        `text-brand-cyan` consumers theme correctly with no component changes.

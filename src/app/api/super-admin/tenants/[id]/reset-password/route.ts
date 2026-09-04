@@ -5,7 +5,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  * Platform-admin action: send a password-reset link to the tenant's owner (or,
  * if there's no owner, the oldest active user with an email). Mirrors the
  * self-service /api/auth/forgot flow — a one-time hashed token + emailed link,
- * valid for 1 hour — but initiated by SSIT support. The admin never sees or
+ * valid for 1 hour — but initiated by Equitywala support. The admin never sees or
  * sets the password; the user picks a new one via the link.
  */
 

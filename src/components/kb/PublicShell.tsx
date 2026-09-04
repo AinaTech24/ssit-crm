@@ -21,8 +21,8 @@ export function PublicShell({
           <Link href="/" className="inline-flex items-center hover:opacity-90 transition-opacity">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/ssit-logo.png"
-              alt="SSIT CRM — mutual fund software for distributors"
+              src="/equitywala-logo.png"
+              alt="Equitywala — mutual fund software for distributors"
               className="h-8 w-auto object-contain shrink-0"
             />
           </Link>
@@ -58,7 +58,7 @@ export function PublicShell({
 
       <footer className="border-t border-border/40 mt-16">
         <div className="max-w-6xl mx-auto px-6 py-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} SSIT Tech. Built for Indian Mutual Fund Distributors.</span>
+          <span>© {new Date().getFullYear()} Equitywala Tech. Built for Indian Mutual Fund Distributors.</span>
           <div className="flex items-center gap-5">
             <Link href="/knowledge-base" className="hover:text-foreground">Knowledge Base</Link>
             <Link href="/privacy" className="hover:text-foreground">Privacy</Link>

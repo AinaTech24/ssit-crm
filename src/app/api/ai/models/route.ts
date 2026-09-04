@@ -1,7 +1,7 @@
 import { handleApiError } from "@/lib/api/error-handler";
 /**
  * GET /api/ai/models — the models the in-chat selector can offer. The CRM runs
- * ONE provider at a time (set in SSIT Admin); we expose its two tiers (fast +
+ * ONE provider at a time (set in Equitywala Admin); we expose its two tiers (fast +
  * reasoning) with human labels. Never returns the API key.
  */
 

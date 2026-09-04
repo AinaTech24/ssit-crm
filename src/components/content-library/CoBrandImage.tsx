@@ -76,7 +76,7 @@ export function CoBrandImage({
     im.onerror = () => {
       if (cancelled) return;
       setError(
-        "Couldn't load the image. The S3 bucket may not allow cross-origin downloads — ask SSIT to add the tenant origin to CORS."
+        "Couldn't load the image. The S3 bucket may not allow cross-origin downloads — ask Equitywala to add the tenant origin to CORS."
       );
       setLoading(false);
     };

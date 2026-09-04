@@ -13,9 +13,9 @@ import { PublicShell } from "@/components/kb/PublicShell";
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: "KAIZEN Knowledge Base | SSIT CRM for Mutual Fund Distributors",
+  title: "KAIZEN Knowledge Base | Equitywala for Mutual Fund Distributors",
   description:
-    "Real situations from an Indian MFD's practice — a missed SIP, a dormant client, an audit query — and exactly how SSIT CRM handles each one. One improvement at a time.",
+    "Real situations from an Indian MFD's practice — a missed SIP, a dormant client, an audit query — and exactly how Equitywala handles each one. One improvement at a time.",
   alternates: { canonical: "/knowledge-base" },
 };
 

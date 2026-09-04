@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → AWS Monitoring (ops tile). App-level operational metrics — user
+ * Equitywala Admin → AWS Monitoring (ops tile). App-level operational metrics — user
  * activity, email, background jobs, security, audit feed, Node process health,
  * tenant analytics. Platform-admin only. Polled alongside the CloudWatch snapshot.
  */

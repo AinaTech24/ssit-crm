@@ -4,7 +4,7 @@
  * Seeds ONLY what a live platform needs and NOTHING fake:
  *   1. subscription packages (so the platform admin can assign plans to tenants)
  *   2. the automation recipe library
- *   3. ONE platform admin (SSIT), credentials from env — NO known default ships
+ *   3. ONE platform admin (Equitywala), credentials from env — NO known default ships
  *
  * It deliberately does NOT create the "Demo Wealth Advisors" tenant or any
  * sample investors/leads. Run once on a fresh DB after migrations:
@@ -93,7 +93,7 @@ async function seedPlatformAdmin() {
   await withSystem(async (tx) => {
     await tx.execute(sql`
       INSERT INTO tenants (id, legal_name, display_name, arn, plan, status, created_at, updated_at)
-      VALUES (${PLATFORM_TENANT_ID}::uuid, 'SSIT Platform', 'SSIT Platform', 'PLATFORM', 'enterprise', 'active', now(), now())
+      VALUES (${PLATFORM_TENANT_ID}::uuid, 'Equitywala Platform', 'Equitywala Platform', 'PLATFORM', 'enterprise', 'active', now(), now())
       ON CONFLICT (id) DO NOTHING
     `);
     await tx.execute(sql`

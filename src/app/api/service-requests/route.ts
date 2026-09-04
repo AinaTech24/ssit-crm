@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Default SLAs in hours per service type — spec § Module 13.
- * Tunable later via masters; SSIT-recommended starting points below.
+ * Tunable later via masters; Equitywala-recommended starting points below.
  */
 const SLA_HOURS_BY_TYPE: Record<string, number> = {
   // Spec-canonical 13

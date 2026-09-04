@@ -5,7 +5,7 @@ output "public_ip" {
 
 output "ssh_command" {
   description = "SSH into the box."
-  value       = "ssh -i ~/.ssh/mfd-deploy ec2-user@${aws_eip.web.public_ip}"
+  value       = "ssh -i ~/.ssh/ssit-crm-deploy ec2-user@${aws_eip.web.public_ip}"
 }
 
 output "db_endpoint" {

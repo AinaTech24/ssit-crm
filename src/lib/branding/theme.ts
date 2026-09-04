@@ -20,13 +20,13 @@
 
 export type ThemeColors = { primary: string; accent: string };
 
-/** The stock SSIT palette — deep navy + electric cyan (matches globals.css). */
+/** The stock Equitywala palette — deep navy + electric cyan (matches globals.css). */
 export const DEFAULT_THEME: ThemeColors = { primary: "#0e2557", accent: "#0ea5e9" };
 
 /**
  * The legacy column default for `tenants.primary_color`. It was never a
  * deliberate brand choice (just the schema default), so we treat it as
- * "unbranded" and fall back to the SSIT navy — otherwise every tenant that
+ * "unbranded" and fall back to the Equitywala navy — otherwise every tenant that
  * never customised would suddenly render in flat grey.
  */
 const LEGACY_DEFAULT_PRIMARY = "#1f2937";
@@ -40,7 +40,7 @@ export type ThemePreset = {
 
 /** Curated one-click palettes shown in the Appearance picker. */
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: "ssit", label: "SSIT Navy", primary: "#0e2557", accent: "#0ea5e9" },
+  { id: "ssit", label: "Equitywala Navy", primary: "#0e2557", accent: "#0ea5e9" },
   { id: "emerald", label: "Emerald", primary: "#064e3b", accent: "#10b981" },
   { id: "royal", label: "Royal Purple", primary: "#3b0764", accent: "#a855f7" },
   { id: "sunset", label: "Sunset Orange", primary: "#7c2d12", accent: "#f97316" },
@@ -87,7 +87,7 @@ function densityRootPx(uiDensity?: string | null): number | null {
 
 /**
  * Resolve the effective theme colours from raw tenant fields, applying the
- * "unbranded → SSIT navy" fallback so un-customised tenants keep the polished
+ * "unbranded → Equitywala navy" fallback so un-customised tenants keep the polished
  * stock look.
  */
 export function resolveThemeColors(
@@ -191,7 +191,7 @@ export function buildThemeVars(primaryHex: string, accentHex: string): Record<st
 /**
  * Build a `:root { … }` CSS string from a tenant's brand colours, for injection
  * into a `<style>` tag in the dashboard layout. Returns `""` when the colours
- * are the stock SSIT palette (nothing to override).
+ * are the stock Equitywala palette (nothing to override).
  */
 /**
  * Optional per-tenant overrides for body TEXT colour and the HOVER / secondary

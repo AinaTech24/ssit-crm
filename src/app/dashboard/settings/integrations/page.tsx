@@ -21,15 +21,15 @@ const INTEGRATIONS = [
   },
   {
     name: "Razorpay",
-    desc: "Subscription billing (your SSIT subscription).",
+    desc: "Subscription billing (your Equitywala subscription).",
     envCheck: () => !!process.env.RAZORPAY_KEY_ID,
-    setupSteps: ["SSIT configures this — you don't need to do anything"],
+    setupSteps: ["Equitywala configures this — you don't need to do anything"],
   },
   {
     name: "KYC providers (Karza / Hyperverge / IDfy)",
     desc: "CKYC fetch, eKYC, video KYC, Aadhaar XML, DigiLocker, eSign.",
     envCheck: () => false,
-    setupSteps: ["Pick a partner", "SSIT wires the integration"],
+    setupSteps: ["Pick a partner", "Equitywala wires the integration"],
   },
   {
     name: "Account Aggregator",
@@ -51,7 +51,7 @@ export default function IntegrationsPage() {
         <Webhook className="size-5" /> Integrations
       </h1>
       <p className="text-sm text-muted-foreground">
-        Connect external services. Most integrations are configured by SSIT on your behalf during onboarding.
+        Connect external services. Most integrations are configured by Equitywala on your behalf during onboarding.
       </p>
 
       {/* Self-serve: the firm connects its own WhatsApp sender once. */}

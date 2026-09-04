@@ -1,7 +1,7 @@
 /**
  * What's new — the in-app changelog.
  *
- * SSIT ships continuously; without this an MFD only discovers a feature by
+ * Equitywala ships continuously; without this an MFD only discovers a feature by
  * stumbling on it. Entries are published once at platform level and every firm
  * sees the same timeline. Opening the page marks everything read, which clears
  * the header badge.

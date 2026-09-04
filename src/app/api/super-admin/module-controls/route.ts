@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → Module Controls. Read/update the GLOBAL state of each module
+ * Equitywala Admin → Module Controls. Read/update the GLOBAL state of each module
  * (enabled / beta / disabled). Platform-admin only. Applies to every tenant
  * within ~30s (cache TTL), no redeploy.
  */

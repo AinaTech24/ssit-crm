@@ -10,7 +10,7 @@
  * address) has no firm to attribute it to. Those rows are visible to platform
  * admins only, via the RLS policy in migration 0192.
  *
- * Written by src/workers/rta-inbox-poller.ts; read by SSIT Admin → Inbound Mail.
+ * Written by src/workers/rta-inbox-poller.ts; read by Equitywala Admin → Inbound Mail.
  */
 
 import { integer, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";

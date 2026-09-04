@@ -16,16 +16,16 @@ import { SignJWT, jwtVerify } from "jose";
 
 export const SESSION_COOKIE = "mfd_session";
 /**
- * Platform-admin (SSIT) sessions live in a SEPARATE cookie from MFD sessions.
- * This is the fix for the "logging into SSIT in one tab logs me out of the MFD
+ * Platform-admin (Equitywala) sessions live in a SEPARATE cookie from MFD sessions.
+ * This is the fix for the "logging into Equitywala in one tab logs me out of the MFD
  * tab" bug: a single browser shares one cookie jar, so with one cookie name the
- * second login overwrites the first. Two names let an SSIT-admin session and an
+ * second login overwrites the first. Two names let an Equitywala-admin session and an
  * MFD session coexist; the URL surface decides which one is read.
  */
 export const ADMIN_SESSION_COOKIE = "ssit_session";
 export const SESSION_TTL_SECONDS = 8 * 60 * 60;
 
-/** True for the SSIT platform-admin URL surface (pages + APIs). */
+/** True for the Equitywala platform-admin URL surface (pages + APIs). */
 export function isAdminSurface(pathname: string): boolean {
   return (
     pathname === "/super-admin" ||
@@ -39,7 +39,7 @@ export function sessionCookieForPath(pathname: string): string {
   return isAdminSurface(pathname) ? ADMIN_SESSION_COOKIE : SESSION_COOKIE;
 }
 
-/** True if these roles belong to SSIT platform staff. */
+/** True if these roles belong to Equitywala platform staff. */
 export function rolesArePlatformAdmin(roles: string[] | null | undefined): boolean {
   const r = roles ?? [];
   return r.includes("platform_admin") || r.includes("platform_support");
@@ -57,7 +57,7 @@ export type SessionUser = {
   roles: string[];
   email: string;
   name: string;
-  /** SSIT platform staff. When true, this user bypasses tenant isolation and
+  /** Equitywala platform staff. When true, this user bypasses tenant isolation and
    *  is routed to /super-admin instead of /dashboard on login. */
   isPlatformAdmin?: boolean;
   permissions?: string[];

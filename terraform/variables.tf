@@ -5,7 +5,7 @@ variable "region" {
 
 variable "project" {
   type    = string
-  default = "mfd-growth-os"
+  default = "ssit-crm"
 }
 
 # Web/worker box. t4g.medium = 2 vCPU / 4 GB ARM (Graviton) — cheap + ample
@@ -48,20 +48,24 @@ variable "monthly_budget_usd" {
   default = "60"
 }
 
-# Where budget alerts go. Leave blank to skip creating the budget alarm.
+# Where budget alerts go. Blank (the default) SKIPS the budget entirely.
+# IMPORTANT on a SHARED AWS account: an AWS Budget is ACCOUNT-WIDE, not
+# per-project — it would measure this stack PLUS every other project in the
+# account and fire misleading alerts. Only set this if the limit above is sized
+# for the whole account's spend, or if this stack has its own AWS account.
 variable "budget_alert_email" {
   type    = string
-  default = "pritesh@ssit.com"
+  default = ""
 }
 
 variable "db_name" {
   type    = string
-  default = "mfd"
+  default = "ssit_crm"
 }
 
 variable "db_username" {
   type    = string
-  default = "mfd_master"
+  default = "ssit_master"
 }
 
 # Only this CIDR may SSH to the box. Set to <your-public-ip>/32 in tfvars.
@@ -72,5 +76,5 @@ variable "ssh_cidr" {
 
 variable "public_key_path" {
   type    = string
-  default = "~/.ssh/mfd-deploy.pub"
+  default = "~/.ssh/ssit-crm-deploy.pub"
 }

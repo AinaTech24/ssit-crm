@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         case "suspend":
           patch.status = "suspended";
           patch.suspendedAt = new Date();
-          patch.suspendedReason = reason ?? "Suspended by SSIT";
+          patch.suspendedReason = reason ?? "Suspended by Equitywala";
           eventType = "suspended";
           break;
         case "activate": {
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         case "cancel":
           patch.status = "cancelled";
           patch.cancelledAt = new Date();
-          patch.cancelledReason = reason ?? "Cancelled by SSIT";
+          patch.cancelledReason = reason ?? "Cancelled by Equitywala";
           eventType = "cancelled";
           break;
       }

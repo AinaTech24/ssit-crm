@@ -9,7 +9,7 @@
  * triaged and routed, the RM gets a one-tap-editable reply, response time collapses.
  *
  * Fail-safe: any error here is swallowed (logged) so it can NEVER break inbound
- * message recording. No-op when no AI provider is configured (SSIT Admin → AI &
+ * message recording. No-op when no AI provider is configured (Equitywala Admin → AI &
  * Models, or env fallback), or when disabled via WA_AUTORESPONDER=off.
  */
 

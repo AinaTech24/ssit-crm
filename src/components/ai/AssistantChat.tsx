@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SSIT Assistant — a modern, ChatGPT-style chat over the firm's LIVE CRM data.
+ * Equitywala Assistant — a modern, ChatGPT-style chat over the firm's LIVE CRM data.
  * Left: conversation history (new / rename / archive / delete). Right: the chat
  * with Markdown+table answers, per-message Copy / Share / Regenerate, and a
  * model selector (the active provider's Fast vs Reasoning tiers).
@@ -278,7 +278,7 @@ export function AssistantChat({ insightsHref }: { insightsHref?: string }) {
             {sidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeft className="size-4" />}
           </button>
           <div className="flex items-center gap-1.5 font-semibold text-sm">
-            <Bot className="size-4 text-brand-cyan ai-icon-animated" /> SSIT CRM Copilot
+            <Bot className="size-4 text-brand-cyan ai-icon-animated" /> Equitywala Copilot
             <span className="text-[10px] font-normal text-muted-foreground bg-secondary rounded px-1.5 py-0.5">beta</span>
           </div>
           {insightsHref && (
@@ -345,7 +345,7 @@ export function AssistantChat({ insightsHref }: { insightsHref?: string }) {
             </button>
           </div>
           <div className="max-w-3xl mx-auto text-[10px] text-muted-foreground text-center mt-1.5">
-            Answers use your live data and can be imperfect · read-only, SSIT CRM only.
+            Answers use your live data and can be imperfect · read-only, Equitywala only.
           </div>
         </div>
       </div>
@@ -419,7 +419,7 @@ function MessageBubble({
   }
   async function share() {
     try {
-      if (navigator.share) await navigator.share({ text: msg.content, title: "SSIT CRM Copilot" });
+      if (navigator.share) await navigator.share({ text: msg.content, title: "Equitywala Copilot" });
       else { await navigator.clipboard.writeText(msg.content); setShared(true); setTimeout(() => setShared(false), 1500); }
     } catch { }
   }

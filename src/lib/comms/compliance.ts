@@ -294,7 +294,7 @@ function ruleDltTemplate(ctx: ComplianceContext): ComplianceFinding[] {
       {
         rule: "trai.dlt_template_not_registered",
         severity: "block",
-        message: `DLT Template ID '${ctx.dltTemplateId}' is not registered in the SSIT DLT pre-registry.`,
+        message: `DLT Template ID '${ctx.dltTemplateId}' is not registered in the Equitywala DLT pre-registry.`,
         remediation: "Go to Settings -> DLT templates to pre-register this Template ID.",
       },
     ];

@@ -3,7 +3,7 @@ import { id, timestamps } from "./_shared";
 import { tenants } from "./tenants";
 
 /**
- * SSIT-managed content library — assets uploaded by SSIT platform admins
+ * Equitywala-managed content library — assets uploaded by Equitywala platform admins
  * that every tenant (MFD) can download with their own branding overlaid.
  *
  * NOT scoped by tenant_id — this table is platform-shared. The RLS policy
@@ -49,7 +49,7 @@ export const contentLibraryAssets = pgTable(
     /** Image pixel dimensions (captured at upload) — null for non-images. */
     width: integer("width"),
     height: integer("height"),
-    /** Whether SSIT published this (platform) or an MFD uploaded it (tenant). */
+    /** Whether Equitywala published this (platform) or an MFD uploaded it (tenant). */
     source: text("source", { enum: ["platform", "tenant"] }).notNull().default("platform"),
     /** Thumbnail/preview shown in the browse grid. Defaults to fileUrl for images. */
     thumbnailUrl: text("thumbnail_url"),

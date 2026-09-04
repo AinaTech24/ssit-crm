@@ -3,7 +3,7 @@
  *   `npm run seed` populates:
  *     - 24 workflow recipes (global, all tenants share)
  *     - 5 packages (Starter / Growth / Pro / Premium / Custom)
- *     - 1 SSIT platform admin (admin@ssit.com / ssit12345)
+ *     - 1 Equitywala platform admin (admin@ssit.com / ssit12345)
  *     - 1 demo MFD tenant (Demo Wealth Advisors / owner@demo.in / demo12345)
  *       with 5 team users + 10 leads + 20 clients + 5 families + 10 SIPs
  *       + 5 SIP rejections + 10 tasks + 5 review meetings + 5 service
@@ -148,13 +148,13 @@ async function seedPackages() {
 }
 
 async function seedSsitAdmin() {
-  console.log("Seeding SSIT platform admin…");
+  console.log("Seeding Equitywala platform admin…");
   await withSystem(async (tx) => {
-    // Platform tenant — sentinel that SSIT staff live under.
+    // Platform tenant — sentinel that Equitywala staff live under.
     await tx.execute(sql`
       INSERT INTO tenants (id, legal_name, display_name, arn, plan, status, created_at, updated_at)
       VALUES (
-        ${PLATFORM_TENANT_ID}::uuid, 'SSIT Platform', 'SSIT Platform',
+        ${PLATFORM_TENANT_ID}::uuid, 'Equitywala Platform', 'Equitywala Platform',
         'PLATFORM', 'enterprise', 'active', now(), now()
       )
       ON CONFLICT (id) DO NOTHING
@@ -164,7 +164,7 @@ async function seedSsitAdmin() {
     // Dev: falls back to the documented demo credentials.
     const email = (process.env.ADMIN_EMAIL || "admin@ssit.com").toLowerCase();
     const password = process.env.ADMIN_PASSWORD || "ssit12345";
-    const name = process.env.ADMIN_NAME || "SSIT Admin";
+    const name = process.env.ADMIN_NAME || "Equitywala Admin";
     const hash = await bcrypt.hash(password, 12);
     await tx.execute(sql`
       INSERT INTO users (
@@ -180,8 +180,8 @@ async function seedSsitAdmin() {
   const shownEmail = (process.env.ADMIN_EMAIL || "admin@ssit.com").toLowerCase();
   console.log(
     process.env.ADMIN_PASSWORD
-      ? `✓ SSIT admin seeded — login: ${shownEmail} (password from ADMIN_PASSWORD)`
-      : `✓ SSIT admin seeded — login: ${shownEmail} / ssit12345`
+      ? `✓ Equitywala admin seeded — login: ${shownEmail} (password from ADMIN_PASSWORD)`
+      : `✓ Equitywala admin seeded — login: ${shownEmail} / ssit12345`
   );
 }
 
@@ -559,7 +559,7 @@ async function main() {
   await seedSsitAdmin();
   await seedDemoTenant();
   console.log("\nAll seed data loaded. Login:");
-  console.log("  SSIT admin:  admin@ssit.com / ssit12345  → /super-admin");
+  console.log("  Equitywala admin:  admin@ssit.com / ssit12345  → /super-admin");
   console.log("  Demo owner:  owner@demo.in / demo12345      → /dashboard");
   process.exit(0);
 }

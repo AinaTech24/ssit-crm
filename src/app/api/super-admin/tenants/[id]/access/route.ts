@@ -62,7 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         tenantId,
         eventType: "upgraded",
         actor: `ssit_admin:${session.userId}`,
-        notes: "SSIT Platform Admin customized module & field overrides",
+        notes: "Equitywala Platform Admin customized module & field overrides",
         meta: { modulesOverride, allowedFields } as any,
       } as any);
 

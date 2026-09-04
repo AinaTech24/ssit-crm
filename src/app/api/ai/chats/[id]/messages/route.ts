@@ -219,7 +219,7 @@ const inr = (n: any) => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN
 function deterministicMarkdown(question: string, s: FirmSnapshot, configured: boolean): string {
   const q = question.toLowerCase();
   const has = (...k: string[]) => k.some((x) => q.includes(x));
-  const note = configured ? "" : "\n\n_AI model isn't configured yet — showing live figures straight from your data. Ask your admin to set it in SSIT Admin → AI & Models._";
+  const note = configured ? "" : "\n\n_AI model isn't configured yet — showing live figures straight from your data. Ask your admin to set it in Equitywala Admin → AI & Models._";
 
   if (has("aum", "assets under")) {
     if (has("rm", "manager")) {

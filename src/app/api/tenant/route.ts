@@ -5,7 +5,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  *
  * Allows the MFD owner to update their organisation profile — branding,
  * contact info, address, business profile. ARN/EUIN/GST/plan stay locked
- * to SSIT (must be edited from the super-admin side).
+ * to Equitywala (must be edited from the super-admin side).
  */
 
 import { NextRequest, NextResponse } from "next/server";

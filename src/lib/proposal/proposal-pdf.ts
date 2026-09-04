@@ -104,7 +104,7 @@ export async function renderProposalPdf(args: { proposal: ProposalData; brand: P
   const secondary = brand.secondaryColor ? hexToRgb(brand.secondaryColor) : ACCENT;
 
   doc.setTitle(ascii(`Proposal ${p.proposalNumber ?? ""} — ${p.recipientName ?? "Client"}`));
-  doc.setProducer("SSIT CRM");
+  doc.setProducer("Equitywala");
   if (brand.legalName || brand.displayName) doc.setAuthor(ascii(brand.legalName ?? brand.displayName ?? ""));
 
   const logo = await embedLogo(doc, brand.logoUrl);

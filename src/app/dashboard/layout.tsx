@@ -191,7 +191,7 @@ const NAV: NavSection[] = [
         roles: ["owner", "compliance", "back_office", "ops"] },
       { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate, module: "broadcasts" },
       { href: "/dashboard/campaigns", label: "Marketing Campaigns", icon: Megaphone, module: "marketing_campaigns", roles: ["owner", "marketing"] },
-      { href: "/dashboard/ssit-library", label: "SSIT Content Library", icon: Library, roles: ["owner", "marketing", "rm", "branch_head", "back_office", "ops"] },
+      { href: "/dashboard/ssit-library", label: "Equitywala Content Library", icon: Library, roles: ["owner", "marketing", "rm", "branch_head", "back_office", "ops"] },
       { href: "/dashboard/communications", label: "Communications", icon: MessageSquare, module: "broadcasts" },
     ],
   },
@@ -232,7 +232,7 @@ const NAV: NavSection[] = [
       { href: "/dashboard/portfolio-intelligence", label: "Portfolio Intelligence", icon: PieChart, roles: ["owner", "branch_head", "compliance", "rm", "back_office", "ops"] },
       { href: "/dashboard/commission-reconciliation", label: "Commission Reconciliation", icon: CreditCard, module: "reports", roles: ["owner", "compliance", "back_office"] },
       { href: "/dashboard/finances", label: "Practice Finances", icon: Wallet, module: "reports", roles: ["owner", "compliance", "back_office"] },
-      { href: "/dashboard/ai-assistant", label: "SSIT CRM Copilot", icon: Bot, module: "ai_assistant" },
+      { href: "/dashboard/ai-assistant", label: "Equitywala Copilot", icon: Bot, module: "ai_assistant" },
       { href: "/dashboard/audit-log", label: "Audit Log", icon: ClipboardCheck, module: "audit_log", roles: ["owner", "compliance"] },
     ],
   },
@@ -246,7 +246,7 @@ function NavBlockedNotice() {
       </div>
       <h1 className="text-2xl font-bold mt-5 tracking-tight">Section not available</h1>
       <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-        This module isn&apos;t enabled for your account. Ask your firm owner (or SSIT) to grant access.
+        This module isn&apos;t enabled for your account. Ask your firm owner (or Equitywala) to grant access.
       </p>
       <Link href="/dashboard" className="btn-primary mt-6 inline-flex">
         Back to dashboard
@@ -380,7 +380,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Per-tenant white-label theme: override the brand CSS variables from the
   // firm's chosen primary/accent colours (Settings → Appearance). Empty string
-  // when the tenant uses the stock SSIT palette, so we inject nothing.
+  // when the tenant uses the stock Equitywala palette, so we inject nothing.
   const themeCss = buildTenantThemeCss(
     tenant?.primaryColor,
     (tenant as any)?.secondaryColor,
@@ -505,7 +505,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 )}
                 <div className="sidebar-brand-text min-w-0">
                   <div className="font-semibold tracking-tight truncate text-sm leading-tight text-foreground">
-                    {tenant.displayName ?? "SSIT CRM"}
+                    {tenant.displayName ?? "Equitywala"}
                   </div>
                   <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground font-mono">
                     <span className="size-1.5 rounded-full bg-emerald-500" />
@@ -514,11 +514,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
                 </div>
               </>
             ) : (
-              // No tenant context → product default: the SSIT wordmark on a white card.
+              // No tenant context → product default: the Equitywala wordmark on a white card.
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src="/ssit-wordmark.png"
-                alt="SSIT CRM"
+                src="/equitywala-wordmark.png"
+                alt="Equitywala"
                 className="h-8 w-auto"
               />
             )}

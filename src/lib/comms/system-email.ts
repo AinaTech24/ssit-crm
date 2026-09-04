@@ -27,7 +27,7 @@ export async function sendSystemEmail(args: {
   /** Stable key so a retried send dedupes provider-side. */
   idempotencyKey?: string;
 }): Promise<SystemEmailResult> {
-  // Resolve the platform SMTP config — DB (SSIT Admin → Email) first, env (SMTP_*)
+  // Resolve the platform SMTP config — DB (Equitywala Admin → Email) first, env (SMTP_*)
   // as fallback.
   const cfg = await loadEmailConfig();
   if (!cfg.configured || !cfg.host) {
@@ -35,7 +35,7 @@ export async function sendSystemEmail(args: {
     // links never arrive). Surface it loudly instead of failing invisibly.
     if (process.env.NODE_ENV === "production") {
       console.error(
-        "[system-email] SMTP is not configured (SSIT Admin → Email, or SMTP_* env) — " +
+        "[system-email] SMTP is not configured (Equitywala Admin → Email, or SMTP_* env) — " +
           `transactional auth email (to ${args.to}, subject "${args.subject}") was NOT sent.`
       );
     }

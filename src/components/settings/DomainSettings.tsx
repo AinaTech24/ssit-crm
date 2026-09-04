@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * White-label URL settings — claim a vanity subdomain (<firm>.crm.ssit.com)
+ * White-label URL settings — claim a vanity subdomain (<firm>.crm.equitywala.com)
  * and/or point the firm's own domain (crm.yourfirm.in) at the CRM. Reads/writes
  * /api/tenant/domain. Owner-only (the page already gates on settings.users).
  */

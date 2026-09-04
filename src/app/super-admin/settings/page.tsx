@@ -42,7 +42,7 @@ export default async function PlatformSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Platform settings</h1>
         <p className="text-muted-foreground text-sm">
-          SSIT-level configuration, integrations health, and module catalog.
+          Equitywala-level configuration, integrations health, and module catalog.
         </p>
       </div>
 

@@ -1,0 +1,8 @@
+# Shell scripts MUST be LF. They are executed on Linux (the EC2 deploy box and
+# inside Docker), where a trailing CR makes bash fail with an opaque
+# "syntax error: unexpected end of file". Windows checkouts default to CRLF via
+# core.autocrlf, so without this any .sh copied straight from a Windows working
+# tree to the server is silently broken.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.pem -text

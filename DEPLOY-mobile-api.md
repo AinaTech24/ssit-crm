@@ -27,13 +27,13 @@ migrations `0185`–`0194` ride along; they belong to other workstreams.
 From the repo root on your laptop:
 
 ```bash
-tar -czf - src/app/api/client-forms src/lib/client-forms "src/app/api/leads/[id]/dispatch" "src/app/api/investors/[id]/dispatch/route.ts" src/app/api/health/route.ts next.config.ts | ssh -i ~/.ssh/mfd-deploy ec2-user@13.204.102.20 'cd ~/app && tar -xzf -'
+tar -czf - src/app/api/client-forms src/lib/client-forms "src/app/api/leads/[id]/dispatch" "src/app/api/investors/[id]/dispatch/route.ts" src/app/api/health/route.ts next.config.ts | ssh -i ~/.ssh/ssit-crm-deploy ec2-user@13.204.242.178 'cd ~/app && tar -xzf -'
 ```
 
 ## 2. Build + restart
 
 ```bash
-ssh -i ~/.ssh/mfd-deploy ec2-user@13.204.102.20 'bash ~/run-deploy.sh'
+ssh -i ~/.ssh/ssit-crm-deploy ec2-user@13.204.242.178 'bash ~/run-deploy.sh'
 ```
 
 Prune first if the box is tight on space — check `deploy-ram-and-prune` notes.
@@ -41,7 +41,7 @@ Prune first if the box is tight on space — check `deploy-ram-and-prune` notes.
 ## 3. Confirm it landed
 
 ```bash
-curl -s https://crm.ssit.com/api/health
+curl -s https://crm.equitywala.com/api/health
 ```
 
 `builtAt` should show the time you just deployed (prod has no `.git`, so `build`

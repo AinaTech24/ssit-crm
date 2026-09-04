@@ -41,7 +41,7 @@ export const config = {
 /**
  * Logged-OUT landing surfaces. A visitor who already holds a session should be
  * sent straight into their app instead of being shown the marketing page (or a
- * login form) — opening crm.ssit.com in a second tab used to render the
+ * login form) — opening crm.equitywala.com in a second tab used to render the
  * public landing page even though the user was signed in in the first tab.
  *
  * Deliberately NOT the whole PUBLIC_PATHS set: /terms, /privacy, /refund must
@@ -215,7 +215,7 @@ export async function middleware(req: NextRequest) {
 
   // Resolve the session from the cookie that governs THIS surface. The admin
   // console (/super-admin, /api/super-admin) reads `ssit_session`; everything
-  // else reads `mfd_session`. Two separate cookies = an SSIT-admin login and an
+  // else reads `mfd_session`. Two separate cookies = an Equitywala-admin login and an
   // MFD login can coexist in the same browser without overwriting each other.
   const onAdminSurface = isAdminSurface(pathname);
   const cookieName = sessionCookieForPath(pathname);
@@ -231,8 +231,8 @@ export async function middleware(req: NextRequest) {
   }
   let session = token ? await verifySession(token) : null;
 
-  // Dual-auth API routes: the shared SSIT content library is READ by MFD users
-  // (mfd_session) but WRITTEN by SSIT platform admins (ssit_session). If the
+  // Dual-auth API routes: the shared Equitywala content library is READ by MFD users
+  // (mfd_session) but WRITTEN by Equitywala platform admins (ssit_session). If the
   // path's primary cookie has no valid session, fall back to the other cookie so
   // a platform admin can upload/save — the route handler still does the actual
   // capability check (isPlatformAdmin || template.edit).
@@ -252,7 +252,7 @@ export async function middleware(req: NextRequest) {
       if (token) res.cookies.delete(cookieName);
       return res;
     }
-    // Nicety: an SSIT admin who lands on an MFD page (no mfd_session) but holds
+    // Nicety: an Equitywala admin who lands on an MFD page (no mfd_session) but holds
     // a valid admin session is sent to their console instead of the login page.
     if (!onAdminSurface) {
       const adminToken = req.cookies.get(ADMIN_SESSION_COOKIE)?.value;

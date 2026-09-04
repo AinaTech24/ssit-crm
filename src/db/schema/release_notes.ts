@@ -2,7 +2,7 @@
  * "What's new" release notes (migration 0197).
  *
  * release_notes is PLATFORM-level — no tenant_id, no RLS, same convention as
- * platformSettings. SSIT publishes an entry once and every firm sees it, so the
+ * platformSettings. Equitywala publishes an entry once and every firm sees it, so the
  * changelog can't drift per tenant.
  *
  * releaseNoteReads IS tenant-scoped (a read receipt belongs to a user inside a

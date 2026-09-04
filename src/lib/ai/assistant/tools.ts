@@ -1,5 +1,5 @@
 /**
- * SSIT Assistant — read-only "skills" (tools the model can call to fetch real,
+ * Equitywala Assistant — read-only "skills" (tools the model can call to fetch real,
  * RLS-scoped data). Every executor runs inside `withTenant`, so results are
  * always scoped to the caller's firm (and branch/role via RLS). Nothing here
  * writes, and the model never emits SQL — it only picks a tool + typed args,

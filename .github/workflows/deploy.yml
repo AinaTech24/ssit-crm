@@ -61,7 +61,7 @@ jobs:
         run: |
           tar czf /tmp/app.tgz \
             --exclude='node_modules' --exclude='.next' --exclude='.git' \
-            src public drizzle scripts \
+            src public drizzle scripts certs \
             package.json package-lock.json next.config.ts tsconfig.json \
             drizzle.config.ts postcss.config.js tailwind.config.ts \
             next-env.d.ts vitest.config.ts
@@ -100,6 +100,20 @@ jobs:
             comm -13 /tmp/shipped.txt /tmp/onbox.txt | while read -r stale; do
               [ -n "$stale" ] && rm -f "$stale" && echo "removed stale: $stale"
             done
+
+            # Refresh the deploy script itself from the shipped tree. Without
+            # this the box keeps whatever ~/run-deploy.sh was installed by hand,
+            # so edits to scripts/run-deploy-bluegreen.sh in git never take
+            # effect and you end up debugging a file the box never runs.
+            #
+            # Strip CR first: a Windows checkout can carry CRLF, and bash rejects
+            # a CRLF script with the opaque "syntax error: unexpected end of
+            # file" BEFORE executing a single line — indistinguishable from the
+            # deploy silently doing nothing. (.gitattributes pins *.sh to LF;
+            # this is the belt to that braces.)
+            sed -i 's/\r$//' scripts/run-deploy-bluegreen.sh
+            install -m 755 scripts/run-deploy-bluegreen.sh ~/run-deploy.sh
+            bash -n ~/run-deploy.sh || { echo "::error::~/run-deploy.sh does not parse"; exit 1; }
 
             # Run detached: the SSH session must not own a 20-minute build.
             rm -f ~/deploy-current.log

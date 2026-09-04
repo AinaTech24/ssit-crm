@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import { PLATFORM_TENANT_ID } from "@/lib/platform";
 import { ROLE_LABELS } from "@/lib/auth/rbac";
 import { formatRelative } from "@/lib/utils";
+import { AdminRowActions } from "./AdminRowActions";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700",
@@ -27,13 +28,20 @@ export default async function PlatformStaffPage() {
       .orderBy(desc(users.createdAt));
   });
 
+  // Guards the delete button: the LAST active Super Admin must not be removable,
+  // or nobody can get back into the platform console. The API enforces this too —
+  // this only keeps the UI from offering an action that would 409.
+  const activeSupers = staff.filter(
+    (s) => s.status === "active" && (s.roles ?? []).includes("platform_admin")
+  ).length;
+
   return (
     <div className="space-y-6 max-w-5xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Admins</h1>
           <p className="text-muted-foreground text-sm">
-            SSIT administrators — Super Admin and Admin both have full cross-tenant access.
+            Equitywala administrators — Super Admin and Admin both have full cross-tenant access.
           </p>
         </div>
         <Link
@@ -61,6 +69,7 @@ export default async function PlatformStaffPage() {
                 <th className="text-left py-2 font-medium">Status</th>
                 <th className="text-left py-2 font-medium">Last login</th>
                 <th className="text-left py-2 font-medium pl-3">Added</th>
+                <th className="text-right py-2 font-medium px-4 w-24">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -74,7 +83,7 @@ export default async function PlatformStaffPage() {
                         key={r}
                         className="mr-1 px-1.5 py-0.5 rounded bg-muted text-[10px] tracking-wide"
                       >
-                        {ROLE_LABELS[r]?.replace(/\s*\(SSIT\)$/, "") ?? r}
+                        {ROLE_LABELS[r]?.replace(/\s*\(Equitywala\)$/, "") ?? r}
                       </span>
                     ))}
                   </td>
@@ -87,6 +96,16 @@ export default async function PlatformStaffPage() {
                     {s.lastLoginAt ? formatRelative(s.lastLoginAt) : "Never"}
                   </td>
                   <td className="py-3 pl-3 text-xs text-muted-foreground">{formatRelative(s.createdAt)}</td>
+                  <td className="py-3 px-4">
+                    <AdminRowActions
+                      id={s.id}
+                      name={s.name ?? ""}
+                      role={(s.roles ?? []).includes("platform_admin") ? "platform_admin" : "platform_support"}
+                      status={s.status}
+                      isSelf={s.id === session.userId}
+                      canRemove={!((s.roles ?? []).includes("platform_admin") && activeSupers <= 1)}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -106,6 +125,11 @@ export default async function PlatformStaffPage() {
           <li>
             An email that is already in use (by any admin or MFD user, in any tenant) cannot be
             reused when creating a new admin.
+          </li>
+          <li>
+            You cannot delete, suspend or demote <strong className="text-foreground">your own</strong>{" "}
+            account, and the <strong className="text-foreground">last active Super Admin</strong>{" "}
+            cannot be removed — promote another admin first. Both rules are enforced server-side.
           </li>
         </ul>
       </div>

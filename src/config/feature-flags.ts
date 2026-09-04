@@ -4,7 +4,7 @@
  * (subscriptions.feature_flags_override). loadTenantLicense merges
  * { ...package.featureFlags, ...subscription.featureFlagsOverride }.
  *
- * Add a row here to make a flag appear in the SSIT-Admin per-tenant editor and
+ * Add a row here to make a flag appear in the Equitywala-Admin per-tenant editor and
  * to document what it does. `type` drives the editor control.
  */
 
@@ -18,7 +18,7 @@ export type FeatureFlagDef = {
 
 export const FEATURE_FLAGS: FeatureFlagDef[] = [
   { key: "customDomain", label: "Custom domain", description: "Serve the CRM on the firm's own domain (crm.theirfirm.in), not just a vanity subdomain.", type: "boolean", group: "White-label" },
-  { key: "whiteLabel", label: "White-label branding", description: "Remove SSIT branding from client-facing surfaces (emails, PDFs, portal).", type: "boolean", group: "White-label" },
+  { key: "whiteLabel", label: "White-label branding", description: "Remove Equitywala branding from client-facing surfaces (emails, PDFs, portal).", type: "boolean", group: "White-label" },
   { key: "maxMessagesPerMonth", label: "Monthly message quota", description: "Cap on WhatsApp/SMS/email sends per month (0 or blank = plan default).", type: "number", group: "Limits" },
 ];
 

@@ -165,7 +165,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         const fromStatus = sub.status;
         await tx
           .update(subscriptions)
-          .set({ status: "cancelled", cancelledAt: new Date(), cancelledReason: "Tenant deleted by SSIT", updatedAt: new Date() } as any)
+          .set({ status: "cancelled", cancelledAt: new Date(), cancelledReason: "Tenant deleted by Equitywala", updatedAt: new Date() } as any)
           .where(eq(subscriptions.id, sub.id));
         await tx.insert(subscriptionEvents).values({
           subscriptionId: sub.id,
@@ -174,7 +174,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           actor: `ssit_admin:${session.userId}`,
           fromStatus,
           toStatus: "cancelled",
-          notes: "Tenant deleted (soft) by SSIT",
+          notes: "Tenant deleted (soft) by Equitywala",
         } as any);
       }
       return { ok: true };

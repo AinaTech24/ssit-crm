@@ -93,7 +93,7 @@ export async function renderRiskProfilePdf(args: RenderRiskProfileArgs): Promise
   const logo = await embedLogo(doc, brand.logoUrl);
 
   doc.setTitle(ascii(`Risk profile — ${investor.name ?? "Client"}`));
-  doc.setProducer("SSIT CRM");
+  doc.setProducer("Equitywala");
   if (brand.legalName || brand.displayName) doc.setAuthor(ascii(brand.legalName ?? brand.displayName ?? ""));
 
   const ctx = { helv, bold, primary, logo, brand, generatedAt: args.generatedAt, refId: args.refId ?? null };

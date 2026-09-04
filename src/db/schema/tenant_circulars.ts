@@ -4,7 +4,7 @@ import { tenants } from "./tenants";
 
 /**
  * A tenant's OWN saved regulatory circulars / compliance notes — distinct from
- * the platform-shared amfi_circulars (SSIT-curated, read-only). Each MFD builds
+ * the platform-shared amfi_circulars (Equitywala-curated, read-only). Each MFD builds
  * their private compliance library, typically by saving AI-summarised drafts
  * from the circular summariser. Tenant-scoped with standard RLS.
  */

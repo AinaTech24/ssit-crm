@@ -11,7 +11,7 @@ import { LibraryGrid } from "@/components/content-library/LibraryGrid";
 
 export const dynamic = "force-dynamic";
 
-export default async function SSITLibraryPage({
+export default async function EquitywalaLibraryPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
@@ -60,7 +60,7 @@ export default async function SSITLibraryPage({
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="page-title">
-            <Sparkles className="size-6 text-brand-cyan" /> SSIT Content Library
+            <Sparkles className="size-6 text-brand-cyan" /> Equitywala Content Library
           </h1>
         </div>
         {canUpload && (
@@ -124,7 +124,7 @@ export default async function SSITLibraryPage({
           <Sparkles className="size-8 mx-auto text-muted-foreground/50" />
           <div className="mt-2 font-medium">No assets in the library yet.</div>
           <p className="mt-2 text-xs max-w-md mx-auto">
-            SSIT uploads festive creatives, market updates, and articles here. Check back soon.
+            Equitywala uploads festive creatives, market updates, and articles here. Check back soon.
           </p>
         </div>
       ) : (

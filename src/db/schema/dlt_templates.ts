@@ -14,7 +14,7 @@ export const dltTemplates = pgTable(
     /** TRAI DLT Template ID (assigned by the portal) */
     dltTemplateId: text("dlt_template_id").notNull(),
     
-    /** Sender ID / Header (e.g. SSITTC, WEALTH) */
+    /** Sender ID / Header (e.g. EquitywalaTC, WEALTH) */
     senderId: text("sender_id").notNull(),
     
     /** Principal Entity ID (PE ID) */

@@ -1,5 +1,5 @@
 /**
- * SSIT CRM Copilot — the learning loop.
+ * Equitywala Copilot — the learning loop.
  *
  * Records every prompt (which intent answered it, or a miss) and — crucially —
  * lets the engine LEARN from that history: when the fixed rules can't parse a

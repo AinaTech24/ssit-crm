@@ -68,5 +68,5 @@ function hintFor(s: ReturnType<typeof storageStatus>): string {
   if (s.configured) {
     return `Uploads go to S3 bucket "${s.bucket}" (${s.region}). Run ?test=1 to verify the key can actually write.`;
   }
-  return "No S3 credentials visible to the server — uploads are saved to local disk (/api/upload-local/...). Set S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET and S3_REGION in the server's .env, then restart/redeploy.";
+  return "No S3 credentials visible to the server — uploads are saved to local disk (/api/upload-local/...). Set S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET and S3_REGION in the server's .env — or, on EC2/ECS with an IAM role attached, S3_USE_INSTANCE_ROLE=1 with S3_BUCKET and S3_REGION — then restart/redeploy.";
 }

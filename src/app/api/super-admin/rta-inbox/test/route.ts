@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → RTA Mailbox → "Test connection". Connects to the saved catch-all
+ * Equitywala Admin → RTA Mailbox → "Test connection". Connects to the saved catch-all
  * mailbox over IMAP and confirms the INBOX is readable, so the operator can
  * verify credentials before relying on the auto-import. Platform-admin only.
  */

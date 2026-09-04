@@ -94,7 +94,7 @@ export function AdminShell({
           <div className="size-9 rounded-xl grid place-items-center font-black shadow-lg shadow-black/30"
             style={{ background: "linear-gradient(135deg,#fff, #dbe6ff)", color: "#0E2557" }}>S</div>
           <div className="leading-tight">
-            <div className="font-bold tracking-tight">SSIT</div>
+            <div className="font-bold tracking-tight">Equitywala</div>
             <div className="text-[10px] text-white/55 font-medium uppercase tracking-wider">Platform Admin</div>
           </div>
         </div>

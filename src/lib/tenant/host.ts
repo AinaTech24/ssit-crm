@@ -15,9 +15,9 @@ import { withSystem } from "@/db/client";
 import { pickLogo } from "@/lib/branding/logo";
 import { buildTenantThemeCss } from "@/lib/branding/theme";
 
-/** The apex the vanity subdomains hang off, e.g. "crm.ssit.com". */
+/** The apex the vanity subdomains hang off, e.g. "crm.equitywala.com". */
 export function appBaseDomain(): string {
-  return (process.env.APP_BASE_DOMAIN ?? "crm.ssit.com").toLowerCase().replace(/\.$/, "");
+  return (process.env.APP_BASE_DOMAIN ?? "crm.equitywala.com").toLowerCase().replace(/\.$/, "");
 }
 
 /** Lowercase, strip port + trailing dot. */
@@ -25,16 +25,16 @@ export function normalizeHost(host?: string | null): string {
   return (host ?? "").toLowerCase().trim().replace(/:\d+$/, "").replace(/\.$/, "");
 }
 
-/** Single-label subdomain of the base ("wecare" for wecare.crm.ssit.com), or null. */
+/** Single-label subdomain of the base ("wecare" for wecare.crm.equitywala.com), or null. */
 export function subdomainOf(host: string, base = appBaseDomain()): string | null {
   const h = normalizeHost(host);
   if (h === base || !h.endsWith(`.${base}`)) return null;
   const label = h.slice(0, -(base.length + 1));
-  // Only a single left-most label maps to a tenant (reject a.b.crm.ssit.com).
+  // Only a single left-most label maps to a tenant (reject a.b.crm.equitywala.com).
   return /^[a-z0-9-]+$/.test(label) && !label.includes(".") ? label : null;
 }
 
-/** True for the shared apex host (crm.ssit.com / www / localhost / the EC2 IP). */
+/** True for the shared apex host (crm.equitywala.com / www / localhost / the EC2 IP). */
 export function isBaseHost(host: string, base = appBaseDomain()): boolean {
   const h = normalizeHost(host);
   return h === base || h === `www.${base}` || h === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(h);

@@ -86,3 +86,8 @@ schema.zip
 
 # local disk upload store (runtime tenant uploads, not source)
 /node-local/uploads/
+
+# Public Amazon RDS root CA bundle — NOT a secret. Needed in the image so the app
+# can verify the RDS TLS chain (sslmode=verify-full); without it a fresh clone
+# builds an image that cannot connect to the database.
+!certs/rds-global-bundle.pem

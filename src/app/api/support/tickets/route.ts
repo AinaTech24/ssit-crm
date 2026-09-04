@@ -1,6 +1,6 @@
 import { handleApiError } from "@/lib/api/error-handler";
 /**
- * Support tickets — MFD users raise tickets to SSIT.
+ * Support tickets — MFD users raise tickets to Equitywala.
  *
  *   GET  /api/support/tickets    — list tickets raised by this tenant
  *   POST /api/support/tickets    — raise a new ticket

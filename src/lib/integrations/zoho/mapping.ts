@@ -13,7 +13,7 @@
  *   - Contacts / Leads / Tasks / Events are NATIVE Zoho modules.
  *   - The rest are CUSTOM modules the MFD creates in their Zoho org. For every
  *     target the MFD adds a single-line external-id field (default
- *     "SSIT_Record_ID") used for the idempotent upsert, plus the fields named in
+ *     "Equitywala_Record_ID") used for the idempotent upsert, plus the fields named in
  *     `toZoho`. The setup list is surfaced in ZohoIntegrationCard.
  */
 import {
@@ -29,7 +29,7 @@ import {
   schemeMaster,
 } from "@/db/schema";
 
-export const EXTERNAL_ID_FIELD = "SSIT_Record_ID";
+export const EXTERNAL_ID_FIELD = "Equitywala_Record_ID";
 
 export type ZohoMapping = {
   entityType: string;

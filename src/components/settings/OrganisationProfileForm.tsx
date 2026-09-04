@@ -6,7 +6,7 @@
  * Three groups:
  *   1. Editable by Owner — identity, contact, address, branding, business profile.
  *   2. Master records (read-only here) — ARN, EUIN, GSTIN, Owner Name, Created date.
- *   3. License / package (read-only here, SSIT controls) — package, status, dates.
+ *   3. License / package (read-only here, Equitywala controls) — package, status, dates.
  *
  * Logo upload: posts to /api/compliance/upload-url (kind=general) to get a
  * presigned PUT URL, uploads the file directly to S3, then patches the tenant
@@ -168,8 +168,8 @@ export function OrganisationProfileForm({
           <Row label="Organisation name (display)" value={form.displayName} onChange={(v) => set("displayName", v)} required />
           <Row label="Legal name" value={form.legalName} onChange={(v) => set("legalName", v)} required />
           <Row label="Owner name" value={owner?.name ?? "—"} disabled note={owner ? owner.email : ""} />
-          <Row label="ARN" helpTerm="ARN" value={tenant.arn ?? "—"} disabled note="Managed by SSIT" />
-          <Row label="Principal EUIN" helpTerm="EUIN" value={tenant.principalEuin ?? "—"} disabled note="Managed by SSIT" />
+          <Row label="ARN" helpTerm="ARN" value={tenant.arn ?? "—"} disabled note="Managed by Equitywala" />
+          <Row label="Principal EUIN" helpTerm="EUIN" value={tenant.principalEuin ?? "—"} disabled note="Managed by Equitywala" />
           <Row label="GSTIN" value={tenant.gstNumber ?? "—"} disabled />
           <Row
             label="Created"
@@ -342,7 +342,7 @@ export function OrganisationProfileForm({
             label="Package selected"
             value={pkg ? `${pkg.name} (${pkg.key})` : license.packageKey ?? "—"}
             disabled
-            note="Contact SSIT to change package"
+            note="Contact Equitywala to change package"
           />
           <Row label="License status" value={license.status ?? "—"} disabled tone={license.isRestricted ? "rose" : "emerald"} />
           <Row

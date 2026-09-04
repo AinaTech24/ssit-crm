@@ -1,13 +1,27 @@
 # Copy to terraform.tfvars and fill in. Only ssh_cidr is required.
 ssh_cidr        = "YOUR.PUBLIC.IP.HERE/32"
-public_key_path = "~/.ssh/mfd-deploy.pub"
+public_key_path = "~/.ssh/ssit-crm-deploy.pub"
+
+# Resource name prefix. Every resource this stack creates is named
+# "<project>-…" (SGs, IAM role, key pair, RDS identifier, EC2 Name tag) and the
+# S3 bucket is "<project>-uploads-<random>". Change it if you are standing up a
+# SECOND stack in the same AWS account (e.g. "ssit-crm-staging") — Terraform
+# errors on a name collision rather than touching the existing resource, so a
+# clash fails safe, but a distinct prefix avoids the failed apply entirely.
+# project = "ssit-crm"
 
 # Optional overrides:
 # region            = "ap-south-1"
 # instance_type     = "t4g.medium"
 # db_instance_class = "db.t4g.micro"
+# db_name           = "ssit_crm"
+# db_username       = "ssit_master"
 
-# Cost + data-safety guardrails (all optional):
+# Data-safety guardrail:
 # db_max_allocated_storage = 200          # RDS storage autoscaling ceiling (GB)
-# monthly_budget_usd       = "60"         # AWS Budgets monthly limit
-# budget_alert_email       = "you@firm.in" # set to enable budget email alerts
+
+# Cost guardrail — OFF by default. An AWS Budget is ACCOUNT-WIDE: on a shared
+# account it measures this stack PLUS every other project, so only enable it
+# with a limit sized for the whole account (or in a dedicated account).
+# monthly_budget_usd = "60"
+# budget_alert_email = "you@firm.in"

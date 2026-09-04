@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * MFD-controlled branding template picker for SSIT library IMAGE assets.
+ * MFD-controlled branding template picker for Equitywala library IMAGE assets.
  *
  * The MFD picks one of the named presets (Classic / Minimal / Bold / Split)
  * from the shared catalog; each maps to a server-side composite layout. A

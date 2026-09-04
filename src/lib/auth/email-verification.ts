@@ -49,7 +49,7 @@ export async function issueEmailVerification(args: {
   const res = await sendSystemEmail({
     tenantId: args.tenantId,
     to: args.email,
-    subject: "Confirm your email to activate your SSIT workspace",
+    subject: "Confirm your email to activate your Equitywala workspace",
     text:
       `Welcome${args.name ? `, ${args.name}` : ""}! Confirm this email address to finish setting up ` +
       `${args.firmName ?? "your firm"}'s workspace (link valid for 24 hours):\n\n${verifyUrl}`,

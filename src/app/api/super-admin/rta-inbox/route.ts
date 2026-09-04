@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → RTA Mailbox. Read the current catch-all inbox config (never the
+ * Equitywala Admin → RTA Mailbox. Read the current catch-all inbox config (never the
  * raw password — only a "saved" flag) and update it. Platform-admin only.
  *
  * This is the ONE mailbox every MFD forwards their CAMS/KFintech mailback to. The

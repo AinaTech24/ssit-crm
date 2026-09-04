@@ -18,7 +18,7 @@ import { CATALOGS } from "@/lib/filter/catalog";
 import { POLICY_TYPES, PREMIUM_FREQUENCIES } from "@/db/schema/insurance";
 
 // Model TIERS, not concrete names — the active provider (Anthropic / Gemini,
-// switchable from SSIT Admin) maps each tier to its configured model.
+// switchable from Equitywala Admin) maps each tier to its configured model.
 const FAST_MODEL = "fast";
 const REASONING_MODEL = "reasoning";
 
@@ -841,7 +841,7 @@ Output ONLY the JSON object.`;
 /**
  * Summarise a pasted AMFI/SEBI/CBDT circular into a distributor-friendly digest:
  * a plain-English summary, the concrete actions an MFD must take, a category and
- * a severity. Helps SSIT / the MFD turn dense regulator PDFs into the
+ * a severity. Helps Equitywala / the MFD turn dense regulator PDFs into the
  * amfi_circulars digest entries.
  */
 export async function summariseCircular(params: {

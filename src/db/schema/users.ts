@@ -19,7 +19,7 @@ export const users = pgTable(
     avatarUrl: text("avatar_url"),
 
     /** Stacked roles. A user is often owner + RM + compliance simultaneously.
-     *  'platform_admin' is reserved for SSIT staff who manage the SaaS itself.
+     *  'platform_admin' is reserved for Equitywala staff who manage the SaaS itself.
      *  'platform_admin' users always have tenant_id = PLATFORM_TENANT_ID. */
     roles: text("roles", {
       enum: [

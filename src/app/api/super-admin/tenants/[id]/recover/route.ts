@@ -75,7 +75,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           actor: `ssit_admin:${session.userId}`,
           fromStatus,
           toStatus: "active",
-          notes: "Tenant recovered from soft-delete by SSIT",
+          notes: "Tenant recovered from soft-delete by Equitywala",
         } as any);
       }
       return { ok: true, arn: restoredArn };

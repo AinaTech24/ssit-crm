@@ -42,7 +42,7 @@ const TYPE_TONE: Record<string, string> = {
 
 export const dynamic = "force-dynamic";
 
-export default async function SSITLibraryDetailPage({
+export default async function EquitywalaLibraryDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;

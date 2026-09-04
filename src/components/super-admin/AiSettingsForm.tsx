@@ -171,7 +171,7 @@ export function AiSettingsForm({ initial, providers }: { initial: Status; provid
           </button>
         )}
         <span className="px-2 py-1 rounded-full bg-muted">
-          Source: {source === "db" ? "SSIT Admin" : source === "env" ? "env var" : "none"}
+          Source: {source === "db" ? "Equitywala Admin" : source === "env" ? "env var" : "none"}
         </span>
       </div>
 

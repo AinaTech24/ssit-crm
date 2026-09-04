@@ -7,7 +7,7 @@ import { clearDeviceSessionCache } from "@/lib/auth/revocation";
 
 /**
  * Clears ONLY the session cookie for the surface you're signing out of, so
- * logging out of the SSIT console doesn't also kill an MFD session open in
+ * logging out of the Equitywala console doesn't also kill an MFD session open in
  * another tab (and vice versa).
  *
  *   ?scope=admin  → clear ssit_session

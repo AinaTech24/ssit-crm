@@ -29,7 +29,7 @@ type CircularItem = {
 
 /**
  * Only emit a link for http(s) URLs. Defends the rendered `<a href>` against
- * stored `javascript:` / `data:` values (covers legacy rows + SSIT-curated data,
+ * stored `javascript:` / `data:` values (covers legacy rows + Equitywala-curated data,
  * not just freshly-validated writes).
  */
 function safeHref(url?: string | null): string | null {
@@ -184,10 +184,10 @@ export function CircularsFeed({
         </div>
       )}
 
-      {/* SSIT Curated Circulars */}
+      {/* Equitywala Curated Circulars */}
       <div className="space-y-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <ScrollText className="size-4 text-muted-foreground" /> SSIT-curated digest ({filteredAmfiCirculars.length})
+          <ScrollText className="size-4 text-muted-foreground" /> Equitywala-curated digest ({filteredAmfiCirculars.length})
         </h2>
         <div className="space-y-3">
           {filteredAmfiCirculars.length === 0 ? (

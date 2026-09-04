@@ -1,9 +1,9 @@
 /**
- * RTA mailback catch-all inbox configuration — the operator sets it from SSIT
+ * RTA mailback catch-all inbox configuration — the operator sets it from Equitywala
  * Admin (no redeploy / env edit), exactly like the platform email config.
  *
  * This is the ONE platform-level mailbox every MFD forwards their RTA mailback to
- * (e.g. rta@crm.ssit.com on Hostinger). It is NOT tenant-scoped — it lives in
+ * (e.g. rta@crm.equitywala.com on Hostinger). It is NOT tenant-scoped — it lives in
  * platform_settings('rta_inbox'). The IMAP password is encrypted at rest
  * (AES-256-GCM) and only decrypted in-process by the poller. The RTA_INBOX_*
  * environment variables remain the fallback.
@@ -41,7 +41,7 @@ export type ResolvedInboxConfig = {
   retentionDays: number;
 };
 
-const DEFAULT_DOMAIN = "crm.ssit.com";
+const DEFAULT_DOMAIN = "crm.equitywala.com";
 /**
  * A week's grace by default. Long enough to notice a bad import and re-run it
  * from the original mail; short enough that the mailbox doesn't grow unbounded.

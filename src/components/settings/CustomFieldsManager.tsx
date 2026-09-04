@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SSIT firm-admin screen to define custom fields for leads / clients. Fields
+ * Equitywala firm-admin screen to define custom fields for leads / clients. Fields
  * defined here appear on the matching detail pages (CustomFieldsCard).
  */
 

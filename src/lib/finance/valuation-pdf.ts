@@ -75,7 +75,7 @@ export async function renderValuationStatementPdf(args: RenderStatementArgs): Pr
   const secondary = brand.secondaryColor ? hexToRgb(brand.secondaryColor) : ACCENT;
 
   doc.setTitle(ascii(`Portfolio statement — ${investor.name ?? "Client"}`));
-  doc.setProducer("SSIT CRM");
+  doc.setProducer("Equitywala");
   if (brand.legalName || brand.displayName) doc.setAuthor(ascii(brand.legalName ?? brand.displayName ?? ""));
 
   let page = doc.addPage([595.28, 841.89]); // A4

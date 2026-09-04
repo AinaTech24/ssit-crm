@@ -8,7 +8,7 @@ import { ContentLibraryManager, type AssetRow } from "@/components/super-admin/C
 
 export const dynamic = "force-dynamic";
 
-export default async function SSITContentLibraryPage() {
+export default async function EquitywalaContentLibraryPage() {
   const session = await requireSession();
   if (!isPlatformAdmin(session.roles)) {
     return <div className="card-surface p-12 text-center text-sm text-muted-foreground">Platform admins only.</div>;

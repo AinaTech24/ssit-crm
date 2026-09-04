@@ -126,7 +126,7 @@ const BODY_SNIPPET_MAX = 2000;
 
 /**
  * Record EVERY message the poller touches — routed or not — so "did my forward
- * arrive?" is answerable from SSIT Admin → Inbound Mail instead of the worker
+ * arrive?" is answerable from Equitywala Admin → Inbound Mail instead of the worker
  * logs. Best-effort: a logging failure must never stop an import.
  *
  * Upserts on message_id (globally unique per RFC 5322), so a message reprocessed
@@ -596,7 +596,7 @@ export function startRtaInboxPollerWorker() {
       const rc = await loadRtaInboxConfig();
       if (!rc.configured) {
         if (!warnedIdle) {
-          console.log("[rta-inbox] inbox not configured (SSIT Admin → RTA Mailbox, or RTA_INBOX_* env) — poller idle");
+          console.log("[rta-inbox] inbox not configured (Equitywala Admin → RTA Mailbox, or RTA_INBOX_* env) — poller idle");
           warnedIdle = true;
         }
         return;
@@ -624,7 +624,7 @@ export function startRtaInboxPollerWorker() {
 
   const handle = setInterval(tick, interval);
   handle.unref?.();
-  console.log(`[rta-inbox] mailback poller started (interval=${interval}ms; config from SSIT Admin)`);
+  console.log(`[rta-inbox] mailback poller started (interval=${interval}ms; config from Equitywala Admin)`);
   return () => clearInterval(handle);
 }
 

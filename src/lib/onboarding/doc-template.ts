@@ -29,7 +29,7 @@ const DOC_BODY = {
 };
 const DOC_VARIABLES = [
   { key: "client.name", label: "Client name", example: "Rajesh Kumar" },
-  { key: "doc.link", label: "Upload link", example: "https://crm.ssit.com/u/abc123" },
+  { key: "doc.link", label: "Upload link", example: "https://crm.equitywala.com/u/abc123" },
 ];
 
 export type EnsureResult = { key: string; status: string; submitted?: boolean; error?: string };

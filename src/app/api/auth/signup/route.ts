@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // An email reserved for an SSIT Admin / Super Admin can't be reused for an MFD
+  // An email reserved for an Equitywala Admin / Super Admin can't be reused for an MFD
   // signup either — otherwise two rows would share the email across tenants and
   // login would become ambiguous.
   const adminEmailTaken = await withSystem(async (tx) => {
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       // Create the trial subscription. WITHOUT this row the license gate
       // (loadTenantLicense → "no_subscription", isRestricted) locks the brand-new
       // tenant straight out of their own dashboard — self-serve signup dead-ends.
-      // Mirrors the SSIT-admin provisioning path (super-admin/tenants/route.ts).
+      // Mirrors the Equitywala-admin provisioning path (super-admin/tenants/route.ts).
       // Default to the public "starter" plan; fall back to the lowest-sorted
       // active package so signup still works if "starter" was renamed.
       const pkg =

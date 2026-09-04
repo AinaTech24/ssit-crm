@@ -8,7 +8,7 @@
  * token per 10 minutes, so we cache the access token per tenant in-process.
  *
  * Idempotency: we UPSERT by an external-id field (the MFD adds a custom
- * single-line field, default "SSIT_Record_ID", to each synced Zoho module), so
+ * single-line field, default "Equitywala_Record_ID", to each synced Zoho module), so
  * re-pushing a record updates the existing Zoho record instead of duplicating it.
  */
 import { accountsServer, apiDomain, type ZohoDataCenter } from "./datacenters";

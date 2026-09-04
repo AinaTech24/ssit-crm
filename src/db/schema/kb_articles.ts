@@ -1,6 +1,6 @@
 /**
  * Public Knowledge Base articles — the "KAIZEN" series and any future series.
- * Platform-level (no tenant_id → no RLS), authored by SSIT admins.
+ * Platform-level (no tenant_id → no RLS), authored by Equitywala admins.
  *
  * Gating: `scenarioMd` + `questions` are PUBLIC; `solutionMd` + `screenshots`
  * require a logged-in session. See migration 0185.

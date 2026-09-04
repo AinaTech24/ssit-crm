@@ -352,7 +352,7 @@ export function TenantAdminPanel({
           </div>
           <p className="text-xs text-rose-700/80 mt-1">
             Removes <span className="font-medium">{legalName}</span> from the platform and blocks all its logins.
-            This is a soft delete — the data is retained and can be restored by SSIT engineering.
+            This is a soft delete — the data is retained and can be restored by Equitywala engineering.
           </p>
           {!confirmOpen ? (
             <button

@@ -9,7 +9,7 @@
  * initialMode, and the URL is reflected via history.replaceState on toggle.
  *
  * Single logo (left panel on desktop, centered wordmark on mobile — never
- * both at once). Colours come straight from the SSIT palette (red primary,
+ * both at once). Colours come straight from the Equitywala palette (red primary,
  * teal accent).
  */
 
@@ -60,7 +60,7 @@ export function AuthScreen({
   brandName = null,
 }: {
   initialMode: Mode;
-  /** White-label branding for a firm's own login host — falls back to SSIT. */
+  /** White-label branding for a firm's own login host — falls back to Equitywala. */
   brandLogoUrl?: string | null;
   brandName?: string | null;
 }) {
@@ -192,9 +192,9 @@ export function AuthScreen({
       <div className="hidden lg:flex relative flex-col justify-between p-12 overflow-hidden text-white bg-gradient-to-br from-[#1B3A7A] via-[#14306A] to-[#0E2557]">
         <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:22px_22px]" />
 
-        <Link href="/" className="relative z-10 inline-flex w-fit items-center" aria-label={`${brandName ?? "SSIT CRM"} home`}>
+        <Link href="/" className="relative z-10 inline-flex w-fit items-center" aria-label={`${brandName ?? "Equitywala"} home`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={brandLogoUrl || "/ssit-logo.png"} alt={brandName ?? "SSIT CRM"} className="h-11 w-auto bg-white rounded-xl px-3 py-2 shadow-lg object-contain" />
+          <img src={brandLogoUrl || "/equitywala-logo.png"} alt={brandName ?? "Equitywala"} className="h-11 w-auto bg-white rounded-xl px-3 py-2 shadow-lg object-contain" />
         </Link>
 
         <div key={`panel-${mode}`} className="auth-swap relative z-10 max-w-md">
@@ -237,7 +237,7 @@ export function AuthScreen({
           {/* Mobile-only logo (desktop uses the left panel — never both) */}
           <div className="lg:hidden mb-8 flex justify-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={brandLogoUrl || "/ssit-wordmark.png"} alt={brandName ?? "SSIT CRM"} className="h-9 w-auto object-contain" />
+            <img src={brandLogoUrl || "/equitywala-wordmark.png"} alt={brandName ?? "Equitywala"} className="h-9 w-auto object-contain" />
           </div>
 
           <div key={`form-${mode}-${challenge ? "2fa" : "x"}`} className="auth-swap">

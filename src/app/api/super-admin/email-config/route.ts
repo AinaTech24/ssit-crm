@@ -1,5 +1,5 @@
 /**
- * SSIT Admin → Email. Read the current email-sending config (never the raw key —
+ * Equitywala Admin → Email. Read the current email-sending config (never the raw key —
  * only a masked last-4) and update it. Platform-admin only.
  *
  * The API key is encrypted (AES-256-GCM) before it touches the DB. Submitting a

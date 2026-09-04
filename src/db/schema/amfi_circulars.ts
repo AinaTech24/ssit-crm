@@ -6,7 +6,7 @@ import { date, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 
  * recipes / packages it has NO tenant_id and NO RLS policy; the RLS CI guard
  * only checks tenant_id tables, so it's correctly out of scope there.
  *
- * Curated by SSIT (and surfaced to every tenant at /dashboard/compliance/
+ * Curated by Equitywala (and surfaced to every tenant at /dashboard/compliance/
  * amfi-circulars), each row carries a plain-English summary + the concrete
  * action an MFD must take, so a distributor isn't reading dense regulator PDFs.
  * The AI summariser (/api/ai/circular-summary) helps draft these entries.

@@ -437,7 +437,7 @@ export function CommandPalette({ navItems }: { navItems: PaletteNavItem[] }) {
               <kbd className="px-1.5 py-0.5 rounded bg-card border font-mono">&gt;</kbd> Actions
             </span>
           </div>
-          <span>SSIT Growth OS</span>
+          <span>Equitywala Growth OS</span>
         </div>
       </div>
     </div>

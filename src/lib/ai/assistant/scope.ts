@@ -1,5 +1,5 @@
 /**
- * SSIT CRM Copilot — scope gate.
+ * Equitywala Copilot — scope gate.
  *
  * Classifies each request BEFORE any tool or LLM runs. Off-topic requests
  * (general knowledge, sports, jokes, etc.) get a standard refusal — never
@@ -13,7 +13,7 @@
 export type Scope = "in_scope" | "out_of_scope" | "investment_advice";
 
 export const REFUSAL_TEXT =
-  "I can only help with SSIT CRM activities and legitimate business communications — clients, leads, AUM, SIPs, KYC, tasks, meetings, insurance, business reports, and customer emails / WhatsApp / SMS drafts.";
+  "I can only help with Equitywala activities and legitimate business communications — clients, leads, AUM, SIPs, KYC, tasks, meetings, insurance, business reports, and customer emails / WhatsApp / SMS drafts.";
 
 export const ADVICE_TEXT =
   "I can summarise the relevant CRM information, but investment recommendations (which fund to buy, expected returns, suitability, or allocation) require review by an authorised advisor under the firm's approved process.";

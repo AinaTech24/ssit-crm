@@ -1,7 +1,7 @@
 /**
  * AWS infrastructure monitoring (platform-admin). Pulls EC2 / RDS / S3 metrics
  * from CloudWatch + EC2/RDS describe APIs + IAM, plus app-level counts from the
- * DB, into one snapshot for the SSIT Admin → AWS Monitoring dashboard.
+ * DB, into one snapshot for the Equitywala Admin → AWS Monitoring dashboard.
  *
  * Read-only. Uses the same credentials as S3 (S3_ACCESS_KEY_ID / AWS_*). The
  * `mfd-deploy` IAM user already has cloudwatch:Get*, ec2:Describe*, rds:Describe*,

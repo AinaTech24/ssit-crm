@@ -25,7 +25,7 @@ export async function POST(_req: NextRequest) {
   try {
     const session = await requireSession();
     const firmWide = can(session.roles, "dashboard.view.owner", session.permissions);
-    const origin = process.env.NEXT_PUBLIC_APP_URL || "https://crm.ssit.com";
+    const origin = process.env.NEXT_PUBLIC_APP_URL || "https://crm.equitywala.com";
 
     const ctx = await withTenant(session.tenantId, async (tx) => {
       const [u] = await tx.select({ name: users.name, email: users.email }).from(users).where(eq(users.id, session.userId)).limit(1);

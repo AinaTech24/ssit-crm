@@ -58,7 +58,7 @@ export const SIDEBAR_REGISTRY: SidebarEntry[] = [
   { group: "Automation", href: "/dashboard/workflows/runs", label: "Automation Monitor" },
   { group: "Automation", href: "/dashboard/templates", label: "Templates" },
   { group: "Automation", href: "/dashboard/campaigns", label: "Marketing Campaigns" },
-  { group: "Automation", href: "/dashboard/ssit-library", label: "SSIT Content Library" },
+  { group: "Automation", href: "/dashboard/ssit-library", label: "Equitywala Content Library" },
   { group: "Automation", href: "/dashboard/communications", label: "Communications" },
   // Compliance & Team
   { group: "Compliance & Team", href: "/dashboard/compliance/command-center", label: "Compliance Center" },

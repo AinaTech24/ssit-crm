@@ -143,10 +143,10 @@ export async function POST(req: NextRequest) {
         await sendSystemEmail({
           tenantId: session.tenantId,
           to: p.email,
-          subject: `You're invited to join ${firmName} on SSIT`,
+          subject: `You're invited to join ${firmName} on Equitywala`,
           text: `${session.name} has invited you to join ${firmName}'s CRM workspace as ${p.roles.join(", ")}.\n\nAccept your invite (valid for 7 days):\n${inviteUrl}`,
           html: actionEmailHtml({
-            heading: `Join ${firmName} on SSIT`,
+            heading: `Join ${firmName} on Equitywala`,
             intro: `${session.name} has invited you to join ${firmName}'s workspace as ${p.roles.join(", ")}. This invite is valid for 7 days.`,
             buttonLabel: "Accept invite",
             buttonUrl: inviteUrl,

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SSIT CRM Copilot — dependency-free SVG charts for assistant replies.
+ * Equitywala Copilot — dependency-free SVG charts for assistant replies.
  *
  * The engine embeds a spec as a fenced ```ssit-chart block; Markdown.tsx parses
  * it and renders this. Supported types: bar (vertical), hbar (horizontal, good

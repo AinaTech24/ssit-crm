@@ -1,5 +1,5 @@
 /**
- * Landing-page marketing packages — the public pricing cards, managed by SSIT
+ * Landing-page marketing packages — the public pricing cards, managed by Equitywala
  * admins (Super Admin → Landing packages). Purely display/marketing; separate
  * from the billing `packages` master. Platform-scoped (no tenant_id).
  */

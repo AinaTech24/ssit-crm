@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * MFD-controlled branding template picker for SSIT library PDF assets.
+ * MFD-controlled branding template picker for Equitywala library PDF assets.
  *
  * The MFD picks one of the named presets; the server prepends a branded
  * cover page (logo / firm name / ARN / title) and stamps a firm·ARN·SEBI

@@ -1,15 +1,15 @@
 /**
  * Platform-level constants.
  *
- * SSIT operates a "platform tenant" — a sentinel tenant_id under which all
- * SSIT staff users live. Platform admins have cross-tenant visibility (enforced
+ * Equitywala operates a "platform tenant" — a sentinel tenant_id under which all
+ * Equitywala staff users live. Platform admins have cross-tenant visibility (enforced
  * at the DB via RLS bypass for these users) but their own user records still
  * have a tenant_id (this sentinel) so they go through the normal auth flow.
  */
 
 export const PLATFORM_TENANT_ID = "00000000-0000-0000-0000-000000000000";
 
-/** Canonical SSIT admin role names. `platform_admin` = "Super Admin",
+/** Canonical Equitywala admin role names. `platform_admin` = "Super Admin",
  *  `platform_support` = "Admin". Both are FULL platform administrators. */
 export const PLATFORM_ROLES = ["platform_admin", "platform_support"] as const;
 
