@@ -173,9 +173,57 @@ SSHes into the box and redeploys via `.github/workflows/deploy.yml`:
 | `DEPLOY_SSH_KEY` | the **private** key (PEM) for that user — paste the whole file |
 | `DEPLOY_SSH_PORT` | *(optional)* defaults to 22 |
 | `DEPLOY_APP_DIR` | *(optional)* repo path on the box, defaults to `/home/ubuntu/MYCRM` |
+| `AWS_ACCESS_KEY_ID` | IAM user that may open/close port 22 — see below |
+| `AWS_SECRET_ACCESS_KEY` | its secret |
+| `AWS_REGION` | *(optional)* defaults to `ap-south-1` |
+| `DEPLOY_SG_ID` | *(optional)* defaults to `sg-039bff1f68a7422e5` |
 
-Until those secrets exist the workflow runs but skips the SSH step (the push still
-succeeds), so it never blocks a commit.
+Without those secrets the workflow now fails LOUDLY at the
+“Authorize this runner for SSH” step rather than timing out at the copy.
+
+### Why the AWS credentials are needed
+
+The security group pins SSH to a single `ssh_cidr` (see `terraform/main.tf`),
+which is one developer's home IP. GitHub-hosted runners draw from thousands of
+dynamic ranges, so **no fixed CIDR can ever cover them** — every deploy before
+this failed at the copy step with `dial tcp <host>:22: i/o timeout`, and the
+workflow had never once succeeded.
+
+Rather than open 22 to the world, the workflow now grants **itself** a `/32`
+for the length of the deploy and revokes it in a step that runs on success,
+failure and cancellation alike. Port 22 stays shut at rest.
+
+The IAM user needs exactly two actions, scoped to the one security group:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:RevokeSecurityGroupIngress"
+    ],
+    "Resource": "arn:aws:ec2:ap-south-1:*:security-group/sg-039bff1f68a7422e5"
+  }]
+}
+```
+
+Create the user, attach that policy, then:
+
+```bash
+gh secret set AWS_ACCESS_KEY_ID
+gh secret set AWS_SECRET_ACCESS_KEY
+gh workflow run deploy.yml --ref deploy/aws
+```
+
+If a run is killed between authorize and revoke, its `/32` is left behind; the
+next run reuses it rather than failing. Prune stale rules with:
+
+```bash
+aws ec2 describe-security-groups --group-ids sg-039bff1f68a7422e5 \
+  --query 'SecurityGroups[0].IpPermissions[?ToPort==`22`].IpRanges[].CidrIp'
+```
 
 **Option B — manual, one command on the box:**
 ```bash

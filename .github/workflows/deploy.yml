@@ -10,9 +10,15 @@ name: Deploy to AWS (EC2)
 #   DEPLOY_SSH_HOST   EC2 public IP / DNS        e.g. 13.204.102.20
 #   DEPLOY_SSH_USER   ssh user                   e.g. ec2-user
 #   DEPLOY_SSH_KEY    the PRIVATE key (PEM), full file including the BEGIN/END lines
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+#                     IAM user allowed to ec2:AuthorizeSecurityGroupIngress and
+#                     ec2:RevokeSecurityGroupIngress on the web security group.
+#                     See "Self-authorizing SSH" below for why this is needed.
 # Optional:
 #   DEPLOY_SSH_PORT   defaults to 22
 #   DEPLOY_APP_DIR    tree on the box            defaults to /home/ec2-user/app
+#   AWS_REGION        defaults to ap-south-1
+#   DEPLOY_SG_ID      web security group         defaults to sg-039bff1f68a7422e5
 #
 # NOTE ON .env: the box owns its own ~/app/.env. This workflow never writes it,
 # so production secrets stay on the box and out of CI.
@@ -71,6 +77,43 @@ jobs:
             vitest.config.ts
           ls -lh app.tgz
 
+      # ── Self-authorizing SSH ──────────────────────────────────────
+      # The box keeps port 22 CLOSED at rest: terraform pins the security group
+      # to a single `ssh_cidr` (one developer IP). GitHub-hosted runners draw
+      # from thousands of dynamic ranges, so no fixed CIDR can ever cover them —
+      # which is why every deploy before this one died at the copy step with
+      # "dial tcp <host>:22: i/o timeout", and why this workflow had never once
+      # succeeded.
+      #
+      # Rather than leave 22 open to the internet, the runner grants ITSELF a
+      # /32 for the duration of the deploy and hands it back in a step that
+      # always runs — including on failure or cancellation.
+      - name: Authorize this runner for SSH
+        id: sshopen
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+          SG_ID: ${{ secrets.DEPLOY_SG_ID || 'sg-039bff1f68a7422e5' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::error::Cannot open SSH. Add repo secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for an IAM user with ec2:AuthorizeSecurityGroupIngress + ec2:RevokeSecurityGroupIngress on $SG_ID."
+            exit 1
+          fi
+          IP="$(curl -fsS --retry 3 https://checkip.amazonaws.com | tr -d '[:space:]')"
+          echo "runner ip: $IP  ->  sg $SG_ID"
+          echo "ip=$IP"    >> "$GITHUB_OUTPUT"
+          echo "sg=$SG_ID" >> "$GITHUB_OUTPUT"
+          # A run killed between authorize and revoke leaves its rule behind.
+          # Treat "already present" as success instead of failing the deploy.
+          if ! aws ec2 authorize-security-group-ingress \
+                 --group-id "$SG_ID" --protocol tcp --port 22 \
+                 --cidr "$IP/32" 2>/tmp/authz.err; then
+            grep -q "InvalidPermission.Duplicate" /tmp/authz.err || { cat /tmp/authz.err; exit 1; }
+            echo "rule already present — reusing it"
+          fi
+
       - name: Copy to the box
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -139,3 +182,18 @@ jobs:
               exit 1
             fi
             echo "Deploy OK — active colour: $(cat ~/app/.active-color 2>/dev/null || echo unknown)"
+
+      # Hand the /32 back. `always()` so a failed build, a failed health check
+      # or a cancelled run cannot leave the port open behind us.
+      - name: Revoke this runner's SSH access
+        if: always() && steps.sshopen.outputs.ip != ''
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id "${{ steps.sshopen.outputs.sg }}" --protocol tcp --port 22 \
+            --cidr "${{ steps.sshopen.outputs.ip }}/32" \
+            && echo "revoked ${{ steps.sshopen.outputs.ip }}/32" \
+            || echo "::warning::Could not revoke ${{ steps.sshopen.outputs.ip }}/32 — check the security group by hand."
