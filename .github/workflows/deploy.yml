@@ -77,43 +77,61 @@ jobs:
             vitest.config.ts
           ls -lh app.tgz
 
-      # ── Self-authorizing SSH ──────────────────────────────────────
-      # The box keeps port 22 CLOSED at rest: terraform pins the security group
-      # to a single `ssh_cidr` (one developer IP). GitHub-hosted runners draw
-      # from thousands of dynamic ranges, so no fixed CIDR can ever cover them —
-      # which is why every deploy before this one died at the copy step with
-      # "dial tcp <host>:22: i/o timeout", and why this workflow had never once
-      # succeeded.
-      #
-      # Rather than leave 22 open to the internet, the runner grants ITSELF a
-      # /32 for the duration of the deploy and hands it back in a step that
-      # always runs — including on failure or cancellation.
-      - name: Authorize this runner for SSH
-        id: sshopen
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
-          SG_ID: ${{ secrets.DEPLOY_SG_ID || 'sg-039bff1f68a7422e5' }}
-        run: |
-          set -euo pipefail
-          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
-            echo "::error::Cannot open SSH. Add repo secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY for an IAM user with ec2:AuthorizeSecurityGroupIngress + ec2:RevokeSecurityGroupIngress on $SG_ID."
-            exit 1
-          fi
-          IP="$(curl -fsS --retry 3 https://checkip.amazonaws.com | tr -d '[:space:]')"
-          echo "runner ip: $IP  ->  sg $SG_ID"
-          echo "ip=$IP"    >> "$GITHUB_OUTPUT"
-          echo "sg=$SG_ID" >> "$GITHUB_OUTPUT"
-          # A run killed between authorize and revoke leaves its rule behind.
-          # Treat "already present" as success instead of failing the deploy.
-          if ! aws ec2 authorize-security-group-ingress \
-                 --group-id "$SG_ID" --protocol tcp --port 22 \
-                 --cidr "$IP/32" 2>/tmp/authz.err; then
-            grep -q "InvalidPermission.Duplicate" /tmp/authz.err || { cat /tmp/authz.err; exit 1; }
-            echo "rule already present — reusing it"
-          fi
-
+      # ── Self-authorizing SSH ──────────────────────────────────────
+
+      # The box keeps port 22 CLOSED at rest: terraform pins the security group
+
+      # to a single `ssh_cidr` (one developer IP). GitHub-hosted runners draw
+
+      # from thousands of dynamic ranges, so no fixed CIDR can ever cover them —
+
+      # which is why every deploy before this one died at the copy step with
+
+      # "dial tcp <host>:22: i/o timeout", and why this workflow had never once
+
+      # succeeded.
+
+      #
+
+      # Rather than leave 22 open to the internet, the runner grants ITSELF a
+
+      # /32 for the duration of the deploy and hands it back in a step that
+
+      # always runs — including on failure or cancellation.
+
+      - name: Authorize this runner for SSH
+        id: sshopen
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+          SG_ID: ${{ secrets.DEPLOY_SG_ID || 'sg-039bff1f68a7422e5' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::error::Cannot open SSH. Add repo secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY."
+            exit 1
+          fi
+          IP="$(curl -fsS --retry 3 https://checkip.amazonaws.com | tr -d '[:space:]')"
+          echo "runner ip: $IP  ->  sg $SG_ID"
+          echo "ip=$IP"    >> "$GITHUB_OUTPUT"
+          echo "sg=$SG_ID" >> "$GITHUB_OUTPUT"
+          # Deliberately one line: a trailing backslash plus a CR (Windows
+          # checkout) escapes the CR, not the newline, and the command splits.
+          if aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$IP/32" 2>/tmp/authz.err; then
+            echo "opened 22 for $IP/32"
+          elif grep -q "InvalidPermission.Duplicate" /tmp/authz.err; then
+            echo "rule already present - reusing it"
+          else
+            cat /tmp/authz.err
+            if grep -q "UnauthorizedOperation" /tmp/authz.err; then
+              echo "::error::The github-deploy IAM user has no policy allowing ec2:AuthorizeSecurityGroupIngress. Create the user, ATTACH the github-deploy policy to it (IAM > Users > github-deploy > Add permissions > Attach policies directly), then re-run."
+            else
+              echo "::error::Could not open port 22 on $SG_ID - see the AWS error above."
+            fi
+            exit 1
+          fi
+
       - name: Copy to the box
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -192,8 +210,10 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
         run: |
-          aws ec2 revoke-security-group-ingress \
-            --group-id "${{ steps.sshopen.outputs.sg }}" --protocol tcp --port 22 \
-            --cidr "${{ steps.sshopen.outputs.ip }}/32" \
-            && echo "revoked ${{ steps.sshopen.outputs.ip }}/32" \
-            || echo "::warning::Could not revoke ${{ steps.sshopen.outputs.ip }}/32 — check the security group by hand."
+          IP="${{ steps.sshopen.outputs.ip }}"
+          SG="${{ steps.sshopen.outputs.sg }}"
+          if aws ec2 revoke-security-group-ingress --group-id "$SG" --protocol tcp --port 22 --cidr "$IP/32"; then
+            echo "revoked $IP/32"
+          else
+            echo "::warning::Could not revoke $IP/32 from $SG - remove it by hand."
+          fi

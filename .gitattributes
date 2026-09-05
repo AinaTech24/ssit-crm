@@ -4,5 +4,10 @@
 # core.autocrlf, so without this any .sh copied straight from a Windows working
 # tree to the server is silently broken.
 *.sh text eol=lf
+# Workflow `run:` blocks are bash executed on Linux runners and hit the exact
+# same CRLF trap: a trailing backslash before a CR escapes the CR, so every
+# line continuation splits into separate commands and the step half-runs.
+.github/workflows/*.yml text eol=lf
+.github/workflows/*.yaml text eol=lf
 Dockerfile text eol=lf
 *.pem -text

@@ -289,6 +289,13 @@ export async function POST(req: NextRequest) {
         category: tmpl.category as any,
         investorId: type === "investor" ? id : undefined,
         leadId: type === "lead" ? id : undefined,
+        // WITHOUT this the send skips the sender's OWN mailbox and looks only
+        // for a firm-wide one. A firm whose only connected mailbox is personal
+        // (the common case — each RM connects their own) then failed every
+        // TEMPLATE send with "your mailbox isn't connected", while the
+        // free-form path beside it worked, because only that one passed the
+        // actor. Same resolution for both paths now.
+        actorUserId: session.userId,
       });
     });
 
