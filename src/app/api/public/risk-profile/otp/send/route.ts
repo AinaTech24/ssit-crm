@@ -163,11 +163,7 @@ export async function POST(req: NextRequest) {
       const tenant =
         (await tx.select().from(tenants).where(eq(tenants.id, tk.tenantId!)).limit(1))[0] ?? null;
       let sender;
-      try {
-        sender = await resolveEmailSender(tx, tk.tenantId!, tk.createdBy ?? undefined);
-      } catch {
-        sender = { source: "resend" } as any;
-      }
+      sender = await resolveEmailSender(tx, tk.tenantId!, tk.createdBy ?? undefined);
       return { kind: "send" as const, code, dest, tenant: tenant as any, sender };
     });
 
@@ -211,7 +207,6 @@ export async function POST(req: NextRequest) {
         inlineHtml: html,
         idempotencyKey: `rpotp:${tk.id}:${now.getTime()}`,
         smtp: (sender as any).smtp,
-        apiKey: (sender as any).apiKey,
         fromOverride: (sender as any).fromEmail || undefined,
         fromNameOverride: (sender as any).fromName || firmName,
         replyTo: (sender as any).replyTo || undefined,

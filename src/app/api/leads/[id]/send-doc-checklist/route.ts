@@ -47,11 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const lead = (await tx.select().from(leads).where(and(eq(leads.id, id), eq(leads.tenantId, session.tenantId))).limit(1))[0] ?? null;
       const tenant = (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null;
       let sender: Awaited<ReturnType<typeof resolveEmailSender>>;
-      try {
-        sender = await resolveEmailSender(tx, session.tenantId, session.userId);
-      } catch {
-        sender = { source: "resend" };
-      }
+      sender = await resolveEmailSender(tx, session.tenantId, session.userId);
       return { lead, tenant, sender };
     });
 
@@ -89,7 +85,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // 2. Email via the firm's connected sender (mailbox / Resend).
     let emailed = false;
     let emailError: string | undefined;
-    const canEmail = !!email && !!(ctx.sender.smtp?.host || ctx.sender.apiKey || process.env.RESEND_API_KEY);
+    const canEmail = !!email && !!(ctx.sender.smtp?.host);
     if (!email) {
       emailError = "no email on file";
     } else if (!canEmail) {
@@ -118,7 +114,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           rendered: { subject: "Documents needed for your investment account", text: `Hi ${name}, please upload your KYC documents using this secure link: ${url}\n\nRequired: ${DOCS_LINE}.`, tokens: {} },
           inlineHtml: html,
           smtp: ctx.sender.smtp,
-          apiKey: ctx.sender.apiKey,
           fromOverride: ctx.sender.fromEmail || undefined,
           fromNameOverride: ctx.sender.fromName || firmName,
           replyTo: ctx.sender.replyTo || undefined,

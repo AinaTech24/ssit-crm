@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     // No firm mailbox connected AND no platform Resend key → give a clear,
     // actionable message instead of a generic "internal" error.
-    if (!sender.smtp && !sender.apiKey && !process.env.RESEND_API_KEY) {
+    if (!sender.smtp) {
       return NextResponse.json(
         { error: "No email account is connected for your firm. Connect your mailbox in Settings → Email, then try the test send again." },
         { status: 400 }
@@ -101,7 +101,6 @@ export async function POST(req: NextRequest) {
       category: "transactional",
       // Send from the firm's own mailbox / Resend key (falls back to platform
       // Resend only if a key is set) — mirrors the real send pipeline.
-      apiKey: sender.apiKey,
       smtp: sender.smtp,
       fromOverride: sender.fromEmail ?? (sender.smtp ? sender.smtp.user : undefined),
       fromNameOverride: sender.fromName,

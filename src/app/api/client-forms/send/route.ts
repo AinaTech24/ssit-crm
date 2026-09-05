@@ -114,11 +114,7 @@ export async function POST(req: NextRequest) {
           : (await tx.select().from(leads).where(and(eq(leads.id, subjectId), eq(leads.tenantId, session.tenantId))).limit(1))[0];
       const tenant = (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null;
       let sender: Awaited<ReturnType<typeof resolveEmailSender>>;
-      try {
-        sender = await resolveEmailSender(tx, session.tenantId, session.userId);
-      } catch {
-        sender = { source: "resend" } as any;
-      }
+      sender = await resolveEmailSender(tx, session.tenantId, session.userId);
       return { row, tenant, sender };
     });
 
@@ -163,7 +159,7 @@ export async function POST(req: NextRequest) {
       emailError = "skipped";
     } else if (!email) {
       emailError = "no email on file";
-    } else if (!(ctx.sender.smtp?.host || ctx.sender.apiKey || process.env.RESEND_API_KEY)) {
+    } else if (!(ctx.sender.smtp?.host)) {
       emailError = "no mailbox connected (Settings → Email)";
     } else {
       try {
@@ -188,7 +184,6 @@ export async function POST(req: NextRequest) {
           rendered: { subject: form.subject, text: `Hi ${name}, ${form.blurb}\n\n${url}`, tokens: {} },
           inlineHtml: html,
           smtp: ctx.sender.smtp,
-          apiKey: ctx.sender.apiKey,
           fromOverride: ctx.sender.fromEmail || undefined,
           fromNameOverride: ctx.sender.fromName || firmName,
           replyTo: ctx.sender.replyTo || undefined,

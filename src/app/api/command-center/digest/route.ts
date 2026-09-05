@@ -32,18 +32,14 @@ export async function POST(_req: NextRequest) {
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1);
       const groups = await buildCommandQueue(tx as any, { userId: session.userId, firmWide });
       let sender: Awaited<ReturnType<typeof resolveEmailSender>>;
-      try {
-        sender = await resolveEmailSender(tx, session.tenantId, session.userId);
-      } catch {
-        sender = { source: "resend" } as any;
-      }
+      sender = await resolveEmailSender(tx, session.tenantId, session.userId);
       return { user: u, tenant: t, groups, sender };
     }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
     const email = ctx.user?.email;
     if (!email) return NextResponse.json({ error: "No email on your profile." }, { status: 400 });
 
-    const canEmail = !!(ctx.sender.smtp?.host || ctx.sender.apiKey || process.env.RESEND_API_KEY);
+    const canEmail = !!(ctx.sender.smtp?.host);
     if (!canEmail) return NextResponse.json({ error: "No mailbox connected (Settings → Email)." }, { status: 400 });
 
     const total = ctx.groups.reduce((n, g) => n + g.count, 0);
@@ -86,7 +82,6 @@ export async function POST(_req: NextRequest) {
       rendered: { subject: `Your Command Center — ${total} open${nowCount ? `, ${nowCount} urgent` : ""}`, text, tokens: {} },
       inlineHtml: html,
       smtp: ctx.sender.smtp,
-      apiKey: ctx.sender.apiKey,
       fromOverride: ctx.sender.fromEmail || undefined,
       fromNameOverride: ctx.sender.fromName || firmName,
       replyTo: ctx.sender.replyTo || undefined,

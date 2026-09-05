@@ -6,7 +6,13 @@
  * Preference order (most authentic first):
  *   1. the sending RM's own mailbox  (per-user SMTP / OAuth)  → replies land in their inbox
  *   2. the firm-wide mailbox         (owner-connected SMTP / OAuth)
- *   3. Resend                        (platform sender, firm sender identity)
+ *
+ * There is NO third option. Email leaves only through a mailbox the firm owns,
+ * so every message genuinely originates from their own server with an authentic
+ * From address. If neither mailbox is connected this THROWS rather than falling
+ * back to a platform sender — a silent fallback is how a firm ends up sending
+ * client mail from an address they do not control, and how "RESEND_API_KEY not
+ * set" surfaced to a user as "your mailbox isn't connected".
  *
  * OAuth mailboxes carry only a refresh token at rest; we mint a short-lived
  * access token here per send and pass it to the adapter for XOAUTH2.
@@ -25,14 +31,12 @@ import {
 import { getProviderDef, refreshAccessToken, type OAuthProvider } from "./oauth";
 
 export interface EmailSender {
-  /** Present when sending through an SMTP/OAuth mailbox (vs Resend). */
+  /** Always present — SMTP is the only transport. */
   smtp?: SmtpConfig;
-  /** Resend API key (only on the resend path). */
-  apiKey?: string;
   fromEmail?: string;
   fromName?: string;
   replyTo?: string;
-  source: "user-mailbox" | "tenant-mailbox" | "resend";
+  source: "user-mailbox" | "tenant-mailbox";
 }
 
 /** Turn a resolved mailbox integration into an SMTP send descriptor, minting an
@@ -112,13 +116,13 @@ export async function resolveEmailSender(
   const s = await mailboxToSmtp(tx, tm);
   if (s) return { ...s, source: "tenant-mailbox" };
 
-  // 3. Resend (platform sender + firm identity).
-  const resend = await getTenantIntegration(tx, tenantId, "resend");
-  return {
-    apiKey: resend?.config?.apiKey,
-    fromEmail: resend?.senderConfig?.fromEmail,
-    fromName: resend?.senderConfig?.fromName,
-    replyTo: resend?.senderConfig?.replyTo,
-    source: "resend",
-  };
+  // 3. Nothing connected — refuse, with an error the recipient of the message
+  // can actually act on. Status 422 so API routes surface it as a user error
+  // rather than a masked 500.
+  throw Object.assign(
+    new Error(
+      "No mailbox is connected, so this firm cannot send email. Connect one under Settings → Integrations → Mailbox — either your own, or a firm-wide mailbox set up by your admin."
+    ),
+    { status: 422 }
+  );
 }

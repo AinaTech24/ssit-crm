@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const ctx = await withTenant(session.tenantId, async (tx) => {
       const tenant = (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null;
       let sender;
-      try { sender = await resolveEmailSender(tx, session.tenantId, session.userId); } catch { sender = { source: "resend" } as any; }
+      sender = await resolveEmailSender(tx, session.tenantId, session.userId);
       return { tenant, sender };
     });
     const tenant = ctx.tenant as any;
@@ -104,7 +104,6 @@ export async function POST(req: NextRequest) {
           inlineHtml: html,
           idempotencyKey: `calc:${session.userId}:${Date.now()}`,
           smtp: (ctx.sender as any).smtp,
-          apiKey: (ctx.sender as any).apiKey,
           fromOverride: (ctx.sender as any).fromEmail || undefined,
           fromNameOverride: (ctx.sender as any).fromName || firmName,
           replyTo: (ctx.sender as any).replyTo || undefined,

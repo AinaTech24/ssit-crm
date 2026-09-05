@@ -66,12 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // hiccup (OAuth refresh / decrypt / unknown provider) must NOT abort the
         // send and surface as a masked "internal" — fall back to Resend.
         let sender: Awaited<ReturnType<typeof resolveEmailSender>>;
-        try {
-          sender = await resolveEmailSender(tx, session.tenantId, session.userId);
-        } catch (e) {
-          console.error("[business_entry.email] sender resolve failed — falling back to Resend:", (e as Error)?.message);
-          sender = { source: "resend" };
-        }
+        sender = await resolveEmailSender(tx, session.tenantId, session.userId);
         return {
           entry,
           lines,
@@ -120,7 +115,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // No mailbox connected and no platform Resend key → tell the user how to fix
     // it, instead of throwing a masked 500.
     const sender = ctx.sender;
-    const canSend = !!(sender.smtp?.host || sender.apiKey || process.env.RESEND_API_KEY);
+    const canSend = !!(sender.smtp?.host);
     if (!canSend) {
       return NextResponse.json(
         { error: "No email sender connected. Connect your firm's mailbox under Settings → Email (SMTP/IMAP) to send client emails." },
@@ -141,7 +136,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Route through the firm's own mailbox when present (authentic From +
         // replies land in their inbox); Resend is the last-resort fallback.
         smtp: sender.smtp,
-        apiKey: sender.apiKey,
         fromOverride: sender.fromEmail || undefined,
         fromNameOverride: sender.fromName || ctx.firmName,
         replyTo: sender.replyTo || undefined,

@@ -102,8 +102,7 @@ export async function POST(req: NextRequest) {
 
       const tenant = (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null;
       let sender: any;
-      try { sender = await resolveEmailSender(tx, session.tenantId, session.userId); }
-      catch { sender = { source: "resend" }; }
+      sender = await resolveEmailSender(tx, session.tenantId, session.userId);
       return { kind: "send" as const, code, dest, tenant, sender };
     });
 
@@ -139,7 +138,6 @@ export async function POST(req: NextRequest) {
         inlineHtml: html,
         idempotencyKey: `rpotp-rm:${investorId}:${now.getTime()}`,
         smtp: (sender as any).smtp,
-        apiKey: (sender as any).apiKey,
         fromOverride: (sender as any).fromEmail || undefined,
         fromNameOverride: (sender as any).fromName || firmName,
         replyTo: (sender as any).replyTo || undefined,

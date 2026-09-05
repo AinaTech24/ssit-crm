@@ -5,7 +5,8 @@
  * auto-statement worker, so both render the SAME live PDF (valueInvestor +
  * AMFI NAV) and leave the same communications audit row.
  *
- *   email    → renders the PDF + emails it as an attachment (Resend), audited.
+ *   email    → renders the PDF + emails it as an attachment over the firm's
+ *              own SMTP mailbox, audited.
  *   whatsapp → returns a wa.me URL with a value summary (the RM sends it).
  *
  * Transactional document (the client's own portfolio), so it isn't gated on
@@ -14,7 +15,6 @@
 
 import { v4 as uuid } from "uuid";
 import { and, eq } from "drizzle-orm";
-import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import type { Tx } from "@/db/client";
 import { investors, tenants, communications } from "@/db/schema";
@@ -31,15 +31,6 @@ export type StatementChannel = "email" | "whatsapp";
 export type SendStatementResult =
   | { ok: true; channel: StatementChannel; externalId: string | null; waUrl: string | null; recipient: string | null }
   | { ok: false; error: string; status: number };
-
-let resendClient: Resend | null = null;
-function getResend(): Resend | null {
-  if (resendClient) return resendClient;
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return null;
-  resendClient = new Resend(key);
-  return resendClient;
-}
 
 function normalizePhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -122,15 +113,16 @@ export async function sendInvestorStatement(
     });
     if (!gate.allowed) return { ok: false, error: `Statement blocked: ${gate.detail}`, status: 422 };
     complianceSnapshot = gate.complianceFindings; complianceScore = gate.complianceScore; consentSnapshot = gate.consentSnapshot;
-    // Resolve the real sender the same way the rest of the app does — the firm/RM
-    // mailbox (SMTP/OAuth) first, then a tenant or env Resend key. NEVER fake a
-    // send: if nothing is connected, fail clearly so the RM knows to set it up.
+    // Resolve the real sender the same way the rest of the app does: the firm's
+    // or RM's own mailbox (SMTP/OAuth). That is the ONLY transport — statements
+    // must leave from an address the firm controls. NEVER fake a send: if no
+    // mailbox is connected, resolveEmailSender throws and the RM is told to
+    // connect one.
     const subject = `Your portfolio statement — ${tenant?.displayName ?? "Investment update"}`;
     const attachments = [{ filename: "portfolio-statement.pdf", content: pdf }];
     const sender = await resolveEmailSender(tx, args.tenantId, args.actorUserId);
     const fromAddr = sender.fromEmail || sender.smtp?.user || process.env.EMAIL_FROM_TRANSACTIONAL || "";
     const from = sender.fromName ? `${sender.fromName} <${fromAddr}>` : fromAddr;
-    const resendKey = sender.apiKey || process.env.RESEND_API_KEY;
     try {
       if (sender.smtp?.host) {
         const transporter = nodemailer.createTransport({
@@ -151,20 +143,10 @@ export async function sendInvestorStatement(
           attachments,
         });
         externalId = info.messageId;
-      } else if (resendKey) {
-        const client = new Resend(resendKey);
-        const result = await client.emails.send({
-          from: from || "Equitywala <connect@ssit.com>",
-          to: [inv.email],
-          subject,
-          html,
-          attachments,
-        } as any);
-        externalId = (result as any)?.data?.id ?? null;
       } else {
         return {
           ok: false,
-          error: "No email sender connected — connect your mailbox in Settings → Integrations → Mailbox (or add a Resend key), then retry.",
+          error: "No mailbox connected — connect your firm's mailbox under Settings → Integrations → Mailbox, then retry.",
           status: 422,
         };
       }

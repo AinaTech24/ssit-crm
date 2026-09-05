@@ -199,7 +199,6 @@ async function performEmailSend(
       recipient: args.recipient,
       category: args.category,
       inlineHtml: args.rendered.html,
-      apiKey: sender.apiKey,
       smtp: sender.smtp,
       // From: explicit sender identity, else the mailbox login address.
       fromOverride: sender.fromEmail ?? (sender.smtp ? sender.smtp.user : undefined),

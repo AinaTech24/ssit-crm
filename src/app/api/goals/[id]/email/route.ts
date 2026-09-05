@@ -48,11 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1);
       let sender: Awaited<ReturnType<typeof resolveEmailSender>>;
-      try {
-        sender = await resolveEmailSender(tx, session.tenantId, session.userId);
-      } catch {
-        sender = { source: "resend" };
-      }
+      sender = await resolveEmailSender(tx, session.tenantId, session.userId);
       return { goal, inv, tenant: t, sender };
     });
 
@@ -64,7 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!ctx.inv?.email) {
       return NextResponse.json({ error: "This client has no email on file. Add an email to send the plan." }, { status: 400 });
     }
-    if (!(ctx.sender.smtp?.host || ctx.sender.apiKey || process.env.RESEND_API_KEY)) {
+    if (!(ctx.sender.smtp?.host)) {
       return NextResponse.json(
         { error: "No email sender connected. Connect your firm's mailbox under Settings → Email (SMTP/IMAP) to send." },
         { status: 400 }
@@ -110,7 +106,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         inlineHtml: html,
         idempotencyKey: `goal:${id}`,
         smtp: ctx.sender.smtp,
-        apiKey: ctx.sender.apiKey,
         fromOverride: ctx.sender.fromEmail || undefined,
         fromNameOverride: ctx.sender.fromName || firmName,
         replyTo: ctx.sender.replyTo || undefined,

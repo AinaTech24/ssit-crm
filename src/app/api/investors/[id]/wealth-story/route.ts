@@ -352,7 +352,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         if (!story) return null;
         const tenant = (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null;
         let sender: any;
-        try { sender = await resolveEmailSender(tx, session.tenantId, session.userId); } catch { sender = { source: "resend" }; }
+        sender = await resolveEmailSender(tx, session.tenantId, session.userId);
         return { story, tenant, sender };
       },
       { userId: session.userId, branchId: session.branchId, roles: session.roles }
@@ -394,7 +394,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         inlineHtml: html,
         idempotencyKey: `wealth-story:${session.userId}:${id}:${Date.now()}`,
         smtp: (data.sender as any).smtp,
-        apiKey: (data.sender as any).apiKey,
         fromOverride: (data.sender as any).fromEmail || undefined,
         fromNameOverride: (data.sender as any).fromName || firmName,
         replyTo: (data.sender as any).replyTo || undefined,

@@ -116,7 +116,14 @@ export async function dispatch(tx: Tx, input: DispatchInput): Promise<DispatchRe
   // 1 + 2. Resolve template + render  (free-form path skips the template)
   // -----------------------------------------------------------
   const tenantRow = await loadTenant(tx, input.tenantId);
-  const subject = input.investorId ? await loadInvestor(tx, input.investorId) : null;
+  // A LEAD send must load the lead too. dispatch() accepted input.leadId but only
+  // ever loaded an investor, so on every lead send the subject was null and each
+  // {{lead.*}} merge field rendered blank — "Dear ," with the name missing.
+  const subject = input.investorId
+    ? await loadInvestor(tx, input.investorId)
+    : input.leadId
+      ? await loadLead(tx, input.leadId)
+      : null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let version: any;
@@ -511,7 +518,6 @@ export async function dispatch(tx: Tx, input: DispatchInput): Promise<DispatchRe
         tokens: rendered.tokens,
         renderedText: rendered.text,
         recipient: input.recipient,
-        apiKey: integration?.config?.apiKey,
         webhookUrl: integration?.config?.webhookUrl,
         defaultLanguage: integration?.config?.defaultLanguage,
         // Stable across step retries → adapter can dedupe a re-fired send.
@@ -531,7 +537,6 @@ export async function dispatch(tx: Tx, input: DispatchInput): Promise<DispatchRe
         category: input.category as any,
         cc: (input.meta?.cc as string[]) ?? [],
         bcc: (input.meta?.bcc as string[]) ?? [],
-        apiKey: sender.apiKey,
         smtp: sender.smtp,
         // From: explicit sender email, else the mailbox login address.
         fromOverride: sender.fromEmail ?? (sender.smtp ? sender.smtp.user : undefined),
@@ -551,7 +556,6 @@ export async function dispatch(tx: Tx, input: DispatchInput): Promise<DispatchRe
         tokens: rendered.tokens,
         rendered,
         recipient: input.recipient,
-        apiKey: integration?.config?.apiKey,
         senderId: integration?.senderConfig?.senderId,
         idempotencyKey: input.idempotencyKey ?? input.workflowRunStepId ?? communicationId,
       });
@@ -724,6 +728,39 @@ async function loadInvestor(tx: Tx, id: string) {
   }
   return enriched;
 }
+/**
+ * Lead counterpart to loadInvestor. Enriched with the merge tokens templates
+ * offer but that are not columns, matching loadSubject() in the workflow runner
+ * so a manual send and an automated one resolve identically:
+ *   lead.rm_name     owning RM's NAME (the row carries only owner_id, a uuid)
+ *   lead.rm_email    owning RM's own email address
+ *   lead.rm_mobile   owning RM's own mobile number
+ *   lead.event_name  readable alias for source_campaign (the Event source)
+ *   lead.first_name  first word, for "Hi Anita" greetings
+ */
+async function loadLead(tx: Tx, id: string) {
+  const { leads, users } = await import("@/db/schema");
+  const [l] = await tx.select().from(leads).where(eq(leads.id, id));
+  if (!l) return null;
+  const enriched: any = { ...l };
+  enriched.first_name = String((l as any).name ?? "").trim().split(/\s+/)[0] ?? "";
+  enriched.event_name = (l as any).sourceCampaign ?? "";
+  if ((l as any).ownerId) {
+    const [rm] = await tx
+      .select({ name: users.name, email: users.email, phone: users.phone })
+      .from(users)
+      .where(eq(users.id, (l as any).ownerId));
+    enriched.rm_name = rm?.name ?? "";
+    enriched.rm_email = rm?.email ?? "";
+    enriched.rm_mobile = rm?.phone ?? "";
+  } else {
+    enriched.rm_name = "";
+    enriched.rm_email = "";
+    enriched.rm_mobile = "";
+  }
+  return enriched;
+}
+
 // Format a numeric amount the Indian way (no ₹ — templates add it). Blank if null.
 function fmtAmount(a: unknown): string {
   return a != null && String(a).trim() !== "" ? Number(a).toLocaleString("en-IN") : "";

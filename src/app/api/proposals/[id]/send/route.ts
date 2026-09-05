@@ -6,7 +6,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  *
  * Sends the proposal to the recipient through the chosen channel:
  *
- *   - email      → uses Resend directly with an auto-generated HTML body
+ *   - email      → sends over the firm’s own SMTP mailbox, auto-generated HTML body
  *                  that contains the proposal summary + ARN tagline.
  *                  Returns { ok: true, externalId }.
  *   - whatsapp   → returns a wa.me URL with a pre-filled message. The
@@ -22,7 +22,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { Resend } from "resend";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, can } from "@/lib/auth/rbac";
@@ -43,15 +42,6 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   channel: z.enum(["email", "whatsapp"]),
 });
-
-let resendClient: Resend | null = null;
-function getResend(): Resend | null {
-  if (resendClient) return resendClient;
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return null;
-  resendClient = new Resend(key);
-  return resendClient;
-}
 
 const KIND_TITLE: Record<string, string> = {
   mf: "Mutual Funds",
@@ -320,7 +310,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           return NextResponse.json({ error: `Proposal blocked by compliance/consent: ${gate.detail}`, findings: (gate as any).findings }, { status: 422 });
         }
         // Generate the proposal PDF and attach it, and send through the firm's
-        // OWN mailbox (RM → firm SMTP/OAuth → Resend). The old path sent via
+        // OWN mailbox (RM → firm SMTP/OAuth). The old path sent via
         // Resend directly from an unverified "no-reply@…" From, which bounced.
         let pdf: Buffer | null = null;
         try {
@@ -337,12 +327,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           console.warn("[proposal.send] PDF generation failed; sending without attachment:", (e as Error)?.message);
         }
         let sender: Awaited<ReturnType<typeof resolveEmailSender>>;
-        try {
-          sender = await resolveEmailSender(tx, session.tenantId, session.userId);
-        } catch {
-          sender = { source: "resend" };
-        }
-        if (!(sender.smtp?.host || sender.apiKey || process.env.RESEND_API_KEY)) {
+        sender = await resolveEmailSender(tx, session.tenantId, session.userId);
+        if (!(sender.smtp?.host)) {
           return NextResponse.json(
             { error: "No email sender connected. Connect your firm's mailbox under Settings → Email (SMTP/IMAP) to send proposals." },
             { status: 400 }
@@ -362,7 +348,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             inlineHtml: html,
             idempotencyKey: `proposal:${id}`,
             smtp: sender.smtp,
-            apiKey: sender.apiKey,
             fromOverride: sender.fromEmail || undefined,
             fromNameOverride: sender.fromName || tenant?.displayName || tenant?.legalName || undefined,
             replyTo: sender.replyTo || undefined,

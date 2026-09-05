@@ -250,7 +250,6 @@ async function digestTenant(tenantId: string, istDate: string): Promise<{ sent: 
         inlineHtml: e.html,
         idempotencyKey: e.idempotencyKey,
         smtp: (e.sender as any).smtp,
-        apiKey: (e.sender as any).apiKey,
         fromOverride: (e.sender as any).fromEmail || undefined,
         fromNameOverride: (e.sender as any).fromName || undefined,
         replyTo: (e.sender as any).replyTo || undefined,

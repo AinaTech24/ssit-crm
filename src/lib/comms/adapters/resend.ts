@@ -1,16 +1,20 @@
 /**
- * Resend email adapter.
+ * Email adapter — SMTP only.
  *
- * Resend has a clean REST API + idempotency keys + webhook for delivery
- * events. For each tenant we use the same Resend API key initially but
- * route through tenant-specific verified domains.
+ * Every message leaves through a mailbox the FIRM owns (per-user or firm-wide,
+ * SMTP or OAuth/XOAUTH2), so the From address is genuinely theirs and replies
+ * land in their own inbox. There is deliberately no API-based fallback.
  *
- * Migration path: when we exceed ~1M emails/month or need dedicated IPs
- * for marketing, swap to AWS SES via the same interface — the rest of the
- * codebase will not change.
+ * The Resend path that used to live here was removed: a silent fallback meant a
+ * firm with no mailbox connected would either send client mail from an address
+ * they did not control, or fail with "RESEND_API_KEY not set" surfaced to the
+ * user as "your mailbox isn't connected". resolveEmailSender now refuses up
+ * front instead.
+ *
+ * NOTE: the filename is still resend.ts and imports across the codebase point at
+ * it; renaming is a mechanical follow-up, kept separate from the behaviour change.
  */
 
-import { Resend } from "resend";
 import nodemailer from "nodemailer";
 import { describeMailError } from "../connection-error";
 import { wrapLinksForTracking } from "../click-tracking";
@@ -27,18 +31,6 @@ export interface SmtpConfig {
   accessToken?: string;
 }
 
-let client: Resend | null = null;
-function getClient(apiKey?: string): Resend {
-  if (apiKey) {
-    return new Resend(apiKey);
-  }
-  if (!client) {
-    const key = process.env.RESEND_API_KEY;
-    if (!key) throw new Error("RESEND_API_KEY not set");
-    client = new Resend(key);
-  }
-  return client;
-}
 
 export interface SendEmailArgs {
   tenantId: string;
@@ -52,14 +44,13 @@ export interface SendEmailArgs {
   bcc?: string[];
   /** Pre-rendered HTML for ad-hoc Compose (no template). Wins over templateVersion. */
   inlineHtml?: string;
-  apiKey?: string;
   fromOverride?: string;
   fromNameOverride?: string;
   /** Reply-To — routes client replies to the MFD's own inbox. */
   replyTo?: string;
-  /** When set, send via the MFD's own SMTP server instead of Resend. */
+  /** The firm's mailbox — the only way a message leaves. */
   smtp?: SmtpConfig;
-  /** Stable key so a re-fired send dedupes provider-side (Resend idempotency). */
+  /** Stable key so a re-fired send can be deduped by the caller. */
   idempotencyKey?: string;
   /** When set (campaign sends), rewrite links through the click-tracking redirect
    *  keyed by this communication id. */
@@ -97,7 +88,7 @@ export const emailAdapter = {
       }
     }
 
-    // Template-level attachments (factsheet, KYC form, …) — Resend fetches by URL.
+    // Template-level attachments (factsheet, KYC form, …) — fetched by URL.
     const tplAttachments = (args.templateVersion?.attachments as Array<{ name: string; url: string }> | undefined) ?? [];
     const attachments: Array<{ filename: string; path?: string; content?: Buffer }> = [
       ...tplAttachments
@@ -135,29 +126,16 @@ export const emailAdapter = {
       return { externalId: info.messageId, status: "sent" };
     }
 
-    const c = getClient(args.apiKey);
-    const res = await c.emails.send(
-      {
-        from,
-        to: [args.recipient],
-        replyTo: args.replyTo || undefined,
-        cc: args.cc?.length ? args.cc : undefined,
-        bcc: args.bcc?.length ? args.bcc : undefined,
-        subject: args.rendered.subject ?? "(no subject)",
-        html,
-        text: args.rendered.text,
-        attachments: attachments.length ? attachments : undefined,
-        tags: [
-          { name: "tenant_id", value: args.tenantId },
-          { name: "template_key", value: args.templateVersion?.id ?? "adhoc_compose" },
-        ],
-      },
-      args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : undefined
+    // SMTP is the ONLY transport. There is no API-based fallback: email must
+    // leave through a mailbox the firm owns, so the From address is genuinely
+    // theirs. Reaching here means no mailbox resolved, which resolveEmailSender
+    // already rejects — so this is a bug guard, not a user-facing path.
+    throw Object.assign(
+      new Error(
+        "No mailbox connected — email can only be sent through the firm's own SMTP mailbox. Connect one under Settings → Integrations → Mailbox."
+      ),
+      { status: 422 }
     );
-    if (res.error) {
-      throw new Error(`Resend error: ${res.error.message}`);
-    }
-    return { externalId: res.data?.id ?? "", status: "sent" };
   },
 
 

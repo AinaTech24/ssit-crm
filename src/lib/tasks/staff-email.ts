@@ -30,7 +30,6 @@ export async function sendStaffEmails(tenantId: string, jobs: StaffEmailJob[]): 
         category: "transactional",
         idempotencyKey: j.key,
         smtp: sender.smtp,
-        apiKey: sender.apiKey,
         fromOverride: sender.fromEmail || undefined,
         fromNameOverride: sender.fromName || undefined,
         replyTo: sender.replyTo || undefined,
