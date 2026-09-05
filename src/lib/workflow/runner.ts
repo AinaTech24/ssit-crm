@@ -396,6 +396,8 @@ async function loadSubject(tx: Tx, type: string, id: string, tenantId: string): 
       // Enrich with the merge tokens templates offer but that are not columns —
       // the same treatment loadInvestor() gives an investor subject:
       //   lead.rm_name    the owning RM's NAME (the row only has owner_id, a uuid)
+      //   lead.rm_email   the owning RM's own email address
+      //   lead.rm_mobile  the owning RM's own mobile number
       //   lead.event_name friendly alias for source_campaign, which is where the
       //                   Event source stores the event a lead came from
       //   lead.first_name first word, for "Hi Anita" style greetings
@@ -403,10 +405,17 @@ async function loadSubject(tx: Tx, type: string, id: string, tenantId: string): 
       enriched.first_name = String((r as any).name ?? "").trim().split(/\s+/)[0] ?? "";
       enriched.event_name = (r as any).sourceCampaign ?? "";
       if ((r as any).ownerId) {
-        const [rm] = await tx.select({ name: users.name }).from(users).where(eq(users.id, (r as any).ownerId));
+        const [rm] = await tx
+          .select({ name: users.name, email: users.email, phone: users.phone })
+          .from(users)
+          .where(eq(users.id, (r as any).ownerId));
         enriched.rm_name = rm?.name ?? "";
+        enriched.rm_email = rm?.email ?? "";
+        enriched.rm_mobile = rm?.phone ?? "";
       } else {
         enriched.rm_name = "";
+        enriched.rm_email = "";
+        enriched.rm_mobile = "";
       }
       return enriched;
     }

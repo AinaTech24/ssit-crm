@@ -34,6 +34,8 @@ export const MERGE_FIELDS: MergeField[] = [
   { token: "investor.aum", label: "AUM (₹)", example: "₹1,25,00,000", category: "Recipient" },
   { token: "investor.date_of_birth", label: "Date of birth", example: "15 Aug 1978", category: "Recipient" },
   { token: "investor.rm_name", label: "Relationship manager", example: "Priya Mehta", category: "Recipient" },
+  { token: "investor.rm_email", label: "RM email", example: "priya@demowealth.in", category: "Recipient" },
+  { token: "investor.rm_mobile", label: "RM mobile no.", example: "+91 98200 11223", category: "Recipient" },
 
   // ── Lead ──────────────────────────────────────────────────────────────────
   { token: "lead.name", label: "Lead name", example: "Anita Desai", category: "Lead" },
@@ -43,6 +45,8 @@ export const MERGE_FIELDS: MergeField[] = [
   { token: "lead.source", label: "Lead source", example: "Referral", category: "Lead" },
   { token: "lead.event_name", label: "Lead event name", example: "Diwali Investor Meet", category: "Lead" },
   { token: "lead.rm_name", label: "Lead relationship manager", example: "Priya Mehta", category: "Lead" },
+  { token: "lead.rm_email", label: "Lead RM email", example: "priya@demowealth.in", category: "Lead" },
+  { token: "lead.rm_mobile", label: "Lead RM mobile no.", example: "+91 98200 11223", category: "Lead" },
 
   // ── Family ────────────────────────────────────────────────────────────────
   { token: "family.family_name", label: "Family name", example: "Sharma Family", category: "Family" },

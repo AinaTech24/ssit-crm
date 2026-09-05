@@ -705,14 +705,22 @@ async function loadInvestor(tx: Tx, id: string) {
   const [i] = await tx.select().from(investors).where(eq(investors.id, id));
   if (!i) return null;
   // Enrich with the computed merge tokens templates use but that aren't columns:
-  // investor.first_name (first word of name) and investor.rm_name (the RM's name).
+  // investor.first_name (first word of name) and the RM's own contact details —
+  // rm_name / rm_email / rm_mobile — which live on the users row, not here.
   const enriched: any = { ...i };
   enriched.first_name = String((i as any).name ?? "").trim().split(/\s+/)[0] ?? "";
   if ((i as any).rmId) {
-    const [rm] = await tx.select({ name: users.name }).from(users).where(eq(users.id, (i as any).rmId));
+    const [rm] = await tx
+      .select({ name: users.name, email: users.email, phone: users.phone })
+      .from(users)
+      .where(eq(users.id, (i as any).rmId));
     enriched.rm_name = rm?.name ?? "";
+    enriched.rm_email = rm?.email ?? "";
+    enriched.rm_mobile = rm?.phone ?? "";
   } else {
     enriched.rm_name = "";
+    enriched.rm_email = "";
+    enriched.rm_mobile = "";
   }
   return enriched;
 }

@@ -33,6 +33,9 @@ const MODULES: Array<{ key: string; label: string; fields: FieldDef[] }> = [
       { key: "risk_profile", label: "Risk profile", type: "string" },
       { key: "nominee_name", label: "Nominee name", type: "string" },
       { key: "next_review_at", label: "Next review date", type: "date" },
+      { key: "rm_name", label: "RM name", type: "string" },
+      { key: "rm_email", label: "RM email", type: "string" },
+      { key: "rm_mobile", label: "RM mobile no.", type: "string" },
     ],
   },
   {
@@ -44,7 +47,9 @@ const MODULES: Array<{ key: string; label: string; fields: FieldDef[] }> = [
       { key: "email", label: "Email", type: "string" },
       { key: "stage", label: "Stage", type: "string" },
       { key: "source", label: "Source", type: "string" },
-      { key: "owner_name", label: "Owner (RM)", type: "string" },
+      { key: "rm_name", label: "RM name", type: "string" },
+      { key: "rm_email", label: "RM email", type: "string" },
+      { key: "rm_mobile", label: "RM mobile no.", type: "string" },
     ],
   },
   {

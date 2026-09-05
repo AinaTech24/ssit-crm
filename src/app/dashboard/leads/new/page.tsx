@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, UserPlus, Loader2, AlertTriangle, ExternalLink, Camera, Trash2, X } from "lucide-react";
+import { ChevronLeft, UserPlus, Loader2, AlertTriangle, ExternalLink, Camera, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
@@ -11,6 +11,7 @@ import { SubDistributorLookup } from "@/components/common/SubDistributorLookup";
 import { SelectField } from "@/components/ui/SelectField";
 import { ThemeDate } from "@/components/ui/ThemeDate";
 import { CustomFieldsSection, missingRequired, type CustomFieldDef } from "@/components/common/CustomFieldInputs";
+import { EventSelect } from "@/components/leads/EventSelect";
 
 type DupMatch = {
   id: string;
@@ -106,19 +107,23 @@ export default function NewLeadPage() {
     return () => { alive = false; };
   }, []);
 
-  /** Drop the selected event from the firm's list (soft delete server-side). */
-  const removeSelectedEvent = useCallback(async () => {
-    const ev = (events ?? []).find((e) => e.label === form.eventName);
-    if (!ev) return;
-    if (!confirm(`Remove "${ev.label}" from the event list?\n\nLeads already tagged with it keep their attribution.`)) return;
+  /** Drop ANY event from the firm's list (soft delete server-side), whether or
+   *  not it is the one currently selected. */
+  const removeEvent = useCallback(async (ev: { key: string; label: string }) => {
+    const ok = confirm(
+      `Remove "${ev.label}" from the event list?\n\n` +
+        "Leads already tagged with it keep their attribution."
+    );
+    if (!ok) return;
     const res = await fetch(`/api/lead-events?key=${encodeURIComponent(ev.key)}`, { method: "DELETE" });
     if (!res.ok) {
-      alert((await res.json().catch(() => ({})))?.error ?? "Could not remove the event.");
+      setErr((await res.json().catch(() => ({})))?.error ?? "Could not remove the event.");
       return;
     }
     setEvents((list) => (list ?? []).filter((e) => e.key !== ev.key));
-    setForm((s) => ({ ...s, eventName: "" }));
-  }, [events, form.eventName]);
+    // Only clear the field when the event just removed was the selected one.
+    setForm((s) => (s.eventName === ev.label ? { ...s, eventName: "" } : s));
+  }, []);
 
   /** Load the firm's event list once, the first time it is needed. */
   const loadEvents = useCallback(async () => {
@@ -466,34 +471,12 @@ export default function NewLeadPage() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-              <SelectField
+              <EventSelect
+                events={events}
                 value={form.eventName}
-                onChange={(e) => set("eventName", e.target.value)}
-              >
-                <option value="">
-                  {events === null
-                    ? "Loading events…"
-                    : events.length === 0
-                      ? "No events yet — use “Add event”"
-                      : "Select the event…"}
-                </option>
-                {(events ?? []).map((ev) => (
-                  <option key={ev.key} value={ev.label}>{ev.label}</option>
-                ))}
-              </SelectField>
-              {form.eventName && (
-                <button
-                  type="button"
-                  onClick={removeSelectedEvent}
-                  title={`Remove "${form.eventName}" from the event list`}
-                  aria-label={`Remove ${form.eventName} from the event list`}
-                  className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                >
-                  <X className="size-4" />
-                </button>
-              )}
-              </div>
+                onChange={(label) => set("eventName", label)}
+                onDelete={removeEvent}
+              />
             )}
             <p className="text-[10px] text-muted-foreground mt-1">
               Saved against the lead so you can measure which events actually produce business.
