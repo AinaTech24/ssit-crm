@@ -27,6 +27,12 @@ const BASELINE = new Set([
   "0072", "0073", "0074",
   "0131", "0137", "0144", "0145", "0147", "0148", "0149", "0150", "0151",
   "0160", "0161",
+  // 0195_ddq_compliance_registers + 0195_product_coherence — two unrelated
+  // feature migrations that landed on the same number and are already applied
+  // in production, so renumbering either would change its ledger checksum and
+  // re-run it. They touch disjoint tables, so their apply order on a fresh DB
+  // is immaterial.
+  "0195",
 ]);
 
 const files = fs.readdirSync(DIR).filter((f) => /^\d+_.*\.sql$/.test(f));

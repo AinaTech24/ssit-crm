@@ -56,9 +56,14 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/mfd
       # Activates the DB-backed vitest suites (RLS isolation, share-token claim)
-      # which skipIf(!TEST_DATABASE_URL) — previously dead in CI because no job
-      # set this while also having a database.
-      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mfd
+      # which skipIf(!TEST_DATABASE_URL).
+      #
+      # Points at the NON-SUPERUSER mfd_app role, not postgres: a superuser
+      # BYPASSES row-level security even with FORCE, so the isolation suite
+      # asserted nothing under the old superuser URL and failed outright. The
+      # provisioning step below creates that role.
+      TEST_DATABASE_URL: postgres://mfd_app:ci_app_password@localhost:5432/mfd
+      APP_DB_PASSWORD: ci_app_password
       ALLOW_SYSTEM_TX: "1"
     steps:
       - uses: actions/checkout@v4
@@ -82,5 +87,8 @@ jobs:
         run: node scripts/migrate-replay.js
       - name: RLS coverage guard (every tenant table has a policy)
         run: npm run check:rls
+      # Must run AFTER the schema exists — it grants DML on the tables it finds.
+      - name: Provision the non-superuser RLS role the isolation suite needs
+        run: npm run db:provision-app-role
       - name: DB-backed unit tests (RLS isolation · share-token · webhook sigs)
         run: npx vitest run
