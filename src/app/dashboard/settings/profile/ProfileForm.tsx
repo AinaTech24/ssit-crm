@@ -22,16 +22,19 @@ export default function ProfileForm({
   initialName,
   email,
   emailVerified,
+  initialPhone,
   initialAvatarUrl,
 }: {
   initialName: string;
   email: string;
   emailVerified: boolean;
+  initialPhone?: string | null;
   initialAvatarUrl?: string | null;
 }) {
   const router = useRouter();
   const toast = useToast();
   const [name, setName] = useState(initialName);
+  const [phone, setPhone] = useState(initialPhone ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
@@ -162,7 +165,9 @@ export default function ProfileForm({
       const res = await fetch("/api/me/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim() }),
+        // Sent even when blank: "" clears the number server-side (the route maps
+        // an empty string to null), so a user can remove a wrong one.
+        body: JSON.stringify({ name: name.trim(), phone: phone.trim() }),
       });
       const data = await res.json();
       if (!res.ok) setProfileMsg({ kind: "err", text: data?.error ?? "Could not save" });
@@ -297,6 +302,21 @@ export default function ProfileForm({
             <div>
               <label className={label}>Full name</label>
               <input className={field} value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div>
+              <label className={label}>Mobile number</label>
+              <input
+                className={field}
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="+91 90000 12345"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Used for WhatsApp/SMS notifications and shown to colleagues in the team directory.
+              </p>
             </div>
             <div>
               <label className={label}>Email</label>

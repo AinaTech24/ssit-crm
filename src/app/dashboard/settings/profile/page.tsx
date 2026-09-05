@@ -21,6 +21,7 @@ export default async function ProfilePage() {
       .select({
         name: users.name,
         email: users.email,
+        phone: users.phone,
         emailVerifiedAt: users.emailVerifiedAt,
         avatarUrl: users.avatarUrl,
         department: users.department,
@@ -109,6 +110,7 @@ export default async function ProfilePage() {
         initialName={me?.name ?? ""}
         email={me?.email ?? ""}
         emailVerified={!!me?.emailVerifiedAt}
+        initialPhone={me?.phone ?? ""}
         initialAvatarUrl={me?.avatarUrl ?? ""}
       />
 

@@ -70,6 +70,7 @@ export async function GET() {
       user: {
         name: u.name ?? "",
         email: u.email ?? "",
+        phone: u.phone ?? "",
         emailVerified: !!u.emailVerifiedAt,
         avatarUrl: u.avatarUrl ?? null,
         department: u.department ?? null,
