@@ -45,9 +45,7 @@ export function PublicShell({
                 >
                   Log in
                 </Link>
-                <Link href="/signup" className="btn-primary text-sm font-semibold">
-                  Start free trial <ArrowRight className="size-4" />
-                </Link>
+
               </>
             )}
           </div>

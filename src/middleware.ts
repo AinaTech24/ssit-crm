@@ -48,12 +48,11 @@ export const config = {
  * stay readable while signed in, and /reset-password + /accept-invite are
  * email-link flows that must work even when another session is present.
  */
-const AUTHED_HOME_PATHS = new Set(["/", "/login", "/signup"]);
+const AUTHED_HOME_PATHS = new Set(["/", "/login"]);
 
 const PUBLIC_PATHS = new Set([
   "/",
   "/login",
-  "/signup",
   "/forgot-password",
   "/reset-password",
   "/accept-invite",

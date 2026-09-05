@@ -161,10 +161,9 @@ export default async function KbArticlePage({ params }: { params: Promise<{ slug
               </Link>
             ) : (
               <>
-                <Link href="/signup" className="btn-primary text-sm font-semibold">
-                  Start free trial <ArrowRight className="size-4" />
+                <Link href="/login" className="btn-primary text-sm font-semibold">
+                  Log in <ArrowRight className="size-4" />
                 </Link>
-                <Link href="/login" className="btn-secondary text-sm font-semibold">Log in</Link>
               </>
             )}
           </div>

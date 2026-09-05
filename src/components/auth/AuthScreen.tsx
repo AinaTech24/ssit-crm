@@ -334,23 +334,14 @@ export function AuthScreen({
               </form>
             )}
 
-            {/* ── Toggle (in-place, no navigation) ── */}
+            {/* Self-serve signup is removed: firms are onboarded by a platform
+                admin under Super Admin → MFD tenants, and staff arrive by invite.
+                The mode toggle is gone so signup mode is unreachable, and both
+                /signup and POST /api/auth/signup are deleted. The signup branch
+                below is now dead code, left in place so re-enabling self-serve
+                onboarding is a one-line change rather than a rewrite. */}
             <div className="mt-6 pt-6 border-t border-border text-center text-sm text-muted-foreground">
-              {mode === "login" ? (
-                <>
-                  Don&apos;t have a workspace yet?{" "}
-                  <button type="button" onClick={() => switchMode("signup")} className="text-primary font-semibold hover:underline">
-                    Create one
-                  </button>
-                </>
-              ) : (
-                <>
-                  Already have an account?{" "}
-                  <button type="button" onClick={() => switchMode("login")} className="text-primary font-semibold hover:underline">
-                    Sign in
-                  </button>
-                </>
-              )}
+              Need an account? Ask your firm administrator to invite you.
             </div>
 
             {mode === "signup" && (

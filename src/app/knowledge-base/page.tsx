@@ -39,11 +39,7 @@ export default async function KnowledgeBasePage() {
         </p>
         {!session && (
           <p className="mt-4 text-sm text-muted-foreground">
-            Every entry is free to read.{" "}
-            <Link href="/signup" className="text-brand-cyan-deep font-semibold hover:underline">
-              Start a free trial
-            </Link>{" "}
-            when you want to try it on your own book.
+            Every entry is free to read.
           </p>
         )}
       </section>
@@ -55,11 +51,7 @@ export default async function KnowledgeBasePage() {
             <BookOpen className="size-8 mx-auto text-muted-foreground/50" />
             <div className="mt-3 font-semibold">The first KAIZEN entry is on its way.</div>
             <p className="text-sm text-muted-foreground mt-1">
-              Check back shortly — or{" "}
-              <Link href="/signup" className="text-brand-cyan-deep font-semibold hover:underline">
-                start a free trial
-              </Link>{" "}
-              and explore the product now.
+              Check back shortly.
             </p>
           </div>
         ) : (

@@ -7,14 +7,27 @@
  * to "here's your reset link" auth mail. We send straight through the email
  * adapter.
  *
- * Robustness contract: NEVER throws. If RESEND_API_KEY isn't configured (dev /
- * stub) or the provider errors, it returns { sent: false, reason } and logs —
- * so callers like /api/auth/forgot can keep their enumeration-safe behaviour
- * and never 500 just because email isn't wired.
+ * Sender preference:
+ *   1. the PLATFORM mailbox (Equitywala Admin → Email, or SMTP_* env)
+ *   2. the TENANT's own mailbox, as a fallback
+ *
+ * The fallback matters: with no platform mailbox configured, password resets and
+ * invites were silently dropped — /api/auth/forgot is deliberately
+ * enumeration-safe, so it reports success either way and the user just never
+ * receives anything. Falling back to the firm's own mailbox means a firm that has
+ * connected one gets working resets without waiting on platform SMTP. A PLATFORM
+ * admin has no tenant mailbox, so their reset still needs option 1 — another
+ * admin can set their password from Super Admin → Admins in the meantime.
+ *
+ * Robustness contract: NEVER throws. If no sender can be resolved, or the
+ * provider errors, it returns { sent: false, reason } and logs — so callers keep
+ * their enumeration-safe behaviour and never 500 just because email isn't wired.
  */
 
 import { emailAdapter } from "./adapters/resend";
 import { loadEmailConfig } from "./email-config";
+import { withSystem } from "@/db/client";
+import { resolveEmailSender } from "./sender";
 
 export type SystemEmailResult = { sent: boolean; reason?: string };
 
@@ -30,17 +43,46 @@ export async function sendSystemEmail(args: {
   // Resolve the platform SMTP config — DB (Equitywala Admin → Email) first, env (SMTP_*)
   // as fallback.
   const cfg = await loadEmailConfig();
-  if (!cfg.configured || !cfg.host) {
-    // In production this silently breaks onboarding (invited users / reset
-    // links never arrive). Surface it loudly instead of failing invisibly.
+
+  let smtp: { host: string; port: number; secure: boolean; user: string; pass: string; accessToken?: string } | null = null;
+  let from: string | undefined;
+
+  if (cfg.configured && cfg.host) {
+    smtp = { host: cfg.host, port: cfg.port, secure: cfg.secure, user: cfg.user ?? "", pass: cfg.pass ?? "" };
+    from = cfg.from;
+  } else {
+    // No platform mailbox — borrow the tenant's own, so a firm that has connected
+    // one still gets its resets and invites.
+    try {
+      const s = await withSystem(async (tx) => resolveEmailSender(tx, args.tenantId));
+      if (s?.smtp?.host) {
+        smtp = {
+          host: s.smtp.host,
+          port: s.smtp.port,
+          secure: s.smtp.secure,
+          user: s.smtp.user ?? "",
+          pass: s.smtp.pass ?? "",
+          accessToken: s.smtp.accessToken,
+        };
+        from = s.fromEmail ? (s.fromName ? `${s.fromName} <${s.fromEmail}>` : s.fromEmail) : undefined;
+      }
+    } catch {
+      /* resolveEmailSender throws when nothing is connected — handled below */
+    }
+  }
+
+  if (!smtp) {
+    // Loud, because the symptom is invisible: the caller reports success and the
+    // user simply never receives the mail.
     if (process.env.NODE_ENV === "production") {
       console.error(
-        "[system-email] SMTP is not configured (Equitywala Admin → Email, or SMTP_* env) — " +
-          `transactional auth email (to ${args.to}, subject "${args.subject}") was NOT sent.`
+        "[system-email] No sender available — set platform SMTP (Equitywala Admin → Email or SMTP_* env), " +
+          `or connect a mailbox for tenant ${args.tenantId}. Email to ${args.to} ("${args.subject}") was NOT sent.`
       );
     }
     return { sent: false, reason: "email_not_configured" };
   }
+
   try {
     await emailAdapter.send({
       tenantId: args.tenantId,
@@ -49,8 +91,8 @@ export async function sendSystemEmail(args: {
       tokens: {},
       rendered: { subject: args.subject, text: args.text, tokens: {} },
       inlineHtml: args.html,
-      smtp: { host: cfg.host, port: cfg.port, secure: cfg.secure, user: cfg.user ?? "", pass: cfg.pass ?? "" },
-      fromOverride: cfg.from,
+      smtp,
+      fromOverride: from,
       idempotencyKey: args.idempotencyKey,
     });
     return { sent: true };
