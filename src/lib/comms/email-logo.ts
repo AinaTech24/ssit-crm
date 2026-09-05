@@ -3,8 +3,12 @@
  * confirmations, free Compose, …) so every outbound email leads with the firm's
  * logo — matching what the template designer already does via its logo block.
  *
- * Returns "" when the firm has no logo configured, so callers can always inline
- * it unconditionally.
+ * When the firm has no logo uploaded this falls back to its NAME rather than
+ * returning nothing, so a transactional email never opens with a blank header.
+ * Returns "" only when there is neither a logo nor a name.
+ *
+ * The fallback is the firm's own name, never the product logo — the whiteLabel
+ * flag exists to keep Equitywala branding off client-facing mail.
  */
 
 /** Email clients (Gmail/Outlook) can't load a relative path — make the logo URL
@@ -17,10 +21,21 @@ export function absoluteEmailUrl(url?: string | null): string {
   return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
 }
 
-export function emailLogoHeaderHtml(logoUrl?: string | null, firmName?: string | null): string {
+export function emailLogoHeaderHtml(
+  logoUrl?: string | null,
+  firmName?: string | null,
+  brandColor?: string | null
+): string {
+  const esc = (v: string) =>
+    v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const url = absoluteEmailUrl(logoUrl);
-  if (!url) return "";
-  const safeUrl = url.replace(/"/g, "&quot;");
-  const alt = String(firmName ?? "Logo").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-  return `<div style="text-align:center;margin:0 0 18px;"><img src="${safeUrl}" alt="${alt}" height="40" style="height:40px;max-height:48px;display:inline-block;border:0;outline:none;"/></div>`;
+  const name = String(firmName ?? "").trim();
+
+  if (url) {
+    const safeUrl = url.replace(/"/g, "&quot;");
+    return `<div style="text-align:center;margin:0 0 18px;"><img src="${safeUrl}" alt="${esc(name || "Logo")}" height="40" style="height:40px;max-height:48px;display:inline-block;border:0;outline:none;"/></div>`;
+  }
+  if (!name) return "";
+  const color = esc(String(brandColor || "#0e2557"));
+  return `<div style="text-align:center;margin:0 0 18px;"><span style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.3px;color:${color};line-height:1.2;">${esc(name)}</span></div>`;
 }

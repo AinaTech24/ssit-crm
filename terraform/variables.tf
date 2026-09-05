@@ -87,3 +87,10 @@ variable "public_key_path" {
   type    = string
   default = "~/.ssh/ssit-crm-deploy.pub"
 }
+
+# Public hostname the app is served on. Used for the S3 CORS allow-list so the
+# browser may PUT directly to the uploads bucket.
+variable "app_domain" {
+  type    = string
+  default = "crm.equitywala.com"
+}

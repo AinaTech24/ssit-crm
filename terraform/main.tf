@@ -132,6 +132,25 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
   }
 }
 
+# Browser uploads go STRAIGHT to S3 via a presigned PUT (see
+# /api/compliance/upload-url), which makes them cross-origin. Without a CORS rule
+# the browser blocks the request before it is sent and the UI shows only
+# "Failed to fetch" with no status code — nothing reaches S3 or the app logs, so
+# there is nothing to debug. Neither the console Create-Bucket flow nor the
+# earlier Terraform set this, so logo/avatar/document uploads failed on a fresh
+# stack.
+resource "aws_s3_bucket_cors_configuration" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT", "GET", "HEAD"]
+    allowed_origins = ["https://${var.app_domain}", "http://localhost:3000"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
 resource "aws_iam_role" "ec2" {
   name = "${var.project}-ec2"
   assume_role_policy = jsonencode({

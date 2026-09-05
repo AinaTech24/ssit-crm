@@ -59,14 +59,10 @@ export function renderEmailHtml(body: EmailDesignerBody, ctx: RenderContext): st
   const blocks = body.blocks ?? [];
   const footer = body.footer ?? { includeArn: true, includeAddress: true, includeUnsubscribe: true };
 
-  // Every email should lead with the firm's logo. If this template has no logo
-  // block, auto-prepend one from the theme/tenant logo so nothing ships unbranded.
+  // Every email leads with the firm's branding. If the template has no logo
+  // block, auto-prepend one so nothing ships with a blank header.
   const hasLogoBlock = blocks.some((b) => (b as any)?.type === "logo");
-  const autoLogoUrl = absoluteEmailUrl(theme.logoUrl || ctx.tenant?.logoUrl || "");
-  const autoLogo =
-    !hasLogoBlock && autoLogoUrl
-      ? `<div style="text-align:${theme.logoAlign ?? "center"};margin-bottom:18px;"><img src="${escape(autoLogoUrl)}" alt="${escape(ctx.tenant?.displayName ?? "Logo")}" height="${theme.logoHeight ?? 40}" style="height:${theme.logoHeight ?? 40}px;max-height:${theme.logoHeight ?? 40}px;display:inline-block;"/></div>`
-      : "";
+  const autoLogo = hasLogoBlock ? "" : brandHeaderHtml(theme, ctx);
   const inner =
     autoLogo +
     blocks
@@ -167,9 +163,34 @@ function renderBlock(block: EmailBlock, theme: EmailTheme, ctx: RenderContext): 
 }
 
 function renderLogo(theme: EmailTheme, ctx: RenderContext): string {
+  return brandHeaderHtml(theme, ctx);
+}
+
+/**
+ * The masthead every email opens with.
+ *
+ * Prefers the firm's uploaded logo. When the firm has NOT uploaded one, falls
+ * back to its NAME set in the brand colour rather than rendering nothing — an
+ * email whose header is simply blank reads as broken.
+ *
+ * The fallback is deliberately the firm's own name, never the product logo:
+ * the whiteLabel feature flag exists to keep Equitywala branding off
+ * client-facing surfaces, and this renderer has no way to see that flag. The
+ * firm's own name is correct whether or not white-labelling is on.
+ */
+function brandHeaderHtml(theme: EmailTheme, ctx: RenderContext): string {
+  const align = theme.logoAlign ?? "center";
   const url = absoluteEmailUrl(theme.logoUrl || ctx.tenant?.logoUrl || "");
-  if (!url) return "";
-  return `<div style="text-align:${theme.logoAlign};margin-bottom:18px;"><img src="${escape(url)}" alt="${escape(ctx.tenant?.displayName ?? "Logo")}" height="${theme.logoHeight}" style="height:${theme.logoHeight}px;max-height:${theme.logoHeight}px;display:inline-block;"/></div>`;
+  const firmName = ctx.tenant?.displayName || ctx.tenant?.legalName || "";
+  const height = theme.logoHeight ?? 40;
+
+  if (url) {
+    return `<div style="text-align:${align};margin-bottom:18px;"><img src="${escape(url)}" alt="${escape(firmName || "Logo")}" height="${height}" style="height:${height}px;max-height:${height}px;display:inline-block;border:0;outline:none;"/></div>`;
+  }
+  if (!firmName) return "";
+  // Sized off logoHeight so swapping in a real logo later doesn't shift layout.
+  const fontSize = Math.max(18, Math.round(height * 0.55));
+  return `<div style="text-align:${align};margin-bottom:18px;"><span style="font-family:${theme.fontFamily === "serif" ? "Georgia,'Times New Roman',serif" : "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"};font-size:${fontSize}px;font-weight:700;letter-spacing:-0.3px;color:${escape(theme.brandColor)};line-height:1.2;">${escape(firmName)}</span></div>`;
 }
 
 function renderHero(b: any, theme: EmailTheme, ctx: RenderContext): string {
