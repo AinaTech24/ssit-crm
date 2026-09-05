@@ -24,6 +24,7 @@ import { tenantIntegrations } from "@/db/schema/tenant_integrations";
 import { encrypt } from "@/lib/crypto";
 import type { SmtpConfig } from "./adapters/resend";
 import {
+  getSoleUserMailbox,
   getTenantIntegration,
   getUserMailbox,
   type TenantIntegrationResolved,
@@ -116,9 +117,24 @@ export async function resolveEmailSender(
   const s = await mailboxToSmtp(tx, tm);
   if (s) return { ...s, source: "tenant-mailbox" };
 
-  // 3. Nothing connected — refuse, with an error the recipient of the message
-  // can actually act on. Status 422 so API routes surface it as a user error
-  // rather than a masked 500.
+  // 3. Fall back to the firm's ONE connected personal mailbox.
+  //
+  // Automations (workflow rules, recipes) send with no actor and default to the
+  // firm-wide mailbox. Most firms never connect one — every RM connects their
+  // own — so "Welcome email to new lead" failed on every run with "No mailbox
+  // is connected" even though a working, verified mailbox existed.
+  //
+  // Deliberately only when there is EXACTLY ONE. With one there is no question
+  // whose identity the firm sends under; with several, picking one would put an
+  // arbitrary RM's name on the firm's mail, so we still refuse.
+  const only = await getSoleUserMailbox(tx, tenantId);
+  if (only) {
+    const s = await mailboxToSmtp(tx, only);
+    if (s) return { ...s, source: "tenant-mailbox" };
+  }
+
+  // 4. Nothing connected — refuse, with an error the reader can act on. Status
+  // 422 so API routes surface it as a user error rather than a masked 500.
   throw Object.assign(
     new Error(
       "No mailbox is connected, so this firm cannot send email. Connect one under Settings → Integrations → Mailbox — either your own, or a firm-wide mailbox set up by your admin."
@@ -126,3 +142,4 @@ export async function resolveEmailSender(
     { status: 422 }
   );
 }
+

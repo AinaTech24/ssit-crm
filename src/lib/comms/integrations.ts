@@ -72,6 +72,36 @@ export async function getTenantIntegration(
 }
 
 /** Resolve a specific user's personal mailbox (provider = "mailbox"). */
+/**
+ * The firm's SINGLE active personal mailbox, or null when there are none or
+ * more than one.
+ *
+ * Last-resort sender for automations, which run with no acting user and would
+ * otherwise demand a firm-wide mailbox most firms never connect. Only ever one:
+ * with a single mailbox there is no question whose identity the firm sends
+ * under; with several, picking one would put an arbitrary RM's name on the
+ * firm's mail.
+ */
+export async function getSoleUserMailbox(
+  tx: Tx,
+  tenantId: string
+): Promise<TenantIntegrationResolved | null> {
+  const rows = await tx
+    .select()
+    .from(tenantIntegrations)
+    .where(
+      and(
+        eq(tenantIntegrations.tenantId, tenantId),
+        eq(tenantIntegrations.provider, "mailbox"),
+        eq(tenantIntegrations.isActive, true)
+      )
+    )
+    .limit(3);
+  const personal = rows.filter((r) => r.userId != null);
+  if (personal.length !== 1) return null;
+  return rowToResolved(personal[0]);
+}
+
 export async function getUserMailbox(
   tx: Tx,
   tenantId: string,

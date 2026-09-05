@@ -118,8 +118,28 @@ async function readSession(): Promise<SessionUser | null> {
  */
 export async function requireSession(): Promise<SessionUser> {
   const session = await getSession();
-  if (!session) throw new AuthError("not authenticated", 401);
-  return session;
+  if (session) return session;
+
+  // A PAGE with no (or a REVOKED) session must land on the login form, not the
+  // error boundary. Middleware checks signature + expiry only — Edge cannot
+  // reach Postgres — so a revoked-but-unexpired token sails past it and fails
+  // here. Throwing turned that into "The app hit a problem" on every dashboard
+  // route. The middleware already assumes this redirect happens ("a revoked
+  // token gets bounced to /login from there") and even guards the ?next=
+  // ping-pong for it; it was simply never implemented.
+  //
+  // API routes keep the 401 — a JSON caller wants a status, not a redirect.
+  let pathname: string | null = null;
+  try {
+    pathname = (await headers()).get("x-pathname");
+  } catch {
+    /* outside a request context (worker / test) — fall through to the throw */
+  }
+  if (pathname && !pathname.startsWith("/api/")) {
+    const { redirect } = await import("next/navigation");
+    redirect(`/login?next=${encodeURIComponent(pathname)}`);
+  }
+  throw new AuthError("not authenticated", 401);
 }
 
 export class AuthError extends Error {
