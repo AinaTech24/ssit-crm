@@ -23,11 +23,7 @@ export default async function TenantsListPage({ searchParams }: { searchParams: 
   // trial/active licence. COALESCE(..., false) so a tenant with NO subscription
   // counts as NOT inactive (otherwise the NULL dropped it from every tab — the
   // "7 shown vs 9 total" bug).
-  const inactive = sql`COALESCE((
-    s.status IN ('suspended','cancelled','expired','past_due')
-    OR (s.status = 'trial' AND s.trial_ends_at IS NOT NULL AND s.trial_ends_at < now())
-    OR (s.status = 'active' AND s.license_end_at IS NOT NULL AND s.license_end_at < now())
-  ), false)`;
+  const inactive = sql`COALESCE(t.status IN ('suspended', 'churned'), false)`;
 
   const whereForTab =
     tab === "deleted"
@@ -45,17 +41,16 @@ export default async function TenantsListPage({ searchParams }: { searchParams: 
         COUNT(*) FILTER (WHERE t.deleted_at IS NULL AND t.created_at >= now() - interval '1 month')::int AS recent,
         COUNT(*) FILTER (WHERE t.deleted_at IS NULL AND ${inactive})::int AS deactivated,
         COUNT(*) FILTER (WHERE t.deleted_at IS NOT NULL)::int AS deleted
-      FROM tenants t LEFT JOIN subscriptions s ON s.tenant_id = t.id
+      FROM tenants t
     `)).rows[0] as any;
 
     const list = await tx.execute(sql`
       SELECT t.id, t.legal_name, t.arn, t.created_at, t.email, t.deleted_at,
              t.logo_url, t.logo_icon_url, t.logo_mark_url, t.favicon_url,
-             s.status AS sub_status, s.package_key, s.trial_ends_at, s.license_end_at, s.next_renewal_at,
+             t.status AS sub_status,
              (SELECT COUNT(*)::int FROM users u WHERE u.tenant_id = t.id) AS user_count,
              (SELECT COUNT(*)::int FROM investors i WHERE i.tenant_id = t.id) AS investor_count
       FROM tenants t
-      LEFT JOIN subscriptions s ON s.tenant_id = t.id
       WHERE ${whereForTab}
       ORDER BY ${tab === "deleted" ? sql`t.deleted_at DESC` : sql`t.created_at DESC`}
     `);

@@ -101,10 +101,10 @@ export const subscriptions = pgTable(
   {
     id,
     tenantId: tenantId, // 1:1 with tenant
-    packageId: uuid("package_id")
-      .notNull()
-      .references(() => packages.id),
-    packageKey: text("package_key").notNull(), // denormalized for fast reads + sidebar gating
+    /** @deprecated packages were removed (migration 0202). Never written. */
+    packageId: uuid("package_id"),
+    /** @deprecated see packageId. */
+    packageKey: text("package_key"),
 
     status: text("status", {
       // "pending" = brand-new self-serve tenant that hasn't chosen/paid for a

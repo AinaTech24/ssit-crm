@@ -31,13 +31,11 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
     const tenant = (await tx.select().from(tenants).where(eq(tenants.id, id)).limit(1))[0];
     if (!tenant) return null;
     const sub = (await tx.select().from(subscriptions).where(eq(subscriptions.tenantId, id)).limit(1))[0];
-    const pkg = sub ? (await tx.select().from(packages).where(eq(packages.id, sub.packageId)).limit(1))[0] : null;
-    // Owner user + all packages — for the editable admin panel.
+    // Owner user — for the editable admin panel.
     const owner = (await tx.execute(sql`
       SELECT id, name, email FROM users WHERE tenant_id = ${id}::uuid AND 'owner' = ANY(roles) AND status <> 'inactive'
       ORDER BY created_at ASC LIMIT 1
     `)).rows[0] as { id: string; name: string; email: string } | undefined;
-    const allPackages = await tx.select({ key: packages.key, name: packages.name }).from(packages).orderBy(packages.name);
     const events = await tx
       .select()
       .from(subscriptionEvents)
@@ -57,7 +55,7 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
            AND created_at >= now() - interval '30 days') AS runs_30d,
         (SELECT COALESCE(SUM(aum::numeric),0) FROM investors WHERE tenant_id = ${id}) AS aum
     `);
-    return { tenant, subscription: sub, package: pkg, owner, allPackages, events, usage: usage.rows[0] as any };
+    return { tenant, subscription: sub, owner, events, usage: usage.rows[0] as any };
   });
 
   if (!data) notFound();
@@ -82,19 +80,16 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
               <h1 className="text-2xl font-bold tracking-tight">{data.tenant.legalName}</h1>
               <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                 <span className="font-mono">{data.tenant.arn ?? "No ARN"}</span>
-                {data.subscription && (
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[data.subscription.status] ?? ""}`}>
-                    {data.subscription.status}
-                  </span>
-                )}
-                <span className="text-xs uppercase">{data.subscription?.packageKey ?? "no package"}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[data.tenant.status] ?? ""}`}>
+                  {data.tenant.status}
+                </span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">
                 Created {formatDate(data.tenant.createdAt)} · {data.tenant.email ?? "no contact email"}
               </div>
             </div>
           </div>
-          <TenantActions tenantId={id} currentStatus={data.subscription?.status ?? "trial"} />
+          <TenantActions tenantId={id} currentStatus={data.tenant.status ?? "active"} />
         </div>
       </div>
 
@@ -109,22 +104,13 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
 
       <div className="grid grid-cols-2 gap-4">
         <div className="border rounded-lg bg-card p-5">
-          <h2 className="font-semibold">Subscription</h2>
-          {data.subscription ? (
-            <dl className="mt-3 text-sm">
-              <Row label="Package" value={data.subscription.packageKey ?? "—"} />
-              <Row label="Status" value={data.subscription.status} />
-              <Row label="Billing cycle" value={data.subscription.billingCycle ?? "—"} />
-              <Row label="License start" value={data.subscription.licenseStartAt ? formatDate(data.subscription.licenseStartAt) : "—"} />
-              <Row label="License end" value={data.subscription.licenseEndAt ? formatDate(data.subscription.licenseEndAt) : "—"} />
-              <Row label="Trial ends" value={data.subscription.trialEndsAt ? formatDate(data.subscription.trialEndsAt) : "—"} />
-              <Row label="Next renewal" value={data.subscription.nextRenewalAt ? formatDate(data.subscription.nextRenewalAt) : "—"} />
-              <Row label="Suspended reason" value={data.subscription.suspendedReason ?? "—"} />
-              <Row label="AUM" value={formatINR(Number(data.usage.aum))} />
-            </dl>
-          ) : (
-            <p className="text-sm text-muted-foreground mt-3">No subscription on file.</p>
-          )}
+          <h2 className="font-semibold">Account</h2>
+          <dl className="mt-3 text-sm">
+            <Row label="Status" value={data.tenant.status ?? "active"} />
+            <Row label="Created" value={formatDate(data.tenant.createdAt)} />
+            <Row label="Suspended reason" value={data.subscription?.suspendedReason ?? "—"} />
+            <Row label="AUM" value={formatINR(Number(data.usage.aum))} />
+          </dl>
         </div>
 
         <TenantDataScope
@@ -180,9 +166,6 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
         displayName={data.tenant.displayName ?? data.tenant.legalName}
         ownerName={data.owner?.name ?? ""}
         ownerEmail={data.owner?.email ?? ""}
-        packageKey={data.subscription?.packageKey ?? ""}
-        billingCycle={data.subscription?.billingCycle ?? "yearly"}
-        packages={data.allPackages ?? []}
       />
 
       {data.subscription && (
@@ -194,8 +177,8 @@ export default async function TenantDetailPage({ params }: { params: Promise<{ i
           initialFeatureFlags={(data.subscription as any).featureFlagsOverride as Record<string, any> | null}
           packageNavKeys={tenantAccessibleNavKeys({
             allowedNav: null,
-            enabledModules: ((data.package as any)?.enabledModules as string[]) ?? [],
-            enabledFeatures: ((data.package as any)?.enabledFeatures as string[]) ?? null,
+            enabledModules: [],
+            enabledFeatures: null,
           })}
         />
       )}

@@ -60,24 +60,11 @@ export async function POST(req: NextRequest) {
     // Note: inviting does NOT require the inviter's own email to be verified.
     // The invite generates a shareable link (returned below) the admin can copy
     // and send directly, so onboarding a team isn't blocked on email delivery /
-    // self-verification. Spam is still bounded by the admin cap + seat limit.
+    // self-verification. Spam is still bounded by the admin capability.
 
-    // Enforce the plan's seat limit: active users + still-pending invites must
-    // stay within maxUsers. (Platform admins / unlimited plans pass freely.)
-    const license = await loadTenantLicense(session.tenantId, session.roles);
-    if (license.maxUsers && license.maxUsers < 1e9) {
-      const used = await withTenant(session.tenantId, async (tx) => {
-        const u = (await tx.execute(sql`SELECT count(*)::int c FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status <> 'suspended'`)).rows[0] as any;
-        const inv = (await tx.execute(sql`SELECT count(*)::int c FROM user_invites WHERE tenant_id = ${session.tenantId}::uuid AND accepted_at IS NULL AND revoked_at IS NULL`)).rows[0] as any;
-        return Number(u?.c ?? 0) + Number(inv?.c ?? 0);
-      });
-      if (used >= license.maxUsers) {
-        return NextResponse.json(
-          { error: `Your plan includes ${license.maxUsers} seats (${used} in use). Upgrade your plan to add more team members.` },
-          { status: 402 }
-        );
-      }
-    }
+    // Seat limits came from the package catalogue, which no longer exists —
+    // team size is unbounded. Invite volume is still bounded by the
+    // settings.users capability required above.
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {

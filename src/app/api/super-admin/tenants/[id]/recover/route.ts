@@ -49,22 +49,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         WHERE id = ${tenantId}::uuid
       `);
 
-      // Reactivate the subscription with a 30-day grace window so the tenant is
-      // immediately usable (the admin can extend further).
+      // Clear any suspension so the recovered tenant is immediately usable.
+      // (There is no license window to restore — packages/trials/renewals are gone.)
       const sub = (await tx.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)).limit(1))[0];
       if (sub) {
         const fromStatus = sub.status;
-        const grace = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-        const endMs = sub.licenseEndAt ? new Date(sub.licenseEndAt).getTime() : 0;
         await tx
           .update(subscriptions)
           .set({
-            status: "active",
             cancelledAt: null,
             cancelledReason: null,
             suspendedAt: null,
             suspendedReason: null,
-            ...(endMs < Date.now() ? { licenseEndAt: grace, nextRenewalAt: grace } : {}),
             updatedAt: new Date(),
           } as any)
           .where(eq(subscriptions.id, sub.id));

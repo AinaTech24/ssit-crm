@@ -19,7 +19,7 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { assertActiveLicense, assertInvestorQuota } from "@/lib/auth/license";
+import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance } from "@/lib/blueprints/auto-advance";
 import { loadEditableLead } from "@/lib/leads/access";
@@ -60,8 +60,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireSession();
     await assertActiveLicense(session.tenantId, session.roles);
-    // Converting a lead creates a new investor — count it against the plan cap.
-    await assertInvestorQuota(session.tenantId, session.roles, 1);
 
     const clientMeta = clientMetaFromHeaders(req.headers);
     const parse = Body.safeParse(await req.json().catch(() => ({})));

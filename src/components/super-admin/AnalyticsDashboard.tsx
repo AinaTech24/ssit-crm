@@ -29,8 +29,6 @@ export type MfdRow = {
   createdAt: string | null;
   deletedAt: string | null;
   status: string;
-  packageKey: string | null;
-  licenseEndAt: string | null;
   investors: number;
   activeInvestors: number;
 };
@@ -88,7 +86,7 @@ function bucketOf(date: Date, gran: Gran): { key: string; label: string; sort: n
   }
 }
 
-export function AnalyticsDashboard({ mfds, extendedCount }: { mfds: MfdRow[]; extendedCount: number }) {
+export function AnalyticsDashboard({ mfds }: { mfds: MfdRow[] }) {
   const [gran, setGran] = useState<Gran>("daily");
 
   const m = useMemo(() => {
@@ -116,17 +114,13 @@ export function AnalyticsDashboard({ mfds, extendedCount }: { mfds: MfdRow[]; ex
       ...(softDeleted > 0 ? [{ name: "Soft-deleted", value: softDeleted, color: "#475569" }] : []),
     ];
 
-    const pkgCount = new Map<string, number>();
-    live.forEach((x) => pkgCount.set(x.packageKey ?? "none", (pkgCount.get(x.packageKey ?? "none") ?? 0) + 1));
-    const pkgDist = [...pkgCount.entries()].map(([k, v], i) => ({ name: k === "none" ? "No plan" : k, value: v, color: PALETTE[i % PALETTE.length] }));
-
     const topClients = [...live]
       .filter((x) => x.investors > 0)
       .sort((a, b) => b.investors - a.investors)
       .slice(0, 10)
       .map((x, i) => ({ name: x.name, value: x.investors, color: PALETTE[i % PALETTE.length] }));
 
-    return { total, active, trial, suspended, expired, inactive, softDeleted, totalClients, activeClients, licenseDist, activeDist, pkgDist, topClients };
+    return { total, active, trial, suspended, expired, inactive, softDeleted, totalClients, activeClients, licenseDist, activeDist, topClients };
   }, [mfds]);
 
   const trend = useMemo(() => {
@@ -168,9 +162,7 @@ export function AnalyticsDashboard({ mfds, extendedCount }: { mfds: MfdRow[]; ex
           <Kpi label="Inactive MFDs" value={m.inactive} icon={ShieldAlert} tone="rose" />
           <Kpi label="Total clients" value={m.totalClients} icon={Users} tone="violet" />
           <Kpi label="Active clients" value={m.activeClients} icon={UserCheck} tone="emerald" />
-          <Kpi label="On trial" value={m.trial} icon={CalendarClock} tone="blue" />
-          <Kpi label="Suspended / Expired" value={m.suspended + m.expired} icon={ShieldAlert} tone="rose" />
-          <Kpi label="Licenses extended" value={extendedCount} icon={BadgeCheck} tone="amber" />
+          <Kpi label="Suspended" value={m.suspended} icon={ShieldAlert} tone="rose" />
           <Kpi label="Soft-deleted MFDs" value={m.softDeleted} icon={Trash2} tone="rose" />
         </div>
       </CollapsibleSection>
@@ -199,12 +191,11 @@ export function AnalyticsDashboard({ mfds, extendedCount }: { mfds: MfdRow[]; ex
       </CollapsibleSection>
 
       {/* Distribution grid */}
-      <CollapsibleSection title="Distributions" subtitle="License, health, plan and client-book breakdowns">
+      <CollapsibleSection title="Distributions" subtitle="Status, health and client-book breakdowns">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <DistributionCard title="License status" subtitle="MFDs by subscription state" data={m.licenseDist} initial="donut" />
-          <DistributionCard title="Active vs inactive MFDs" subtitle="Subscription health split" data={m.activeDist} initial="pie" />
+          <DistributionCard title="Firm status" subtitle="MFDs by account state" data={m.licenseDist} initial="donut" />
+          <DistributionCard title="Active vs inactive MFDs" subtitle="Account health split" data={m.activeDist} initial="pie" />
           <DistributionCard title="Clients per MFD (top 10)" subtitle="Investor book size by firm" data={m.topClients} initial="hbar" />
-          <DistributionCard title="Plan distribution" subtitle="MFDs by subscription package" data={m.pkgDist} initial="bar" />
         </div>
       </CollapsibleSection>
     </div>

@@ -11,7 +11,7 @@ import { z } from "zod";
 import { withPlatformAdmin } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requirePlatform } from "@/lib/auth/rbac";
-import { packages, subscriptions, subscriptionEvents } from "@/db/schema";
+import { subscriptions, subscriptionEvents } from "@/db/schema";
 import { MASTER_SEEDS } from "@/lib/masters/seeds";
 
 export const dynamic = "force-dynamic";
@@ -29,12 +29,6 @@ const Body = z.object({
   // password changed without touching the other.
   additionalEmail: z.union([z.string().email(), z.literal("")]).default(""),
   additionalPassword: z.union([z.string().min(8), z.literal("")]).default(""),
-  // The packages module was removed from the admin console; a tenant is
-  // provisioned with no plan and is never license-gated. These stay optional
-  // so existing API callers keep working.
-  packageKey: z.string().min(2).optional(),
-  billingCycle: z.enum(["monthly", "yearly", "custom"]).default("yearly"),
-  trialDays: z.number().int().nonnegative().default(14),
 });
 
 export async function POST(req: NextRequest) {
@@ -98,19 +92,11 @@ export async function POST(req: NextRequest) {
     const additionalHash = addEmail ? await bcrypt.hash(addPassword, 12) : null;
     // Display name only — the person renames themselves in Settings → Profile.
     const additionalName = addEmail ? addEmail.split("@")[0] : "";
-    const trialEnds = new Date(Date.now() + body.trialDays * 24 * 60 * 60 * 1000);
     // Normalise ARN: empty string → null (optional column, unique index treats
     // NULLs as distinct so multiple ARN-less tenants coexist).
     const arn = body.arn && body.arn.trim() ? body.arn.trim() : null;
 
     await withPlatformAdmin(session.userId, async (tx) => {
-      // Resolve a package only if one was named AND still exists. Licensing is
-      // no longer enforced, so a missing package is not an error — the tenant is
-      // simply created without a subscription row.
-      const pkg = body.packageKey
-        ? (await tx.select().from(packages).where(eq(packages.key, body.packageKey)).limit(1))[0] ?? null
-        : (await tx.select().from(packages).limit(1))[0] ?? null;
-
       // If a SOFT-DELETED tenant still holds this ARN, free it first (deleting a
       // tenant is meant to release its ARN) so re-creation succeeds. Active
       // tenants holding the ARN are left alone → the INSERT below 409s clearly.
@@ -126,8 +112,8 @@ export async function POST(req: NextRequest) {
       // Tenant — seed the contact email from the owner's email so the detail
       // page isn't left blank (admin can change it later).
       await tx.execute(sql`
-        INSERT INTO tenants (id, legal_name, display_name, arn, email, plan, status, trial_ends_at, created_at, updated_at)
-        VALUES (${tenantId}, ${body.firmName}, ${body.firmName}, ${arn}, ${body.ownerEmail.toLowerCase()}, 'starter', 'trial', ${trialEnds}, now(), now())
+        INSERT INTO tenants (id, legal_name, display_name, arn, email, status, created_at, updated_at)
+        VALUES (${tenantId}, ${body.firmName}, ${body.firmName}, ${arn}, ${body.ownerEmail.toLowerCase()}, 'active', now(), now())
       `);
 
       // Branch
@@ -152,30 +138,14 @@ export async function POST(req: NextRequest) {
         `);
       }
 
-      // Subscription — only when a package still exists to point at.
-      if (pkg) {
+      // Per-tenant ACCESS OVERRIDE row. Every firm gets one at creation so a
+      // platform admin can immediately customise its sidebar / fields — the
+      // Module & Field Access Center writes into this row.
       await tx.insert(subscriptions).values({
         id: subId,
         tenantId,
-        packageId: pkg.id,
-        packageKey: pkg.key,
-        status: "trial",
-        billingCycle: body.billingCycle,
-        licenseStartAt: new Date(),
-        trialEndsAt: trialEnds,
+        status: "active",
       } as any);
-
-      // Subscription event
-      await tx.insert(subscriptionEvents).values({
-        subscriptionId: subId,
-        tenantId,
-        eventType: "created",
-        actor: `ssit_admin:${session.userId}`,
-        toStatus: "trial",
-        toPackage: pkg.key,
-        notes: "Tenant created by Equitywala",
-      } as any);
-      }
 
       // Seed masters for this tenant
       for (const [masterType, rows] of Object.entries(MASTER_SEEDS)) {
@@ -192,12 +162,12 @@ export async function POST(req: NextRequest) {
       }
 
       // Audit (append-only): who provisioned this tenant.
-      if (pkg) await tx.insert(subscriptionEvents).values({
+      await tx.insert(subscriptionEvents).values({
         subscriptionId: subId,
         tenantId,
         eventType: "created" as any,
         actor: `ssit_admin:${session.userId}`,
-        toStatus: "trial",
+        toStatus: "active",
         notes: `Provisioned '${body.firmName}' (ARN ${arn ?? "—"}).`,
       } as any);
     });

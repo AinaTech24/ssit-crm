@@ -125,17 +125,14 @@ export async function PATCH(req: NextRequest) {
       } else {
         if (!HOSTNAME_RE.test(d)) return NextResponse.json({ error: "Enter a valid domain, e.g. crm.yourfirm.in" }, { status: 400 });
         if (d === base || d.endsWith(`.${base}`)) return NextResponse.json({ error: `Use the subdomain field for ${base} — the custom domain must be your own.` }, { status: 400 });
-        // Premium-only. Vanity subdomains stay open to every plan; a fully custom
-        // domain requires a premium tier or an explicit `customDomain` feature flag.
+        // Vanity subdomains stay open to every firm; a fully custom domain is
+        // switched on per firm via the customDomain feature flag in
+        // Equitywala Admin -> Module & Field Access Center.
         const license = await loadTenantLicense(session.tenantId, session.roles);
-        const canCustomDomain =
-          !!license.featureFlags?.customDomain ||
-          ["professional", "premium", "enterprise", "custom"].includes(license.packageKey ?? "") ||
-          license.maxUsers >= 1e9;
-        if (!canCustomDomain) {
+        if (!license.featureFlags?.customDomain) {
           return NextResponse.json(
-            { error: "Custom domains are a premium feature. Upgrade your plan to use your own domain — a vanity subdomain is available on your current plan." },
-            { status: 402 }
+            { error: "Custom domains are switched on per firm. Ask Equitywala to enable it for your account — a vanity subdomain is available meanwhile." },
+            { status: 403 }
           );
         }
         set.customDomain = d;

@@ -64,9 +64,10 @@ export async function GET() {
       },
       roleLabels: ROLE_LABELS,
       capabilities,
+      // Per-tenant access grants (Equitywala Admin -> Module & Field Access
+      // Center). No package / trial / renewal fields — that model is gone.
       license: {
         status: license.status,
-        packageKey: license.packageKey,
         enabledModules: license.enabledModules,
         enabledFeatures: license.enabledFeatures,
         allowedNav: license.allowedNav,
@@ -74,12 +75,6 @@ export async function GET() {
         allowedDashboardWidgets: license.allowedDashboardWidgets,
         featureFlags: license.featureFlags,
         isRestricted: license.isRestricted,
-        needsOnboarding: license.needsOnboarding,
-        maxUsers: license.maxUsers,
-        maxInvestors: license.maxInvestors,
-        trialEndsAt: license.trialEndsAt,
-        licenseEndAt: license.licenseEndAt,
-        nextRenewalAt: license.nextRenewalAt,
       },
     });
   } catch (err: any) {

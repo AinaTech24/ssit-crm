@@ -335,38 +335,6 @@ export function OrganisationProfileForm({
         </div>
       </Section>
 
-      {/* --------------------------- License / package ---------------------------- */}
-      <Section title="License & package">
-        <div className="grid grid-cols-2 gap-3">
-          <Row
-            label="Package selected"
-            value={pkg ? `${pkg.name} (${pkg.key})` : license.packageKey ?? "—"}
-            disabled
-            note="Contact Equitywala to change package"
-          />
-          <Row label="License status" value={license.status ?? "—"} disabled tone={license.isRestricted ? "rose" : "emerald"} />
-          <Row
-            label="License start"
-            value={fmtDate(subscription?.licenseStartAt)}
-            disabled
-          />
-          <Row
-            label="License end"
-            value={fmtDate(subscription?.licenseEndAt)}
-            disabled
-          />
-          <Row
-            label="Trial ends"
-            value={fmtDate(subscription?.trialEndsAt)}
-            disabled
-          />
-          <Row
-            label="Next renewal"
-            value={fmtDate(subscription?.nextRenewalAt)}
-            disabled
-          />
-        </div>
-      </Section>
 
       {err && <div className="text-sm text-rose-600">{err}</div>}
 

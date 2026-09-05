@@ -131,22 +131,10 @@ export async function POST(req: NextRequest) {
     let quotaSkipped = 0;
     const errors: Array<{ rowIndex: number; error: string; pan?: string | null; name?: string }> = [];
 
-    // Plan client-count gate (insert paths only). Rather than reject the whole
-    // import, fill up to the plan cap and report the overflow as quota-skipped so
-    // a partial import still lands. `room` is remaining capacity (Infinity if
-    // unlimited). Update-only mode never consumes a seat.
-    const license = await loadTenantLicense(session.tenantId, session.roles);
-    const cap = license.maxInvestors;
-    let room = Infinity;
-    if (mode !== "update" && cap && cap < 1e9) {
-      const current = await withTenant(session.tenantId, async (tx) => {
-        const r = (await tx.execute(
-          sql`SELECT count(*)::int c FROM investors WHERE tenant_id = ${session.tenantId}::uuid AND status <> 'closed'`
-        )).rows[0] as { c?: number } | undefined;
-        return Number(r?.c ?? 0);
-      });
-      room = Math.max(0, cap - current);
-    }
+    // Client-count caps came from the package catalogue, which no longer
+    // exists — an import is never quota-skipped. `room` stays so the per-row
+    // accounting below reads unchanged.
+    const room = Infinity;
 
     await withTenant(session.tenantId, async (tx) => {
       // Firm custom-field definitions — any mapped cf_* column is sanitized + stored.
@@ -429,9 +417,6 @@ export async function POST(req: NextRequest) {
       quotaSkipped,
       errored: errors.length,
       errors: errors.slice(0, 1000),
-      ...(quotaSkipped > 0
-        ? { quotaMessage: `${quotaSkipped} client(s) were not imported because your plan's client limit (${cap}) was reached. Upgrade to add more.` }
-        : {}),
     });
   } catch (err: any) {
     return handleApiError(err);

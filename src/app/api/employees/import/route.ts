@@ -54,17 +54,10 @@ export async function POST(req: NextRequest) {
     // Inviting does NOT require the inviter's own email to be verified — invites
     // generate shareable links the admin can send directly (same as single-invite).
 
-    // Seat limit: ensure (current usage + this batch) fits the plan.
-    const license = await loadTenantLicense(session.tenantId, session.roles);
+    // Seat limits came from the package catalogue, which no longer exists — an
+    // import is never capped. Kept as a constant so the per-row accounting
+    // below reads unchanged.
     let remainingSeats = Infinity;
-    if (license.maxUsers && license.maxUsers < 1e9) {
-      const used = await withTenant(session.tenantId, async (tx) => {
-        const u = (await tx.execute(sql`SELECT count(*)::int c FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status <> 'suspended'`)).rows[0] as any;
-        const inv = (await tx.execute(sql`SELECT count(*)::int c FROM user_invites WHERE tenant_id = ${session.tenantId}::uuid AND accepted_at IS NULL AND revoked_at IS NULL`)).rows[0] as any;
-        return Number(u?.c ?? 0) + Number(inv?.c ?? 0);
-      });
-      remainingSeats = Math.max(0, license.maxUsers - used);
-    }
 
     const firmName = await withTenant(session.tenantId, async (tx) => {
       const t = (await tx.select({ displayName: tenants.displayName }).from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0];

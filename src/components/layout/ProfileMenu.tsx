@@ -17,9 +17,6 @@ export function ProfileMenu({
   roleLabel,
   initials,
   avatarUrl,
-  packageKey,
-  licenseStatus,
-  trialEndsLabel,
 }: {
   name: string;
   email?: string;
@@ -28,11 +25,8 @@ export function ProfileMenu({
   /** Profile photo (uploaded in Settings → My profile). Falls back to initials. */
   avatarUrl?: string | null;
   /** License plan key, e.g. "premium" — shown as the "premium" chip. */
-  packageKey?: string | null;
   /** License status, e.g. "trial" / "active". */
-  licenseStatus?: string | null;
   /** e.g. "19 Jun" — shown as a "Trial ends" chip inside the menu. */
-  trialEndsLabel?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -146,17 +140,6 @@ export function ProfileMenu({
                 <span className="inline-flex items-center rounded-full bg-white/15 border border-white/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
                   {roleLabel}
                 </span>
-                {packageKey && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-white/15 border border-white/25 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                    {packageKey}
-                    {licenseStatus && <span className="text-white/70 normal-case font-medium">· {licenseStatus}</span>}
-                  </span>
-                )}
-                {trialEndsLabel && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/25 border border-amber-200/40 px-2 py-0.5 text-[10px] font-semibold tracking-wide">
-                    Trial ends {trialEndsLabel}
-                  </span>
-                )}
               </div>
             </div>
 

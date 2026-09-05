@@ -18,7 +18,7 @@ import { z } from "zod";
 import { withPlatformAdmin } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requirePlatform } from "@/lib/auth/rbac";
-import { tenants, subscriptions, subscriptionEvents, users, packages } from "@/db/schema";
+import { tenants, subscriptions, subscriptionEvents, users } from "@/db/schema";
 import { PLATFORM_TENANT_ID } from "@/lib/platform";
 
 export const dynamic = "force-dynamic";
@@ -35,8 +35,6 @@ const Patch = z.object({
   ownerName: z.string().trim().min(2).optional(),
   ownerEmail: z.string().email().optional(),
   // Subscription — package + billing cycle.
-  packageKey: z.string().trim().min(1).optional(),
-  billingCycle: z.enum(["monthly", "yearly", "custom"]).optional(),
   // Data wall: when true, users only see the clients their role entitles them
   // to (RM = own book). Default false = firm-wide, as every tenant has had.
   restrictUserDataScope: z.boolean().optional(),
@@ -96,22 +94,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             uset.email = oe;
           }
           await tx.update(users).set(uset as any).where(eq(users.id, owner.id));
-        }
-      }
-
-      // ── Subscription (package / billing cycle) ─────────────────────────
-      if (d.packageKey !== undefined || d.billingCycle !== undefined) {
-        const sub = (await tx.select().from(subscriptions).where(eq(subscriptions.tenantId, tenantId)).limit(1))[0];
-        if (sub) {
-          const sset: Record<string, unknown> = { updatedAt: new Date() };
-          if (d.packageKey !== undefined) {
-            const pkg = (await tx.select().from(packages).where(eq(packages.key, d.packageKey)).limit(1))[0];
-            if (!pkg) throw Object.assign(new Error(`unknown package: ${d.packageKey}`), { status: 400 });
-            sset.packageId = pkg.id;
-            sset.packageKey = pkg.key;
-          }
-          if (d.billingCycle !== undefined) sset.billingCycle = d.billingCycle;
-          await tx.update(subscriptions).set(sset as any).where(eq(subscriptions.id, sub.id));
         }
       }
 

@@ -107,7 +107,6 @@ export async function POST(req: NextRequest) {
           assignRmId: assignToMe ? session.userId : null,
           reportType: parsed.reportType,
           kind: parsed.kind === "holdings" ? "holdings" : parsed.kind === "full" ? "full" : "master",
-          quotaCap: license.maxInvestors,
         }),
       { userId: session.userId, branchId: session.branchId, roles: session.roles }
     );

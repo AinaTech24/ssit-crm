@@ -13,7 +13,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny, can } from "@/lib/auth/rbac";
-import { assertActiveLicense, assertModuleEnabled, assertInvestorQuota } from "@/lib/auth/license";
+import { assertActiveLicense, assertModuleEnabled } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { buildInvestorConditions } from "@/lib/investors/list-filters";
 import { investorScopeCondition } from "@/lib/investors/access";
@@ -187,8 +187,6 @@ export async function POST(req: NextRequest) {
     requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
     const canAssignAnyRm = can(session.roles, "investor.edit.all", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
-    // Plan client-count gate — enforce the maxInvestors the package advertises.
-    await assertInvestorQuota(session.tenantId, session.roles, 1);
 
     const parse = CreateBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {

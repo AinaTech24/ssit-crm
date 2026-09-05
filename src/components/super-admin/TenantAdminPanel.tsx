@@ -12,7 +12,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mail, KeyRound, Trash2, Loader2, Check, AlertTriangle, Building2, UserCog, CreditCard } from "lucide-react";
+import { Mail, KeyRound, Trash2, Loader2, Check, AlertTriangle, Building2, UserCog } from "lucide-react";
 
 export function TenantAdminPanel({
   tenantId,
@@ -22,9 +22,6 @@ export function TenantAdminPanel({
   displayName,
   ownerName,
   ownerEmail,
-  packageKey,
-  billingCycle,
-  packages,
 }: {
   tenantId: string;
   currentEmail: string | null;
@@ -33,9 +30,6 @@ export function TenantAdminPanel({
   displayName: string;
   ownerName: string;
   ownerEmail: string;
-  packageKey: string;
-  billingCycle: string;
-  packages: { key: string; name: string }[];
 }) {
   const router = useRouter();
 
@@ -52,10 +46,6 @@ export function TenantAdminPanel({
   const [ownerMsg, setOwnerMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Editable subscription (package + billing cycle).
-  const [pkg, setPkg] = useState(packageKey ?? "");
-  const [billing, setBilling] = useState(billingCycle ?? "yearly");
-  const [subBusy, setSubBusy] = useState(false);
-  const [subMsg, setSubMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function patch(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
     const res = await fetch(`/api/super-admin/tenants/${tenantId}`, {
@@ -76,18 +66,6 @@ export function TenantAdminPanel({
       if (r.ok) router.refresh();
     } finally {
       setOwnerBusy(false);
-    }
-  }
-
-  async function saveSubscription() {
-    setSubBusy(true);
-    setSubMsg(null);
-    try {
-      const r = await patch({ packageKey: pkg, billingCycle: billing });
-      setSubMsg(r.ok ? { ok: true, text: "Subscription updated." } : { ok: false, text: r.error ?? "Could not update subscription" });
-      if (r.ok) router.refresh();
-    } finally {
-      setSubBusy(false);
     }
   }
 
@@ -281,42 +259,6 @@ export function TenantAdminPanel({
             {ownerBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Save owner
           </button>
           {ownerMsg && <span className={`text-xs ${ownerMsg.ok ? "text-emerald-600" : "text-rose-600"}`}>{ownerMsg.text}</span>}
-        </div>
-      </div>
-
-      {/* Subscription (package + billing cycle) */}
-      <div className="border-t pt-4">
-        <label className="text-sm font-medium flex items-center gap-1.5">
-          <CreditCard className="size-4 text-muted-foreground" /> Subscription
-        </label>
-        <div className="mt-2 grid sm:grid-cols-2 gap-2">
-          <div>
-            <div className="text-[11px] text-muted-foreground mb-1">Package</div>
-            <select value={pkg} onChange={(e) => setPkg(e.target.value)} className="input-base text-sm h-9 w-full">
-              {!pkg && <option value="">Select…</option>}
-              {packages.map((p) => (
-                <option key={p.key} value={p.key}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div className="text-[11px] text-muted-foreground mb-1">Billing cycle</div>
-            <select value={billing} onChange={(e) => setBilling(e.target.value)} className="input-base text-sm h-9 w-full">
-              <option value="yearly">Yearly</option>
-              <option value="monthly">Monthly</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-        </div>
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            onClick={saveSubscription}
-            disabled={subBusy || !pkg || (pkg === (packageKey ?? "") && billing === (billingCycle ?? "yearly"))}
-            className="rounded-md border px-3 py-1.5 text-sm flex items-center gap-1.5 hover:bg-accent disabled:opacity-50"
-          >
-            {subBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Save subscription
-          </button>
-          {subMsg && <span className={`text-xs ${subMsg.ok ? "text-emerald-600" : "text-rose-600"}`}>{subMsg.text}</span>}
         </div>
       </div>
 

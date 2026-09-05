@@ -596,7 +596,6 @@ async function computeRichImport(
         assignRmId: job.assignToMe ? job.userId : null,
         reportType: parsed.reportType,
         kind: parsed.kind === "holdings" ? "holdings" : parsed.kind === "full" ? "full" : "master",
-        quotaCap: license.maxInvestors,
         // Clients fill 15→40%, folios 40→85% of the bar; the UI derives the ETA.
         onProgress: (phase, done, total) => {
           const frac = done / Math.max(1, total);

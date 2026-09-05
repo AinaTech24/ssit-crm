@@ -27,10 +27,7 @@ export default async function OrganisationProfilePage() {
         `)
         .then((r) => (r.rows[0] as { id: string; name: string; email: string } | undefined) ?? null),
     ]);
-    const p = s
-      ? await tx.select().from(packages).where(eq(packages.id, s.packageId)).limit(1).then((r) => r[0])
-      : null;
-    return { tenant: t, sub: s, ownerRow: owner, pkg: p };
+    return { tenant: t, sub: s, ownerRow: owner, pkg: null };
   });
 
   return (

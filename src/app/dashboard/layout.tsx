@@ -611,13 +611,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
               roleLabel={roleLabel}
               initials={initials}
               avatarUrl={avatarUrl}
-              packageKey={license.packageKey}
-              licenseStatus={license.status}
-              trialEndsLabel={
-                license.status === "trial" && license.trialEndsAt
-                  ? license.trialEndsAt.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-                  : null
-              }
             />
           </div>
         </div>

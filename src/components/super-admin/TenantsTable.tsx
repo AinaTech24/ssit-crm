@@ -15,11 +15,7 @@ export type TenantRow = {
   arn: string | null;
   email: string | null;
   logo_url: string | null;
-  package_key: string | null;
   sub_status: string | null;
-  trial_ends_at: string | null;
-  license_end_at: string | null;
-  next_renewal_at: string | null;
   created_at: string | null;
   deleted_at: string | null;
   user_count: number;
@@ -31,39 +27,9 @@ const STATUS_BADGE: Record<string, string> = {
   trial: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
   inactive: "bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
 };
-const PKG_BADGE: Record<string, string> = {
-  premium: "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
-  professional: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  starter: "bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300",
-  platform: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-};
 
-function effectiveStatus(r: TenantRow): "active" | "trial" | "inactive" | null {
-  const st = r.sub_status;
-  if (!st) return "active"; // no subscription → treat as a live/active org
-  const now = Date.now();
-  if (st === "trial") return r.trial_ends_at && new Date(r.trial_ends_at).getTime() < now ? "inactive" : "trial";
-  if (st === "active") return r.license_end_at && new Date(r.license_end_at).getTime() < now ? "inactive" : "active";
-  return "inactive";
-}
-
-const dayDiff = (iso: string) => Math.round((new Date(iso).getTime() - Date.now()) / 86_400_000);
-
-/** Renewal / expiry summary — "Renews in 12d", "Trial ends in 3d", "Expired 5d ago". */
-function renewal(r: TenantRow): { label: string; cls: string } {
-  if (r.sub_status === "trial") {
-    if (!r.trial_ends_at) return { label: "Trial", cls: "text-muted-foreground" };
-    const d = dayDiff(r.trial_ends_at);
-    if (d < 0) return { label: `Trial ended ${-d}d ago`, cls: "text-rose-600" };
-    if (d === 0) return { label: "Trial ends today", cls: "text-amber-600" };
-    return { label: `Trial ends in ${d}d`, cls: d <= 3 ? "text-amber-600" : "text-muted-foreground" };
-  }
-  const end = r.next_renewal_at || r.license_end_at;
-  if (!end) return { label: "—", cls: "text-muted-foreground" };
-  const d = dayDiff(end);
-  if (d < 0) return { label: `Expired ${-d}d ago`, cls: "text-rose-600" };
-  if (d === 0) return { label: "Renews today", cls: "text-amber-600" };
-  return { label: `Renews in ${d}d`, cls: d <= 7 ? "text-amber-600" : "text-emerald-600" };
+function effectiveStatus(r: TenantRow): "active" | "inactive" | null {
+  return r.sub_status === "active" || !r.sub_status ? "active" : "inactive";
 }
 
 function RetentionCell({ deletedAt, retentionDays }: { deletedAt: string | null; retentionDays: number }) {
@@ -89,11 +55,10 @@ export function TenantsTable({
 }) {
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("created_desc");
-  const [pkg, setPkg] = useState("");
   const [status, setStatus] = useState("");
 
   const packages = useMemo(
-    () => Array.from(new Set(rows.map((r) => (r.package_key ?? "").toLowerCase()).filter(Boolean))).sort(),
+    () => [] as string[],
     [rows]
   );
 
@@ -104,7 +69,6 @@ export function TenantsTable({
         const hay = `${r.legal_name} ${r.arn ?? ""} ${r.email ?? ""}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
-      if (pkg && (r.package_key ?? "").toLowerCase() !== pkg) return false;
       if (status && effectiveStatus(r) !== status) return false;
       return true;
     });
@@ -117,7 +81,7 @@ export function TenantsTable({
       }
     });
     return out;
-  }, [rows, q, sort, pkg, status]);
+  }, [rows, q, sort, status]);
 
   return (
     <div className="space-y-3">
@@ -142,16 +106,7 @@ export function TenantsTable({
           <SelectField value={status} onChange={(e) => setStatus(e.target.value)} className="w-auto" aria-label="Status filter">
             <option value="">All statuses</option>
             <option value="active">Active</option>
-            <option value="trial">Trial</option>
             <option value="inactive">Inactive</option>
-          </SelectField>
-        )}
-        {packages.length > 0 && (
-          <SelectField value={pkg} onChange={(e) => setPkg(e.target.value)} className="w-auto" aria-label="Package filter">
-            <option value="">All packages</option>
-            {packages.map((p) => (
-              <option key={p} value={p}>{p.toUpperCase()}</option>
-            ))}
           </SelectField>
         )}
       </div>
@@ -167,19 +122,16 @@ export function TenantsTable({
               <tr>
                 <th className="text-left font-medium">MFD</th>
                 <th className="text-left font-medium">ARN</th>
-                <th className="text-left font-medium">Package</th>
                 <th className="text-left font-medium">Status</th>
                 <th className="text-right font-medium">Users</th>
                 <th className="text-right font-medium">Investors</th>
-                <th className="text-left font-medium">{tab === "deleted" ? "Retention" : "Renewal"}</th>
+                <th className="text-left font-medium">{tab === "deleted" ? "Retention" : ""}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {shown.map((t) => {
                 const eff = effectiveStatus(t);
-                const pk = (t.package_key ?? "").toLowerCase();
-                const rn = renewal(t);
                 return (
                   <tr key={t.id} className="border-b last:border-0 hover:bg-accent/40">
                     <td className="py-3">
@@ -197,13 +149,6 @@ export function TenantsTable({
                     </td>
                     <td className="font-mono text-xs text-muted-foreground">{t.arn ?? "—"}</td>
                     <td>
-                      {t.package_key ? (
-                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${PKG_BADGE[pk] ?? "bg-muted text-muted-foreground"}`}>{t.package_key}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td>
                       {eff ? (
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${STATUS_BADGE[eff] ?? ""}`}>{eff}</span>
                       ) : (
@@ -213,7 +158,7 @@ export function TenantsTable({
                     <td className="text-right tabular-nums">{t.user_count}</td>
                     <td className="text-right tabular-nums">{t.investor_count}</td>
                     <td className="text-xs">
-                      {tab === "deleted" ? <RetentionCell deletedAt={t.deleted_at} retentionDays={retentionDays} /> : <span className={rn.cls}>{rn.label}</span>}
+                      {tab === "deleted" ? <RetentionCell deletedAt={t.deleted_at} retentionDays={retentionDays} /> : null}
                     </td>
                     <td className="text-right">
                       {tab === "deleted" ? (
