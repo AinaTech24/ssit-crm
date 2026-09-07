@@ -24,6 +24,7 @@ import { registerNomineePanDocs } from "@/lib/investors/nominee-docs";
 import { loadCustomFieldDefs, sanitizeCustomFields } from "@/lib/custom-fields/values";
 import { applyRiskCategory, RISK_CATEGORIES } from "@/lib/risk-profile/apply";
 import { cleanUccCodes } from "@/lib/investors/ucc";
+import { normaliseTags } from "@/lib/investors/client-tags";
 import { investors, eventsOutbox } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,12 @@ const CreateBody = z.object({
   bseUccCode: z.string().optional(),
   nseCanCode: z.string().optional(),
   uccCodes: z.array(z.string()).optional(),
+  // Per-platform client codes + the book tag(s) they belong to.
+  mfCode: z.string().max(60).optional(),
+  moCode: z.string().max(60).optional(),
+  bajajCode: z.string().max(60).optional(),
+  lasCode: z.string().max(60).optional(),
+  tags: z.array(z.string()).optional(),
   mandateStatus: z
     .enum(["none", "pending", "active", "expired", "rejected", "cancelled"])
     .optional(),
@@ -234,6 +241,11 @@ export async function POST(req: NextRequest) {
           bseUccCode: body.bseUccCode || null,
           nseCanCode: body.nseCanCode || null,
           uccCodes: cleanUccCodes(body.uccCodes),
+          mfCode: body.mfCode?.trim() || null,
+          moCode: body.moCode?.trim() || null,
+          bajajCode: body.bajajCode?.trim() || null,
+          lasCode: body.lasCode?.trim() || null,
+          tags: normaliseTags(body.tags),
           // KYC / compliance
           kycStatus: body.kycStatus ?? "pending",
           taxStatus: body.taxStatus || null,

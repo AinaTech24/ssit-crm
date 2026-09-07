@@ -8,17 +8,33 @@
  * Stored as a JSONB map on investors.crossSell: { productKey: statusKey }.
  */
 
+/**
+ * Order is the firm's, and it is load-bearing: the holdings card renders the
+ * first CROSS_SELL_COLUMN_SPLIT entries down the left column and the rest down
+ * the right, so moving an entry here moves it on screen.
+ *
+ * KEYS ARE STORAGE. Labels can be reworded freely, but a key rename orphans
+ * every investor row already carrying it — which is why "loan" keeps its key
+ * while reading "Loan Against Share".
+ */
 export const CROSS_SELL_PRODUCTS = [
-  ["mutual_funds", "Mutual Funds"],
+  // Left column — the investment side.
+  ["mutual_funds", "Mutual Fund"],
   ["demat", "Demat A/c"],
+  ["pms", "PMS"],
+  ["aif", "AIF"],
+  ["gift_city", "Gift City"],
+  // Right column — lending, protection and fixed income.
+  ["loan", "Loan Against Share"],
   ["life_insurance", "Life Insurance"],
   ["general_insurance", "General Insurance"],
-  ["health_insurance", "Health / Mediclaim"],
-  ["nps", "NPS"],
+  ["health_insurance", "Health Mediclaim"],
   ["fd_bonds_ncd", "FD / Bonds / NCD"],
-  ["pms", "PMS"],
-  ["loan", "Loan"],
+  ["nps", "NPS"],
 ] as const;
+
+/** Entries before this index go in the left column, the rest on the right. */
+export const CROSS_SELL_COLUMN_SPLIT = 5;
 
 export const CROSS_SELL_STATUSES = [
   ["held_with_us", "Held with us"],

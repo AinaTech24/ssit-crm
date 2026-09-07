@@ -13,6 +13,7 @@ import { Loader2, Save, Check, TrendingUp } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
 import {
   CROSS_SELL_PRODUCTS,
+  CROSS_SELL_COLUMN_SPLIT,
   CROSS_SELL_STATUSES,
   crossSellOpportunities,
   crossSellStatusLabel,
@@ -74,20 +75,30 @@ export function CrossSellCard({
         )}
       </div>
 
+      {/* Two explicit COLUMNS, not a 2-col grid: a grid flows 1,2 / 3,4 across
+          the rows, which would interleave the two lists. The firm reads this
+          top-to-bottom down each side, so each side is its own stack. */}
       <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
-        {CROSS_SELL_PRODUCTS.map(([key, label]) => (
-          <div key={key} className="flex items-center justify-between gap-2">
-            <span className="text-sm">{label}</span>
-            <SelectField
-              value={map[key] ?? ""}
-              onChange={(e) => setProduct(key, e.target.value)}
-              className="text-xs w-40"
-            >
-              <option value="">Select…</option>
-              {CROSS_SELL_STATUSES.map(([v, l]) => (
-                <option key={v} value={v}>{l}</option>
-              ))}
-            </SelectField>
+        {[
+          CROSS_SELL_PRODUCTS.slice(0, CROSS_SELL_COLUMN_SPLIT),
+          CROSS_SELL_PRODUCTS.slice(CROSS_SELL_COLUMN_SPLIT),
+        ].map((column, i) => (
+          <div key={i} className="space-y-2">
+            {column.map(([key, label]) => (
+              <div key={key} className="flex items-center justify-between gap-2">
+                <span className="text-sm">{label}</span>
+                <SelectField
+                  value={map[key] ?? ""}
+                  onChange={(e) => setProduct(key, e.target.value)}
+                  className="text-xs w-40"
+                >
+                  <option value="">Select…</option>
+                  {CROSS_SELL_STATUSES.map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </SelectField>
+              </div>
+            ))}
           </div>
         ))}
       </div>

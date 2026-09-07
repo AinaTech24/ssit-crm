@@ -77,6 +77,12 @@ export const investors = pgTable(
      *  MFU or multiple registrations). Free list, editable in the master form and
      *  importable. Migration 0178. */
     uccCodes: jsonb("ucc_codes").$type<string[]>().default([]),
+    /** Per-platform client codes (migration 0206). The BOOK a client belongs to
+     *  — Motilal Oswal / Mutual Fund — is a tag; these are the identifiers. */
+    mfCode: text("mf_code"),
+    moCode: text("mo_code"),
+    bajajCode: text("bajaj_code"),
+    lasCode: text("las_code"),
     mandateStatus: text("mandate_status", {
       enum: ["none", "pending", "active", "expired", "rejected", "cancelled"],
     }).default("none"),

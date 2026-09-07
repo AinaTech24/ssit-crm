@@ -21,6 +21,8 @@ import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
 import { NomineesField } from "@/components/investors/NomineesField";
 import { UccCodesField } from "@/components/investors/UccCodesField";
+import { ClientTagsField } from "@/components/investors/ClientTagsField";
+import { CLIENT_CODE_FIELDS } from "@/lib/investors/client-tags";
 import { cleanUccCodes } from "@/lib/investors/ucc";
 import { formatINR } from "@/lib/utils";
 import type { Nominee } from "@/lib/investors/nominee";
@@ -116,6 +118,11 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
     nominees: seedNominees,
     bankAccounts: seedBanks,
     bseUccCode: investor.bseUccCode ?? "",
+    tags: ((investor as any).tags as string[] | null) ?? [],
+    mfCode: (investor as any).mfCode ?? "",
+    moCode: (investor as any).moCode ?? "",
+    bajajCode: (investor as any).bajajCode ?? "",
+    lasCode: (investor as any).lasCode ?? "",
     nseCanCode: investor.nseCanCode ?? "",
     uccCodes: ((investor as any).uccCodes as string[] | undefined) ?? [],
     mandateStatus: investor.mandateStatus ?? "none",
@@ -227,6 +234,11 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
           }))
           .filter((b) => b.bankName),
         bseUccCode: f.bseUccCode || null,
+        tags: f.tags,
+        mfCode: f.mfCode || null,
+        moCode: f.moCode || null,
+        bajajCode: f.bajajCode || null,
+        lasCode: f.lasCode || null,
         nseCanCode: f.nseCanCode || null,
         uccCodes: cleanUccCodes(f.uccCodes),
         mandateStatus: inSet(f.mandateStatus, ["none", "pending", "active", "expired", "rejected", "cancelled"]),
@@ -432,6 +444,19 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
                     <F label="CAN (NSE)"><input value={f.nseCanCode} onChange={(e) => set("nseCanCode", e.target.value)} className="input-base" /></F>
                   </div>
                   <UccCodesField value={f.uccCodes} onChange={(v) => set("uccCodes", v)} label="Other UCC codes" />
+                  <ClientTagsField value={f.tags} onChange={(v) => set("tags", v)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    {CLIENT_CODE_FIELDS.map((c) => (
+                      <F key={c.key} label={c.label}>
+                        <input
+                          value={(f as any)[c.key]}
+                          onChange={(e) => set(c.key as any, e.target.value)}
+                          placeholder={c.placeholder}
+                          className="input-base"
+                        />
+                      </F>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <F label="Mandate status">
                       <SelectField value={f.mandateStatus} onChange={(e) => set("mandateStatus", e.target.value)} className="w-full">

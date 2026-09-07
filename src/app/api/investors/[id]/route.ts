@@ -19,6 +19,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny, can } from "@/lib/auth/rbac";
 import { cleanUccCodes } from "@/lib/investors/ucc";
+import { normaliseTags } from "@/lib/investors/client-tags";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { healthFields } from "@/lib/investors/health";
 import { computeNextReview } from "@/lib/investors/review-cadence";
@@ -161,6 +162,11 @@ const Patch = z.object({
   bseUccCode: z.string().max(40).nullable().optional(),
   nseCanCode: z.string().max(40).nullable().optional(),
   uccCodes: z.array(z.string()).nullable().optional(),
+  mfCode: z.string().max(60).nullable().optional(),
+  moCode: z.string().max(60).nullable().optional(),
+  bajajCode: z.string().max(60).nullable().optional(),
+  lasCode: z.string().max(60).nullable().optional(),
+  tags: z.array(z.string()).nullable().optional(),
   mandateStatus: z.enum(["none", "pending", "active", "expired", "rejected", "cancelled"]).nullable().optional(),
   mandateRefNo: z.string().max(60).nullable().optional(),
   status: z.enum(["active", "dormant", "inactive", "redemption_risk", "closed", "exited"]).optional(),
@@ -390,6 +396,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...datePatch,
           ...mirror,
           ...(parse.data.uccCodes !== undefined ? { uccCodes: cleanUccCodes(parse.data.uccCodes) } : {}),
+          // De-duplicate rather than trusting the client: the tag chips and the
+          // free-text box can both produce "Motilal Oswal".
+          ...(parse.data.tags !== undefined ? { tags: normaliseTags(parse.data.tags) } : {}),
           updatedAt: new Date(),
           ...(touchingKyc
             ? { kycLastUpdatedBy: session.userId }

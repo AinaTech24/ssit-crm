@@ -400,6 +400,13 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
                   {inv.segmentTag}
                 </span>
               )}
+              {/* Book tags — which distributor this client came through. Beside
+                  the segment chip because it is the same kind of fact. */}
+              {(((inv as any).tags as string[] | null) ?? []).map((t) => (
+                <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-brand-cyan-light text-brand-cyan-deep font-medium">
+                  {t}
+                </span>
+              ))}
               {/* KYC status intentionally omitted here — it lives in the
                   "Onboarding & compliance readiness" strip below (no duplication). */}
               <span className="text-xs">Onboarded {inv.onboardedAt ? formatDate(inv.onboardedAt) : "—"}</span>
@@ -845,6 +852,11 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
           {showPan && <KV label="UCC (BSE)" value={inv.bseUccCode ?? "—"} mono edit={{ id: inv.id, field: "bseUccCode", value: inv.bseUccCode ?? "", nullable: true }} />}
           {showPan && <KV label="CAN (NSE)" value={inv.nseCanCode ?? "—"} mono edit={{ id: inv.id, field: "nseCanCode", value: inv.nseCanCode ?? "", nullable: true }} />}
           {showPan && ((inv as any).uccCodes as string[] | undefined)?.length ? <KV label="Other UCCs" value={((inv as any).uccCodes as string[]).join(", ")} mono /> : null}
+          {/* Book codes. Inline-editable like the UCCs beside them. */}
+          <KV label="MF Code" value={(inv as any).mfCode ?? "—"} mono edit={{ id: inv.id, field: "mfCode", value: (inv as any).mfCode ?? "", nullable: true }} />
+          <KV label="MO Code" value={(inv as any).moCode ?? "—"} mono edit={{ id: inv.id, field: "moCode", value: (inv as any).moCode ?? "", nullable: true }} />
+          <KV label="Bajaj Code" value={(inv as any).bajajCode ?? "—"} mono edit={{ id: inv.id, field: "bajajCode", value: (inv as any).bajajCode ?? "", nullable: true }} />
+          <KV label="LAS" value={(inv as any).lasCode ?? "—"} mono edit={{ id: inv.id, field: "lasCode", value: (inv as any).lasCode ?? "", nullable: true }} />
           <Status label="Mandate" value={inv.mandateStatus ?? "none"} good={inv.mandateStatus === "active"} />
           <KV label="Mandate ref" value={inv.mandateRefNo ?? "—"} mono edit={{ id: inv.id, field: "mandateRefNo", value: inv.mandateRefNo ?? "", nullable: true }} />
           {inv.mandateAmount != null && <KV label="Mandate amount" value={formatINR(Number(inv.mandateAmount))} />}

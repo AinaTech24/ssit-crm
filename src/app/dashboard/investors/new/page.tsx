@@ -13,6 +13,8 @@ import { ReferralsField } from "@/components/investors/ReferralsField";
 import type { Referral } from "@/lib/investors/referral";
 import { UccCodesField } from "@/components/investors/UccCodesField";
 import { cleanUccCodes } from "@/lib/investors/ucc";
+import { ClientTagsField } from "@/components/investors/ClientTagsField";
+import { CLIENT_CODE_FIELDS } from "@/lib/investors/client-tags";
 import { CustomFieldsSection, missingRequired, type CustomFieldDef } from "@/components/common/CustomFieldInputs";
 
 function NewInvestorPageInner() {
@@ -55,6 +57,12 @@ function NewInvestorPageInner() {
     modeOfHolding: "",
     bseUccCode: "", // UCC No
     uccCodes: [] as string[],
+    // Which book the client sits in, and their code on each platform.
+    tags: [] as string[],
+    mfCode: "",
+    moCode: "",
+    bajajCode: "",
+    lasCode: "",
     taxStatus: "",
     residencyStatus: "",
     kycStatus: "pending",
@@ -147,6 +155,11 @@ function NewInvestorPageInner() {
           referralClientName: u(form.referralClientName),
           modeOfHolding: u(form.modeOfHolding),
           bseUccCode: u(form.bseUccCode),
+          tags: form.tags.length ? form.tags : undefined,
+          mfCode: u(form.mfCode),
+          moCode: u(form.moCode),
+          bajajCode: u(form.bajajCode),
+          lasCode: u(form.lasCode),
           uccCodes: cleanUccCodes(form.uccCodes),
           taxStatus: u(form.taxStatus),
           residencyStatus: form.residencyStatus || undefined,
@@ -285,6 +298,21 @@ function NewInvestorPageInner() {
           <div className="sm:col-span-2">
             <UccCodesField value={form.uccCodes} onChange={(v) => setForm((p) => ({ ...p, uccCodes: v }))} label="Other UCC codes" />
           </div>
+          <div className="sm:col-span-2">
+            <ClientTagsField
+              value={form.tags}
+              onChange={(v) => setForm((p) => ({ ...p, tags: v }))}
+            />
+          </div>
+          {CLIENT_CODE_FIELDS.map((c) => (
+            <Field
+              key={c.key}
+              label={c.label}
+              value={(form as any)[c.key]}
+              onChange={(v) => set(c.key as any, v)}
+              placeholder={c.placeholder}
+            />
+          ))}
           <Field label="Tax status" value={form.taxStatus} onChange={(v) => set("taxStatus", v)} placeholder="e.g. Resident Individual" />
           <SelectField label="Residential status" value={form.residencyStatus} onChange={(v) => set("residencyStatus", v)} options={[{ value: "", label: "Select" }, { value: "indian_resident", label: "Indian resident" }, { value: "nri", label: "NRI" }, { value: "oci", label: "OCI" }, { value: "pio", label: "PIO" }, { value: "foreign_national", label: "Foreign national" }]} />
           <SelectField label="KYC status" value={form.kycStatus} onChange={(v) => set("kycStatus", v)} options={[{ value: "pending", label: "Pending" }, { value: "registered", label: "Registered" }, { value: "verified", label: "Verified" }, { value: "hold", label: "Hold" }, { value: "rejected", label: "Rejected" }, { value: "expired", label: "Expired" }, { value: "re_kyc_required", label: "Re-KYC required" }]} />

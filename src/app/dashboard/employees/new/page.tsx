@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Copy } from "lucide-react";
 
-const ROLES = [
+const ROLES: { key: string; label: string; hint?: string }[] = [
+  // A firm can have more than one admin. Each one signs in with their OWN email
+  // and sets their OWN password when accepting the invite — no shared login.
+  // The API and the employee editor already allowed this role; only this list
+  // left it out, so the second admin could not be invited from the UI at all.
+  { key: "owner", label: "Owner / Firm Admin", hint: "Full access to the firm, including billing and team" },
   { key: "rm", label: "Relationship Manager" },
   { key: "back_office", label: "Back Office" },
   { key: "marketing", label: "Marketing" },
@@ -80,7 +85,10 @@ export default function InviteEmployeePage() {
                     onChange={() => toggleRole(r.key)}
                     className="size-3.5"
                   />
-                  <span className="text-sm">{r.label}</span>
+                  <span className="text-sm">
+                    {r.label}
+                    {r.hint && <span className="block text-[11px] text-muted-foreground">{r.hint}</span>}
+                  </span>
                 </label>
               ))}
             </div>
