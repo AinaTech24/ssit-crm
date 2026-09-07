@@ -140,7 +140,7 @@ export default async function ProfilePage() {
       {/* Leave entitlements */}
       <div className="border rounded-lg bg-card p-5">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">My leave (earned so far this FY)</h3>
+          <h3 className="font-semibold text-sm">My leave</h3>
           <Link href="/dashboard/leave-applications" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
             Apply / view <ArrowRight className="size-3" />
           </Link>
@@ -154,16 +154,16 @@ export default async function ProfilePage() {
               ) : (
                 <>
                   <div className="text-lg font-bold">{l.remaining}<span className="text-xs font-normal text-muted-foreground"> / {l.entitlement} left</span></div>
-                  <div className="text-[10px] text-muted-foreground">{l.used} used this FY</div>
+                  <div className="text-[10px] text-muted-foreground">{l.used} used</div>
                 </>
               )}
             </div>
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground mt-2">
-          Casual, sick and earned leave share one pool of {data.policy.annualTotal} days a year, earned{" "}
-          {data.policy.monthlyAccrual} a month — so the figure above is what you have accrued to date, not the
-          full year. Financial year runs Apr–Mar{custom ? " · includes your custom allowance" : ""}.
+          Total leaves {data.policy.annualTotal} a year — casual, sick and earned share one pool, earned{" "}
+          {data.policy.monthlyAccrual} a month, so the figure above is what you have accrued to date
+          {custom ? " · includes your custom allowance" : ""}.
         </p>
       </div>
 

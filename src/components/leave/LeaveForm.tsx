@@ -198,17 +198,28 @@ export function LeaveForm({
         {entitlement === null ? (
           <span className="text-muted-foreground">{LEAVE_TYPE_LABELS[leaveType]} is uncapped — no annual limit.</span>
         ) : (
-          <span className="inline-flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
             {overBalance && <AlertTriangle className="size-4" />}
-            {pooled ? "Paid leave" : LEAVE_TYPE_LABELS[leaveType]} balance: <b>{remaining}</b> of {entitlement}{" "}
-            {pooled ? "earned so far" : "left"} this FY ({used} used)
+            {/* Lead with TOTAL leaves — that is the number people know their
+                policy by. The accrued figure still has to appear, because it
+                is what actually limits this request, but it comes second. */}
+            {pooled ? (
+              <>
+                Total leaves <b>{annualTotal}</b> · available now <b>{remaining}</b> of {entitlement} earned
+                {" "}({used} used)
+              </>
+            ) : (
+              <>
+                {LEAVE_TYPE_LABELS[leaveType]} balance: <b>{remaining}</b> of {entitlement} left ({used} used)
+              </>
+            )}
             {overBalance && <span className="font-medium"> · this request ({days}) exceeds the balance</span>}
           </span>
         )}
         {pooled && (
           <div className="text-[11px] text-muted-foreground mt-1">
             Casual, sick and earned leave share one pool of {annualTotal} days a year, earned{" "}
-            {monthlyAccrual} a month.
+            {monthlyAccrual} a month — so only what you have earned so far is available today.
           </div>
         )}
       </div>

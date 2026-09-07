@@ -228,11 +228,11 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           value={attendancePct != null ? `${attendancePct}%` : "—"}
           accent={attendancePct != null && attendancePct < 80 ? "rose" : attendancePct != null ? "emerald" : "muted"}
         />
-        <Tile icon={CheckCircle2} label={`Leave left (of ${accrued} earned)`} value={String(totalLeaveBalance)} accent="emerald" />
+        <Tile icon={CheckCircle2} label={`Leave left (${accrued} earned of ${data.policy.annualTotal})`} value={String(totalLeaveBalance)} accent="emerald" />
         <Tile icon={AlertTriangle} label="Pending leave" value={String(data.pendingLeave)} accent={data.pendingLeave > 0 ? "amber" : "muted"} />
         <div className="card-surface p-3">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
-            <span>Leave used (FY)</span>
+            <span>Leave used</span>
             <Calendar className="size-3 text-muted-foreground" />
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">

@@ -276,13 +276,18 @@ export default async function TemplatesPage({
                         {tpl.updatedAt ? formatRelative(tpl.updatedAt) : "—"}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <RowActions
-                          editHref={`/dashboard/templates/${tpl.id}`}
-                          deleteUrl={`/api/templates/${tpl.id}`}
-                          itemLabel="template"
-                          itemName={tpl.name}
-                          verb="Archive"
-                        />
+                        {/* Edit + Archive are firm-admin only. Everyone else
+                            reads templates and nothing more, so they get no
+                            menu rather than options that 403 on click. */}
+                        {canCreate && (
+                          <RowActions
+                            editHref={`/dashboard/templates/${tpl.id}`}
+                            deleteUrl={`/api/templates/${tpl.id}`}
+                            itemLabel="template"
+                            itemName={tpl.name}
+                            verb="Archive"
+                          />
+                        )}
                       </td>
                     </tr>
                   );

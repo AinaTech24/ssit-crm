@@ -77,8 +77,10 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [givenOn, setGivenOn] = useState(() => new Date().toISOString().slice(0, 10));
-  // Blank = logged but not delivered yet. Setting it intimates the client's RM.
-  const [deliveredOn, setDeliveredOn] = useState("");
+  // Defaults to today: when someone logs a gift they have almost always
+  // already handed it over, and a blank default meant the common case notified
+  // nobody. Clear it for a gift that is ordered but not yet delivered.
+  const [deliveredOn, setDeliveredOn] = useState(() => new Date().toISOString().slice(0, 10));
   const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
 
@@ -144,7 +146,7 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
       setTitle("");
       setAmount("");
       setGivenOn(new Date().toISOString().slice(0, 10));
-      setDeliveredOn("");
+      setDeliveredOn(new Date().toISOString().slice(0, 10));
       setNotes("");
       setShowForm(false);
       await load();
@@ -351,8 +353,8 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
                   </label>
                   <DateField value={deliveredOn} onChange={(e) => setDeliveredOn(e.target.value)} />
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    Leave blank if it has not reached the client yet — you can mark it delivered later. Setting
-                    a date notifies the client&apos;s RM.
+                    Notifies the client&apos;s RM that the gift has landed. Clear it if the gift has not reached
+                    them yet — you can mark it delivered later.
                   </p>
                 </div>
                 <div className="sm:col-span-2">

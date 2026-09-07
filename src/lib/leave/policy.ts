@@ -124,24 +124,37 @@ export function accruedPoolDays(opts?: {
  * Pooled types report the accrued pool; everything else keeps the per-type
  * entitlement (comp-off = granted, unpaid/other = null = uncapped).
  */
-export function poolAwareEntitlement(
-  leaveType: string,
-  opts: {
-    customEntitlements?: Record<string, number> | null;
-    tenantEntitlements?: Record<string, number | null> | null;
-    joiningDate?: string | null;
-    annualTotal?: number | null;
-    monthlyAccrual?: number | null;
-    today?: Date;
-  },
-): number | null {
-  if (isPooledLeaveType(leaveType)) {
-    // A per-EMPLOYEE override still wins — that is how a firm grants someone a
-    // larger allowance without moving the firm-wide policy.
-    const custom = opts.customEntitlements?.[leaveType];
-    if (custom !== undefined && custom !== null) return Number(custom);
-    return accruedPoolDays(opts);
-  }
+export type PoolOpts = {
+  customEntitlements?: Record<string, number> | null;
+  tenantEntitlements?: Record<string, number | null> | null;
+  joiningDate?: string | null;
+  annualTotal?: number | null;
+  monthlyAccrual?: number | null;
+  today?: Date;
+};
+
+/**
+ * The pool days available to this person right now.
+ *
+ * A per-EMPLOYEE override wins — that is how a firm grants someone a larger
+ * allowance without moving the firm-wide policy. An override on ANY pooled type
+ * raises the whole pool (the largest wins), because the pool is one bucket:
+ * granting 30 casual days while capping the pool at the accrued 9 would be a
+ * grant that cannot be spent.
+ *
+ * Every caller goes through here. The form and the balance summaries used to
+ * compute this separately and could disagree.
+ */
+export function poolEntitlement(opts: PoolOpts): number {
+  const customs = POOLED_LEAVE_TYPES.map((t) => opts.customEntitlements?.[t]).filter(
+    (v): v is number => v !== undefined && v !== null && Number.isFinite(Number(v))
+  ).map(Number);
+  if (customs.length > 0) return Math.max(...customs);
+  return accruedPoolDays(opts);
+}
+
+export function poolAwareEntitlement(leaveType: string, opts: PoolOpts): number | null {
+  if (isPooledLeaveType(leaveType)) return poolEntitlement(opts);
   return getEntitlement(leaveType, opts.customEntitlements, opts.tenantEntitlements);
 }
 
@@ -177,7 +190,7 @@ export function buildLeaveBalanceRows(opts: {
   extraTypes?: string[];
 }): LeaveBalanceRow[] {
   const total = opts.annualTotal ?? LEAVE_ANNUAL_TOTAL;
-  const accrued = accruedPoolDays(opts);
+  const accrued = poolEntitlement(opts);
   const poolUsed = pooledUsed(opts.usedByType);
   const rows: LeaveBalanceRow[] = [
     {

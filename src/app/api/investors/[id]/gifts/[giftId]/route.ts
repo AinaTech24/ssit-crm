@@ -37,6 +37,15 @@ export async function DELETE(
           AND investor_id = ${id}::uuid
           AND tenant_id = ${session.tenantId}::uuid
       `);
+      // Drop the intimation with the gift. Left behind it becomes a notice
+      // about a gift that no longer exists — and re-adding the same gift then
+      // reads as a duplicate notification.
+      await tx.execute(sql`
+        DELETE FROM notifications
+        WHERE tenant_id = ${session.tenantId}::uuid
+          AND kind IN ('gift.delivered', 'gift.anniversary')
+          AND meta->>'giftId' = ${giftId}
+      `);
     });
     return NextResponse.json({ ok: true });
   } catch (err: any) {
@@ -106,6 +115,7 @@ export async function PATCH(
         const sent = await notifyGiftDelivered(tx, {
           tenantId: session.tenantId,
           rmId: inv.rm_id,
+          giftId: giftId,
           investorId: id,
           clientName: inv.name ?? "this client",
           giftTitle: g.title,

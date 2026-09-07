@@ -424,6 +424,7 @@ export async function scanTenant(tenantId: string): Promise<ScanResult> {
         await notifyGiftAnniversary(tx, {
           tenantId,
           rmId: row.rm_id,
+          giftId: row.id,
           investorId: row.investor_id,
           clientName: row.investor_name ?? "this client",
           giftTitle: row.title,

@@ -21,6 +21,8 @@ import { createNotification } from "@/lib/notifications/create";
 
 export type GiftIntimation = {
   tenantId: string;
+  /** Lets the notification be removed when the gift is deleted. */
+  giftId?: string | null;
   /** The client's owning RM. Null/undefined = nobody to tell; no-op. */
   rmId: string | null | undefined;
   investorId: string;
@@ -54,7 +56,7 @@ export async function notifyGiftDelivered(tx: any, g: GiftIntimation): Promise<b
     body: `${g.giftTitle}${rupees(g.amount)} was delivered on ${pretty(g.onDate)}. Worth a call.`,
     linkUrl: `/dashboard/investors/${g.investorId}`,
     severity: "success",
-    meta: { investorId: g.investorId, giftTitle: g.giftTitle, deliveredOn: g.onDate },
+    meta: { giftId: g.giftId ?? null, investorId: g.investorId, giftTitle: g.giftTitle, deliveredOn: g.onDate },
   });
   return true;
 }
@@ -70,7 +72,7 @@ export async function notifyGiftAnniversary(tx: any, g: GiftIntimation): Promise
     body: `Last year on ${pretty(g.onDate)} you sent ${g.giftTitle}${rupees(g.amount)}. Time to plan this year's — and pick something different.`,
     linkUrl: `/dashboard/investors/${g.investorId}`,
     severity: "info",
-    meta: { investorId: g.investorId, giftTitle: g.giftTitle, previousOn: g.onDate },
+    meta: { giftId: g.giftId ?? null, investorId: g.investorId, giftTitle: g.giftTitle, previousOn: g.onDate },
   });
   return true;
 }

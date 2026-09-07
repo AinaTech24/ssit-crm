@@ -136,6 +136,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const sent = await notifyGiftDelivered(tx, {
           tenantId: session.tenantId,
           rmId: inv.rm_id,
+          giftId: gift.id,
           investorId: id,
           clientName: inv.name ?? "this client",
           giftTitle: gift.title,
