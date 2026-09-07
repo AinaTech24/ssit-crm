@@ -13,7 +13,7 @@
  * queries keep working.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -37,6 +37,8 @@ import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
 import { AttachmentPicker, uploadAttachments } from "@/components/common/EntityAttachments";
+import { useToast } from "@/components/ui/Toast";
+import { readApiError, readThrownError } from "@/lib/api/client-error";
 import { DateField } from "@/components/ui/DateField";
 
 type TaskTemplate = {
@@ -77,6 +79,7 @@ const DEPARTMENTS: [string, string][] = [
 
 export default function NewTaskPage() {
   const router = useRouter();
+  const toast = useToast();
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -120,18 +123,32 @@ export default function NewTaskPage() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [titleTouched, setTitleTouched] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch("/api/task-templates");
-        if (!r.ok) return;
-        const j = await r.json();
-        setTemplates(Array.isArray(j.templates) ? j.templates : []);
-      } catch {
-        /* templates are optional — ignore */
+  // Templates are optional, but SILENTLY optional was the bug: when this call
+  // failed the picker just rendered empty, indistinguishable from a firm that
+  // has no templates. Say so, and let the rest of the form carry on.
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const loadTemplates = useCallback(async (opts?: { silent?: boolean }) => {
+    setTemplatesError(null);
+    try {
+      const r = await fetch("/api/task-templates");
+      if (!r.ok) {
+        const f = await readApiError(r, "load task templates");
+        setTemplatesError(f.message);
+        if (!opts?.silent) toast.error(f.message);
+        return;
       }
-    })();
-  }, []);
+      const j = await r.json();
+      setTemplates(Array.isArray(j.templates) ? j.templates : []);
+    } catch (e) {
+      const f = readThrownError(e, "load task templates");
+      setTemplatesError(f.message);
+      if (!opts?.silent) toast.error(f.message);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    void loadTemplates({ silent: true });
+  }, [loadTemplates]);
 
   function applyTemplate(id: string) {
     setTemplateId(id);
@@ -264,6 +281,18 @@ export default function NewTaskPage() {
       </div>
 
       {/* Start from a template */}
+      {templatesError && (
+        <div className="card-surface p-4 text-xs text-rose-700 bg-rose-50 border border-rose-200 flex items-start justify-between gap-3">
+          <span>{templatesError} You can still fill the form in by hand.</span>
+          <button
+            type="button"
+            onClick={() => void loadTemplates()}
+            className="shrink-0 font-medium underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {templates.length > 0 && (
         <div className="card-surface p-5 space-y-3">
           <div className="flex items-center gap-2">

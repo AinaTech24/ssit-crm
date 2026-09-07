@@ -9,8 +9,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Cake, Gift, Trash2, Plus, Loader2, Check, Truck } from "lucide-react";
+import { Cake, Gift, Trash2, Plus, Loader2, Check, Truck, RefreshCw } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
+import { useToast } from "@/components/ui/Toast";
+import { readApiError, readThrownError } from "@/lib/api/client-error";
 import { DateField } from "@/components/ui/DateField";
 
 type GiftRow = {
@@ -61,6 +63,7 @@ function daysUntilBirthday(dob: string): number {
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function ClientGifts({ investorId, clientName }: { investorId: string; clientName: string }) {
+  const toast = useToast();
   const [data, setData] = useState<GiftsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,21 +87,32 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
   const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     setError(null);
     try {
       const res = await fetch(`/api/investors/${investorId}/gifts`, { cache: "no-store" });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Failed to load gifts");
+      if (!res.ok) {
+        const f = await readApiError(res, "load gifts");
+        setError(f.message);
+        // Silent on the first automatic load — the inline panel already says
+        // what happened, and a toast on page open for something the user did
+        // not click is noise. Retries and writes DO toast.
+        if (!opts?.silent) toast.error(f.message);
+        return;
+      }
       setData((await res.json()) as GiftsData);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load");
+    } catch (e) {
+      const f = readThrownError(e, "load gifts");
+      setError(f.message);
+      if (!opts?.silent) toast.error(f.message);
     } finally {
       setLoading(false);
     }
-  }, [investorId]);
+    // toast is stable (context value), but list it so the linter agrees.
+  }, [investorId, toast]);
 
   useEffect(() => {
-    void load();
+    void load({ silent: true });
   }, [load]);
 
   async function saveBudget() {
@@ -113,11 +127,19 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ budget }),
       });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Failed to save budget");
+      if (!res.ok) {
+        const f = await readApiError(res, "save the budget");
+        setError(f.message);
+        toast.error(f.message);
+        return;
+      }
       setEditingBudget(false);
-      await load();
+      await load({ silent: true });
+      toast.success("Budget saved");
     } catch (e: any) {
-      setError(e?.message || "Failed to save budget");
+      const f = readThrownError(e, "save the budget");
+      setError(f.message);
+      toast.error(f.message);
     } finally {
       setSavingBudget(false);
     }
@@ -183,10 +205,18 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
     setError(null);
     try {
       const res = await fetch(`/api/investors/${investorId}/gifts/${giftId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Failed to delete");
-      await load();
+      if (!res.ok) {
+        const f = await readApiError(res, "delete the gift");
+        setError(f.message);
+        toast.error(f.message);
+        return;
+      }
+      await load({ silent: true });
+      toast.success("Gift removed");
     } catch (e: any) {
-      setError(e?.message || "Failed to delete gift");
+      const f = readThrownError(e, "delete the gift");
+      setError(f.message);
+      toast.error(f.message);
     }
   }
 
@@ -220,8 +250,15 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
       ) : (
         <>
           {error && (
-            <div className="mb-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">
-              {error}
+            <div className="mb-3 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2 flex items-start justify-between gap-3">
+              <span>{error}</span>
+              <button
+                type="button"
+                onClick={() => { setLoading(true); void load(); }}
+                className="shrink-0 inline-flex items-center gap-1 font-medium underline hover:no-underline"
+              >
+                <RefreshCw className="size-3" /> Retry
+              </button>
             </div>
           )}
 
