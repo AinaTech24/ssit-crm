@@ -18,8 +18,11 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
+import { notifyGiftDelivered } from "@/lib/gifts/notify";
 
 export const dynamic = "force-dynamic";
+
+const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd");
 
 const AddBody = z.object({
   occasion: z.enum(["birthday", "anniversary", "festival", "other"]).default("birthday"),
@@ -27,6 +30,8 @@ const AddBody = z.object({
   amount: z.number().int().min(0).default(0),
   givenOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd"),
   notes: z.string().max(500).optional(),
+  /** Set when the gift has already reached the client — intimates the RM. */
+  deliveredOn: DateStr.nullish(),
 });
 
 const BudgetBody = z.object({
@@ -40,6 +45,7 @@ function mapGift(r: any) {
     title: r.title as string,
     amount: Number(r.amount ?? 0),
     givenOn: r.given_on as string,
+    deliveredOn: (r.delivered_on as string | null) ?? null,
     notes: (r.notes as string | null) ?? null,
     createdAt: r.created_at as string,
   };
@@ -60,7 +66,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       if (!inv) return null;
 
       const giftRes = await tx.execute(sql`
-        SELECT id, occasion, title, amount, given_on, notes, created_at
+        SELECT id, occasion, title, amount, given_on, delivered_on, notes, created_at
         FROM client_gifts
         WHERE tenant_id = ${session.tenantId}::uuid AND investor_id = ${id}::uuid
         ORDER BY given_on DESC, created_at DESC
@@ -97,15 +103,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const result = await withTenant(session.tenantId, async (tx) => {
       // Verify the investor is visible in-tenant before inserting.
+      // Pull the RM up front — the intimation below needs it, and it doubles
+      // as the in-tenant existence check.
       const invRes = await tx.execute(sql`
-        SELECT 1 FROM investors
+        SELECT name, rm_id FROM investors
         WHERE id = ${id}::uuid AND tenant_id = ${session.tenantId}::uuid
         LIMIT 1
       `);
       if (invRes.rows.length === 0) return null;
+      const inv = invRes.rows[0] as { name: string | null; rm_id: string | null };
 
       const ins = await tx.execute(sql`
-        INSERT INTO client_gifts (tenant_id, investor_id, occasion, title, amount, given_on, notes, created_by)
+        INSERT INTO client_gifts (tenant_id, investor_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
         VALUES (
           ${session.tenantId}::uuid,
           ${id}::uuid,
@@ -113,12 +122,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           ${body.title},
           ${body.amount},
           ${body.givenOn}::date,
+          ${body.deliveredOn ?? null}::date,
           ${body.notes ?? null},
           ${session.userId}::uuid
         )
-        RETURNING id, occasion, title, amount, given_on, notes, created_at
+        RETURNING id, occasion, title, amount, given_on, delivered_on, notes, created_at
       `);
-      return mapGift(ins.rows[0]);
+      const gift = mapGift(ins.rows[0]);
+
+      // Logged as already delivered → tell the RM now. Whoever ships the gift
+      // is often not the RM, and the RM is the one who speaks to the client.
+      if (gift.deliveredOn) {
+        const sent = await notifyGiftDelivered(tx, {
+          tenantId: session.tenantId,
+          rmId: inv.rm_id,
+          investorId: id,
+          clientName: inv.name ?? "this client",
+          giftTitle: gift.title,
+          amount: gift.amount,
+          onDate: gift.deliveredOn,
+        });
+        if (sent) {
+          await tx.execute(sql`
+            UPDATE client_gifts SET rm_notified_at = now() WHERE id = ${gift.id}::uuid
+          `);
+        }
+      }
+      return gift;
     });
     if (!result) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json(result, { status: 201 });

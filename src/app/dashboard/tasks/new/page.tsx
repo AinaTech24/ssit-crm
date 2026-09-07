@@ -36,6 +36,7 @@ import {
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
+import { AttachmentPicker, uploadAttachments } from "@/components/common/EntityAttachments";
 import { DateField } from "@/components/ui/DateField";
 
 type TaskTemplate = {
@@ -59,6 +60,7 @@ const KNOWN_TYPES = [
   "collect_document",
   "kyc_renewal",
   "mandate_renewal",
+  "marketing_material",
 ];
 
 const DEPARTMENTS: [string, string][] = [
@@ -113,6 +115,9 @@ export default function NewTaskPage() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [templateId, setTemplateId] = useState("");
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  // Held in memory until the task exists — a task id is needed to upload
+  // against. See save().
+  const [attachments, setAttachments] = useState<File[]>([]);
   const [titleTouched, setTitleTouched] = useState(false);
 
   useEffect(() => {
@@ -226,6 +231,17 @@ export default function NewTaskPage() {
         setErr(j.error ?? `Save failed (${res.status})`);
         return;
       }
+      // Files can only be attached once the task has an id. A failure here must
+      // not read as "the task was not created" — it was; say what actually went
+      // wrong and leave the user on the form with the files still picked.
+      if (attachments.length > 0 && j?.id) {
+        try {
+          await uploadAttachments(`/api/tasks/${j.id}/attachments`, attachments);
+        } catch (e: any) {
+          setErr(`Task created, but the files did not upload: ${e?.message ?? "unknown error"}`);
+          return;
+        }
+      }
       router.push(`/dashboard/tasks`);
     } finally {
       setBusy(false);
@@ -313,6 +329,13 @@ export default function NewTaskPage() {
             className="input-base text-xs"
           />
         </label>
+
+        <AttachmentPicker
+          files={attachments}
+          onChange={setAttachments}
+          disabled={busy}
+          hint="Drop a brief, artwork or a form here — or use “Add files”. One file or many. They upload once the task is created. Max 25 MB each."
+        />
       </div>
 
       {/* Related entities */}
@@ -420,6 +443,7 @@ export default function NewTaskPage() {
               <option value="collect_document">Collect document</option>
               <option value="kyc_renewal">KYC renewal</option>
               <option value="mandate_renewal">Mandate renewal</option>
+              <option value="marketing_material">Marketing Material</option>
               <option value="custom">Custom</option>
             </SelectField>
             {form.type === "custom" && (

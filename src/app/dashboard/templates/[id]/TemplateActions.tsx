@@ -12,6 +12,8 @@ interface TemplateActionsProps {
   versionStatus: string;
   versionNumber: number;
   hasApproveRole: boolean;
+  /** Firm-admin authoring rights (template.create). Approval is separate. */
+  canAuthor: boolean;
 }
 
 export function TemplateActions({
@@ -21,6 +23,7 @@ export function TemplateActions({
   versionStatus,
   versionNumber,
   hasApproveRole,
+  canAuthor,
 }: TemplateActionsProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -72,7 +75,7 @@ export function TemplateActions({
       )}
 
       <div className="flex gap-2 items-center flex-wrap">
-        {versionStatus === "draft" && (
+        {versionStatus === "draft" && canAuthor && (
           <>
             <Link
               href={`/dashboard/templates/${templateId}/edit`}
@@ -90,7 +93,10 @@ export function TemplateActions({
           </>
         )}
 
-        {(templateStatus === "approved" || versionStatus === "approved_internal" || versionStatus === "approved_external") && (
+        {canAuthor &&
+          (templateStatus === "approved" ||
+            versionStatus === "approved_internal" ||
+            versionStatus === "approved_external") && (
           <button
             onClick={() => handleAction(`/api/templates/${templateId}/version`)}
             disabled={loading}

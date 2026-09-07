@@ -66,7 +66,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "template.edit", session.permissions);
+    // Authoring a template is firm-admin only (template.create). NOT
+    // template.edit — marketing holds that for the content library, designer
+    // test sends and the WhatsApp sync, none of which change what the firm is
+    // allowed to say to investors.
+    requireCap(session.roles, "template.create", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     
     const parse = Patch.safeParse(await req.json().catch(() => ({})));
@@ -175,7 +179,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "template.edit", session.permissions);
+    // Authoring a template is firm-admin only (template.create). NOT
+    // template.edit — marketing holds that for the content library, designer
+    // test sends and the WhatsApp sync, none of which change what the firm is
+    // allowed to say to investors.
+    requireCap(session.roles, "template.create", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const clientMeta = clientMetaFromHeaders(req.headers);
     await withTenant(session.tenantId, async (tx) => {

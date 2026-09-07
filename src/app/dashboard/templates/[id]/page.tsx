@@ -67,6 +67,9 @@ export default async function TemplateDetailPage({
   const { tpl, ver, allVersions } = data;
 
   const hasApproveRole = can(session.roles, "template.approve", session.permissions);
+  // Authoring (edit / new version / submit) is firm-admin only — the same
+  // capability the API enforces, so nobody is shown a button that 403s.
+  const canAuthor = can(session.roles, "template.create", session.permissions);
   const Icon = channelIcons[tpl.channel as keyof typeof channelIcons] ?? MessageSquare;
 
   return (
@@ -113,6 +116,7 @@ export default async function TemplateDetailPage({
               versionStatus={ver.approvalStatus}
               versionNumber={ver.versionNumber}
               hasApproveRole={hasApproveRole}
+              canAuthor={canAuthor}
             />
           </div>
         )}

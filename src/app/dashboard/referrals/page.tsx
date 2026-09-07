@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { Users, TrendingUp, Heart, CheckCircle2, Clock, Sparkles, Phone } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { requireAny } from "@/lib/auth/rbac";
 import { formatINR, formatDate } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -15,6 +16,10 @@ export default async function ReferralsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
+  // Every query below is firm-wide — there is no per-RM scoping — so this needs
+  // the firm-wide client capability. It matters now that the page is reachable
+  // from the sidebar: an RM opening it would otherwise see colleagues' books.
+  requireAny(session.roles, ["investor.view.all"], session.permissions);
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const minOnly = sp.min === "2";

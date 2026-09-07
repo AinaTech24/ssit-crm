@@ -13,6 +13,7 @@
  *                                    not already flagged
 *   investor.kyc_expiring          — CKYC expiry within 30 days
  *   investor.kyc_expired           — CKYC expiry passed; kyc_status auto-set to expired
+ *   investor.gift_anniversary      — a gift was delivered a year ago today
  *   investor.risk_profile_expired  — risk profile signed > 365 days ago
  *   goal.drift                     — an investor's goal is >10pp behind its
  *                                    time-trajectory (one per investor/day)
@@ -48,6 +49,7 @@
  */
 
 import { eq, sql } from "drizzle-orm";
+import { notifyGiftAnniversary } from "@/lib/gifts/notify";
 import { withSystem, withTenant } from "@/db/client";
 import { readSoftDeleteRetentionDays } from "@/lib/platform/retention";
 import { recomputeAllHealth } from "@/lib/investors/health-persist";
@@ -64,6 +66,7 @@ interface ScanResult {
   dormant: number;
   kycExpiring: number;
   kycExpired: number;
+  giftAnniversary: number;
   riskExpired: number;
   /** Compliance-vault documents expiring within 30 days. */
   docsExpiring: number;
@@ -146,6 +149,7 @@ export async function scanTenant(tenantId: string): Promise<ScanResult> {
     dormant: 0,
     kycExpiring: 0,
     kycExpired: 0,
+    giftAnniversary: 0,
     riskExpired: 0,
     docsExpiring: 0,
     docsExpired: 0,
@@ -384,6 +388,59 @@ export async function scanTenant(tenantId: string): Promise<ScanResult> {
           entityType: "investor",
           entityId: row.id,
           after: { name: row.name, expiredAt: row.ckyc_expiry_at, rmId: row.rm_id } as any,
+          meta: { scanDate, source: "daily-ops-scanner" } as any,
+        } as any).onConflictDoNothing();
+      }
+
+      // ── 5c. Gift delivered a year ago today → remind the RM ───────────
+      // A gift is an annual habit, and the RM plans this year's from what they
+      // sent last year — usually to avoid repeating it. Left to memory, last
+      // year's gift is a row nobody reopens.
+      //
+      // Keyed on delivered_on, falling back to given_on for rows written before
+      // migration 0205 added the delivery date.
+      const giftRows = await tx.execute(sql`
+        SELECT g.id, g.title, g.amount,
+               COALESCE(g.delivered_on, g.given_on) AS on_date,
+               i.id AS investor_id, i.name AS investor_name, i.rm_id
+          FROM client_gifts g
+          JOIN investors i ON i.id = g.investor_id AND i.tenant_id = g.tenant_id
+         WHERE g.tenant_id = ${tenantId}::uuid
+           AND i.status = 'active'
+           AND i.deleted_at IS NULL
+           AND i.rm_id IS NOT NULL
+           AND COALESCE(g.delivered_on, g.given_on) = CURRENT_DATE - INTERVAL '1 year'
+      `);
+      result.giftAnniversary = giftRows.rows.length;
+      for (const row of giftRows.rows as Array<{
+        id: string;
+        title: string;
+        amount: number | string;
+        on_date: string;
+        investor_id: string;
+        investor_name: string | null;
+        rm_id: string;
+      }>) {
+        await notifyGiftAnniversary(tx, {
+          tenantId,
+          rmId: row.rm_id,
+          investorId: row.investor_id,
+          clientName: row.investor_name ?? "this client",
+          giftTitle: row.title,
+          amount: Number(row.amount ?? 0),
+          onDate: String(row.on_date).slice(0, 10),
+        });
+        await tx.insert(eventsOutbox).values({
+          tenantId,
+          kind: "investor.gift_anniversary",
+          entityType: "investor",
+          entityId: row.investor_id,
+          after: {
+            name: row.investor_name,
+            giftTitle: row.title,
+            previousOn: String(row.on_date).slice(0, 10),
+            rmId: row.rm_id,
+          } as any,
           meta: { scanDate, source: "daily-ops-scanner" } as any,
         } as any).onConflictDoNothing();
       }
@@ -1319,6 +1376,7 @@ export async function runDailyOpsScan(): Promise<{
     dormant: 0,
     kycExpiring: 0,
     kycExpired: 0,
+    giftAnniversary: 0,
     riskExpired: 0,
     docsExpiring: 0,
     docsExpired: 0,
@@ -1359,6 +1417,7 @@ export async function runDailyOpsScan(): Promise<{
       totals.dormant += r.dormant;
       totals.kycExpiring += r.kycExpiring;
       totals.kycExpired += r.kycExpired;
+      totals.giftAnniversary += r.giftAnniversary;
       totals.riskExpired += r.riskExpired;
       totals.docsExpiring += r.docsExpiring;
       totals.docsExpired += r.docsExpired;

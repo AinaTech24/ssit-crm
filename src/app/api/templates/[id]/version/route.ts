@@ -15,7 +15,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "template.edit", session.permissions);
+    // New version = new content. Firm-admin only, same bar as create/edit.
+    requireCap(session.roles, "template.create", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const clientMeta = clientMetaFromHeaders(req.headers);

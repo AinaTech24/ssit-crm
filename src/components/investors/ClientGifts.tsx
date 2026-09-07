@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Cake, Gift, Trash2, Plus, Loader2 } from "lucide-react";
+import { Cake, Gift, Trash2, Plus, Loader2, Check, Truck } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
 
@@ -19,6 +19,7 @@ type GiftRow = {
   title: string;
   amount: number;
   givenOn: string;
+  deliveredOn: string | null;
   notes: string | null;
   createdAt: string;
 };
@@ -76,6 +77,9 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [givenOn, setGivenOn] = useState(() => new Date().toISOString().slice(0, 10));
+  // Blank = logged but not delivered yet. Setting it intimates the client's RM.
+  const [deliveredOn, setDeliveredOn] = useState("");
+  const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
 
   const load = useCallback(async () => {
@@ -128,6 +132,7 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
         body: JSON.stringify({
           occasion,
           title: title.trim(),
+          deliveredOn: deliveredOn || null,
           amount: amount.trim() === "" ? 0 : Math.max(0, Math.round(Number(amount))),
           givenOn,
           notes: notes.trim() || undefined,
@@ -139,6 +144,7 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
       setTitle("");
       setAmount("");
       setGivenOn(new Date().toISOString().slice(0, 10));
+      setDeliveredOn("");
       setNotes("");
       setShowForm(false);
       await load();
@@ -146,6 +152,28 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
       setError(e?.message || "Failed to add gift");
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * Records delivery for a gift already in the log. The API intimates the
+   * client's RM exactly once (rm_notified_at), so pressing this twice is safe.
+   */
+  async function markDelivered(giftId: string) {
+    setError(null);
+    setDeliveringId(giftId);
+    try {
+      const res = await fetch(`/api/investors/${investorId}/gifts/${giftId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deliveredOn: new Date().toISOString().slice(0, 10) }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || "Failed to update");
+      await load();
+    } catch (e: any) {
+      setError(e?.message || "Failed to mark delivered");
+    } finally {
+      setDeliveringId(null);
     }
   }
 
@@ -318,6 +346,16 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
                   <DateField value={givenOn} onChange={(e) => setGivenOn(e.target.value)} />
                 </div>
                 <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Delivered on <span className="font-normal">(optional)</span>
+                  </label>
+                  <DateField value={deliveredOn} onChange={(e) => setDeliveredOn(e.target.value)} />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Leave blank if it has not reached the client yet — you can mark it delivered later. Setting
+                    a date notifies the client&apos;s RM.
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-muted-foreground mb-1">Title</label>
                   <input
                     value={title}
@@ -394,9 +432,29 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
                       <span className="font-medium text-sm truncate">{g.title}</span>
                       <span className="text-sm font-semibold tabular-nums">₹{inr(g.amount)}</span>
                     </div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      {fmtDate(g.givenOn)}
-                      {g.notes ? <span className="ml-2 italic">{g.notes}</span> : null}
+                    <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>{fmtDate(g.givenOn)}</span>
+                      {g.deliveredOn ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-700">
+                          <Check className="size-3" /> Delivered {fmtDate(g.deliveredOn)}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => markDelivered(g.id)}
+                          disabled={deliveringId === g.id}
+                          className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 hover:bg-accent disabled:opacity-50"
+                          title="Records delivery and notifies the client's RM"
+                        >
+                          {deliveringId === g.id ? (
+                            <Loader2 className="size-3 animate-spin" />
+                          ) : (
+                            <Truck className="size-3" />
+                          )}
+                          Mark delivered
+                        </button>
+                      )}
+                      {g.notes ? <span className="italic">{g.notes}</span> : null}
                     </div>
                   </div>
                   <button

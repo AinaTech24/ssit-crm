@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   ScrollText,
   HeartHandshake,
+  Share2,
   Target,
   TrendingUp,
   Repeat,
@@ -134,6 +135,10 @@ const NAV: NavSection[] = [
         roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
       { href: "/dashboard/families", label: "Family Mapping", icon: HeartHandshake, module: "family_mapping",
         roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
+      // No "rm": the page is firm-wide with no per-RM scoping (see its
+      // requireAny), so an RM would only get a locked door.
+      { href: "/dashboard/referrals", label: "Referrals", icon: Share2, module: "client_master",
+        roles: ["owner", "branch_head", "back_office", "ops", "compliance"] },
       // Client Onboarding module retired — its 11-stage pipeline is now
       // covered by the unified 30-stage blueprint engine that owns both
       // Leads (1-10) and Clients (11-30). Page redirects to /dashboard/leads.
