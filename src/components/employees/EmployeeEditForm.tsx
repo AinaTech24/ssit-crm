@@ -21,7 +21,7 @@ import {
   Briefcase
 } from "lucide-react";
 import { can, type Capability } from "@/lib/auth/rbac";
-import { NAV_ACCESS_GROUPS } from "@/config/nav-access";
+import { NAV_ACCESS_GROUPS, roleDefaultNavKeys } from "@/config/nav-access";
 import { CAPABILITY_GROUPS } from "@/lib/auth/capability-catalog";
 import { formatINR, formatDate } from "@/lib/utils";
 import { SelectField } from "@/components/ui/SelectField";
@@ -601,7 +601,16 @@ export function EmployeeEditForm({
                     onChange={(e) => {
                       setModuleAccessActive(e.target.checked);
                       if (e.target.checked && (!v.enabledModules || v.enabledModules.length === 0)) {
-                        setV((prev) => ({ ...prev, enabledModules: [...tenantNavKeys] }));
+                        // Seed from what this person can ALREADY see, not from
+                        // the whole firm — for a role with a narrow default
+                        // (back office) ticking "Limit access" used to silently
+                        // widen them to everything before the admin touched a
+                        // single box.
+                        const roleDefault = roleDefaultNavKeys(v.roles);
+                        const seed = roleDefault
+                          ? tenantNavKeys.filter((k) => roleDefault.includes(k))
+                          : [...tenantNavKeys];
+                        setV((prev) => ({ ...prev, enabledModules: seed }));
                       }
                       setSaved(false);
                     }}

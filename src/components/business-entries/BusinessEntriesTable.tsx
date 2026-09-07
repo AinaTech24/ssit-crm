@@ -15,6 +15,21 @@ import { BulkTable, type BulkColumn, type BulkAction } from "@/components/common
 const PRODUCT_LABEL: Record<string, string> = {
   mutual_fund: "Mutual Fund", pms: "PMS", aif: "AIF", sif: "SIF", bond: "Bond", ncd: "NCD", other: "Other",
 };
+// Derived daily from the CKYC expiry date (daily-ops-scanner), not typed by
+// hand — so "expired" here is a fact about the client, not a stale label.
+const KYC_TONE: Record<string, string> = {
+  verified: "bg-emerald-50 text-emerald-700",
+  registered: "bg-sky-50 text-sky-700",
+  pending: "bg-amber-50 text-amber-700",
+  hold: "bg-amber-50 text-amber-700",
+  re_kyc_required: "bg-amber-50 text-amber-700",
+  expired: "bg-rose-50 text-rose-600",
+  rejected: "bg-rose-50 text-rose-600",
+};
+const KYC_LABEL: Record<string, string> = {
+  re_kyc_required: "Re-KYC",
+};
+
 const STATUS_TONE: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600",
   confirmed: "bg-sky-50 text-sky-700",
@@ -33,6 +48,8 @@ type Row = {
   totalAmount: string | number;
   rmName: string | null;
   lineCount: number;
+  /** null for an entry logged against a free-text name with no client record. */
+  kycStatus: string | null;
 };
 
 export function BusinessEntriesTable({ rows, rmOptions }: { rows: Row[]; rmOptions: { value: string; label: string }[] }) {
@@ -63,6 +80,22 @@ export function BusinessEntriesTable({ rows, rmOptions }: { rows: Row[]; rmOptio
           <span className="truncate">{r.clientName}</span>
         </Link>
       ),
+    },
+    {
+      key: "kyc",
+      header: "KYC",
+      thClass: "text-left py-2 font-medium",
+      tdClass: "py-2.5",
+      render: (r) =>
+        r.kycStatus ? (
+          <span className={`chip text-[10px] capitalize ${KYC_TONE[r.kycStatus] ?? ""}`}>
+            {KYC_LABEL[r.kycStatus] ?? r.kycStatus}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground" title="No client record linked to this entry">
+            —
+          </span>
+        ),
     },
     { key: "product", header: "Product", thClass: "text-left py-2 font-medium", tdClass: "py-2.5 text-xs text-muted-foreground", render: (r) => PRODUCT_LABEL[r.productType] ?? r.productType },
     { key: "schemes", header: "Schemes", thClass: "text-right py-2 font-medium", tdClass: "py-2.5 text-right text-xs tabular-nums", render: (r) => r.lineCount },

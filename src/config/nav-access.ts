@@ -129,6 +129,50 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
   },
 ];
 
+/**
+ * Per-role DEFAULT sidebar, applied ONLY when a user has no explicit
+ * `users.enabled_modules` grant. It narrows what a role SEES; it does not
+ * revoke capabilities — those stay in the RBAC matrix so a firm admin can widen
+ * any individual back-office user by ticking "Customize sidebar access" on their
+ * employee record. That is the whole point: scoped by default, manageable
+ * per person.
+ *
+ * A role that is absent from this map is unrestricted, and a user holding ANY
+ * unrestricted role is unrestricted (see roleDefaultNavKeys) — so a back-office
+ * employee who is also an RM keeps the full RM sidebar.
+ */
+export const ROLE_DEFAULT_NAV: Record<string, string[]> = {
+  // Back office works five areas, per the firm policy:
+  //   clients (view) · tasks · service requests · business entries · SIP rejections
+  // The trailing four are employee self-service — every staff member needs to
+  // see their own calendar, mark attendance, apply for leave and read notices,
+  // whatever desk they sit at.
+  back_office: [
+    "/dashboard/investors",
+    "/dashboard/tasks",
+    "/dashboard/service-requests",
+    "/dashboard/business-entries",
+    "/dashboard/sip-rejections",
+    "/dashboard/calendar",
+    "/dashboard/attendance",
+    "/dashboard/leave-applications",
+    "/dashboard/announcements",
+  ],
+};
+
+/**
+ * The default nav grant for a set of roles, or null for "no default — show
+ * everything the tenant allows". Returns null the moment the user holds a role
+ * with no entry above, so adding a second role can only ever widen access.
+ */
+export function roleDefaultNavKeys(roles: string[]): string[] | null {
+  if (!roles.length) return null;
+  if (roles.some((r) => !ROLE_DEFAULT_NAV[r])) return null;
+  const keys = new Set<string>();
+  for (const r of roles) for (const k of ROLE_DEFAULT_NAV[r]) keys.add(k);
+  return keys.size ? [...keys] : null;
+}
+
 /** Never gated — always accessible regardless of grants. */
 export const CORE_HREFS = new Set<string>([
   "/dashboard",

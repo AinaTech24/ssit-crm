@@ -58,6 +58,9 @@ export default async function BusinessEntriesPage({
         clientName: businessEntries.clientName,
         investorId: businessEntries.investorId,
         avatarUrl: investors.avatarUrl,
+        // Surfaced in the list because booking business against a client whose
+        // KYC has lapsed is exactly what gets caught at the AMC, after the fact.
+        kycStatus: investors.kycStatus,
         productType: businessEntries.productType,
         businessDate: businessEntries.businessDate,
         status: businessEntries.status,

@@ -6,14 +6,16 @@ import { LEAVE_TYPE_LABELS } from "@/lib/leave/policy";
 
 type Entitlements = Record<string, number | null>;
 
-// Order shown in the form. unpaid/other are typically uncapped (blank).
-const TYPES = ["casual", "sick", "earned", "comp_off", "unpaid", "other"] as const;
+// Only the types OUTSIDE the pool get their own quota. casual / sick / earned
+// are set by the pool fields above instead — giving them a second per-type cap
+// here would let a firm configure two contradictory limits for the same day off.
+const TYPES = ["comp_off", "unpaid", "other"] as const;
 
 export function LeaveSettingsForm({
   initial,
   canManage,
 }: {
-  initial: { entitlements: Entitlements; carryForwardEarned: boolean };
+  initial: { entitlements: Entitlements; carryForwardEarned: boolean; annualTotal: number; monthlyAccrual: number };
   canManage: boolean;
 }) {
   // Blank string = uncapped (null). Numeric string = capped days.
@@ -26,6 +28,8 @@ export function LeaveSettingsForm({
     return m;
   });
   const [carry, setCarry] = useState(!!initial.carryForwardEarned);
+  const [annualTotal, setAnnualTotal] = useState(String(initial.annualTotal));
+  const [monthlyAccrual, setMonthlyAccrual] = useState(String(initial.monthlyAccrual));
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -43,7 +47,12 @@ export function LeaveSettingsForm({
       const res = await fetch("/api/leave-applications/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ entitlements, carryForwardEarned: carry }),
+        body: JSON.stringify({
+          entitlements,
+          carryForwardEarned: carry,
+          annualTotal: Number(annualTotal),
+          monthlyAccrual: Number(monthlyAccrual),
+        }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(j.error ?? `Save failed (${res.status})`); return; }
@@ -55,6 +64,46 @@ export function LeaveSettingsForm({
 
   return (
     <div className="card-surface p-5 space-y-4">
+      {/* The pool — the number almost every firm actually means by "leave policy". */}
+      <div className="rounded-lg border border-border bg-secondary/30 p-4 space-y-3">
+        <div>
+          <div className="text-sm font-semibold">Paid leave pool</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">
+            Casual, sick and earned leave all draw on this one pool. Days are EARNED month by month, so a
+            new joiner accrues pro-rata instead of getting the whole year on day one.
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <label className="block">
+            <div className="text-xs font-semibold text-foreground/80 mb-1.5">Total per year</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={0} max={365} step={0.5}
+                value={annualTotal}
+                disabled={!canManage}
+                onChange={(e) => { setAnnualTotal(e.target.value); setSaved(false); }}
+                className="input-base w-32 tabular-nums"
+              />
+              <span className="text-xs text-muted-foreground">days</span>
+            </div>
+          </label>
+          <label className="block">
+            <div className="text-xs font-semibold text-foreground/80 mb-1.5">Earned each month</div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={0} max={31} step={0.25}
+                value={monthlyAccrual}
+                disabled={!canManage}
+                onChange={(e) => { setMonthlyAccrual(e.target.value); setSaved(false); }}
+                className="input-base w-32 tabular-nums"
+              />
+              <span className="text-xs text-muted-foreground">days / month</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div className="text-xs font-semibold text-foreground/80 pt-1">Outside the pool</div>
       <div className="grid sm:grid-cols-2 gap-4">
         {TYPES.map((t) => (
           <label key={t} className="block">

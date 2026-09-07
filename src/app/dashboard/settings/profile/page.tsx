@@ -5,13 +5,15 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { users } from "@/db/schema";
 import { primaryRoleLabel } from "@/lib/auth/rbac";
-import { getEntitlement, currentFyStart, LEAVE_TYPE_LABELS } from "@/lib/leave/policy";
+import { buildLeaveBalanceRows, currentFyStart } from "@/lib/leave/policy";
+import { loadLeavePolicy } from "@/lib/leave/settings";
 import { formatRelative } from "@/lib/utils";
 import ProfileForm from "./ProfileForm";
 
 export const dynamic = "force-dynamic";
 
-const LEAVE_TYPES_SHOWN = ["casual", "sick", "earned", "comp_off"] as const;
+// The pool row is always first; these are the types that sit outside it.
+const EXTRA_LEAVE_TYPES = ["comp_off", "unpaid"];
 
 export default async function ProfilePage() {
   const session = await requireSession();
@@ -52,7 +54,8 @@ export default async function ProfilePage() {
       ORDER BY at DESC LIMIT 12
     `);
 
-    return { u: u ?? null, leaveUsed: leaveUsed.rows as Array<{ leave_type: string; used: string }>, activity: activity.rows as Array<{ action: string; at: string; entity_type: string }> };
+    const policy = await loadLeavePolicy(tx, session.tenantId);
+    return { u: u ?? null, policy, leaveUsed: leaveUsed.rows as Array<{ leave_type: string; used: string }>, activity: activity.rows as Array<{ action: string; at: string; entity_type: string }> };
   });
   const me = data.u;
 
@@ -62,10 +65,14 @@ export default async function ProfilePage() {
   const usedByType: Record<string, number> = {};
   for (const r of data.leaveUsed) usedByType[r.leave_type] = Number(r.used ?? 0);
   const custom = (me?.customLeaveEntitlements as Record<string, number> | null) ?? null;
-  const leaveRows = LEAVE_TYPES_SHOWN.map((t) => {
-    const ent = getEntitlement(t, custom);
-    const used = usedByType[t] ?? 0;
-    return { type: t, entitlement: ent, used, remaining: ent == null ? null : Math.max(0, ent - used) };
+  const leaveRows = buildLeaveBalanceRows({
+    usedByType,
+    customEntitlements: custom,
+    tenantEntitlements: data.policy.entitlements,
+    joiningDate: (me as any)?.joiningDate ?? null,
+    annualTotal: data.policy.annualTotal,
+    monthlyAccrual: data.policy.monthlyAccrual,
+    extraTypes: EXTRA_LEAVE_TYPES,
   });
 
   return (
@@ -133,7 +140,7 @@ export default async function ProfilePage() {
       {/* Leave entitlements */}
       <div className="border rounded-lg bg-card p-5">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">My leave (annual entitlement)</h3>
+          <h3 className="font-semibold text-sm">My leave (earned so far this FY)</h3>
           <Link href="/dashboard/leave-applications" className="text-xs text-primary hover:underline inline-flex items-center gap-1">
             Apply / view <ArrowRight className="size-3" />
           </Link>
@@ -141,7 +148,7 @@ export default async function ProfilePage() {
         <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {leaveRows.map((l) => (
             <div key={l.type} className="rounded-md border bg-background px-3 py-2">
-              <div className="text-xs text-muted-foreground">{LEAVE_TYPE_LABELS[l.type] ?? l.type}</div>
+              <div className="text-xs text-muted-foreground">{l.label}</div>
               {l.entitlement == null ? (
                 <div className="text-lg font-bold">Unpaid</div>
               ) : (
@@ -153,7 +160,11 @@ export default async function ProfilePage() {
             </div>
           ))}
         </div>
-        <p className="text-[11px] text-muted-foreground mt-2">Balances are for the current financial year (Apr–Mar){custom ? " · includes your custom allowance" : ""}.</p>
+        <p className="text-[11px] text-muted-foreground mt-2">
+          Casual, sick and earned leave share one pool of {data.policy.annualTotal} days a year, earned{" "}
+          {data.policy.monthlyAccrual} a month — so the figure above is what you have accrued to date, not the
+          full year. Financial year runs Apr–Mar{custom ? " · includes your custom allowance" : ""}.
+        </p>
       </div>
 
       {/* Recent activity — your own audit trail */}

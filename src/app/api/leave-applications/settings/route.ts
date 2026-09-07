@@ -14,7 +14,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { leaveSettings } from "@/db/schema";
-import { loadLeaveEntitlements } from "@/lib/leave/settings";
+import { loadLeavePolicy } from "@/lib/leave/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -26,22 +26,16 @@ const Entitlement = z.union([z.number().int().min(0).max(365), z.null()]);
 const Body = z.object({
   entitlements: z.record(z.enum(LEAVE_TYPES), Entitlement),
   carryForwardEarned: z.boolean(),
+  // The pool. Half-day granularity on the total, quarter-day on the accrual —
+  // enough for every policy we have seen without allowing float noise.
+  annualTotal: z.number().min(0).max(365).optional(),
+  monthlyAccrual: z.number().min(0).max(31).optional(),
 });
 
 export async function GET() {
   try {
     const session = await requireSession();
-    const data = await withTenant(session.tenantId, async (tx) => {
-      const entitlements = await loadLeaveEntitlements(tx, session.tenantId);
-      const row = (
-        await tx
-          .select({ carryForwardEarned: leaveSettings.carryForwardEarned })
-          .from(leaveSettings)
-          .where(eq(leaveSettings.tenantId, session.tenantId))
-          .limit(1)
-      )[0];
-      return { entitlements, carryForwardEarned: row?.carryForwardEarned ?? false };
-    });
+    const data = await withTenant(session.tenantId, async (tx) => loadLeavePolicy(tx, session.tenantId));
     return NextResponse.json({ settings: data });
   } catch (err: any) {
     return handleApiError(err);
@@ -61,9 +55,13 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
     }
 
+    // numeric() columns take strings in drizzle; omit rather than write null so
+    // a client that does not send the pool leaves the stored policy alone.
     const vals = {
       entitlements: parse.data.entitlements as Record<string, number | null>,
       carryForwardEarned: parse.data.carryForwardEarned,
+      ...(parse.data.annualTotal !== undefined ? { annualTotal: String(parse.data.annualTotal) } : {}),
+      ...(parse.data.monthlyAccrual !== undefined ? { monthlyAccrual: String(parse.data.monthlyAccrual) } : {}),
     };
     const clientMeta = clientMetaFromHeaders(req.headers);
 

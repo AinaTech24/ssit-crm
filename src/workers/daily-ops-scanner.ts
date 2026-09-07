@@ -12,6 +12,7 @@
  *   investor.dormant               — no transaction in last 365 days,
  *                                    not already flagged
 *   investor.kyc_expiring          — CKYC expiry within 30 days
+ *   investor.kyc_expired           — CKYC expiry passed; kyc_status auto-set to expired
  *   investor.risk_profile_expired  — risk profile signed > 365 days ago
  *   goal.drift                     — an investor's goal is >10pp behind its
  *                                    time-trajectory (one per investor/day)
@@ -62,6 +63,7 @@ interface ScanResult {
   minorToMajor: number;
   dormant: number;
   kycExpiring: number;
+  kycExpired: number;
   riskExpired: number;
   /** Compliance-vault documents expiring within 30 days. */
   docsExpiring: number;
@@ -143,6 +145,7 @@ export async function scanTenant(tenantId: string): Promise<ScanResult> {
     minorToMajor: 0,
     dormant: 0,
     kycExpiring: 0,
+    kycExpired: 0,
     riskExpired: 0,
     docsExpiring: 0,
     docsExpired: 0,
@@ -344,6 +347,43 @@ export async function scanTenant(tenantId: string): Promise<ScanResult> {
           entityType: "investor",
           entityId: row.id,
           after: { name: row.name, expiresAt: row.ckyc_expiry_at, rmId: row.rm_id } as any,
+          meta: { scanDate, source: "daily-ops-scanner" } as any,
+        } as any).onConflictDoNothing();
+      }
+
+      // ── 5b. CKYC already lapsed → flip kyc_status to expired ──────────
+      // The status used to be whatever a human last typed, so a client whose
+      // CKYC ran out in March still read "verified" in September and sailed
+      // through every screen that trusts the field. The expiry DATE is the
+      // fact; the status is now derived from it daily, with nobody having to
+      // remember.
+      //
+      // Only registered/verified move. pending, hold, rejected and
+      // re_kyc_required are human decisions — a date must not overwrite those.
+      const kycLapsed = await tx.execute(sql`
+        UPDATE investors
+           SET kyc_status = 'expired',
+               updated_at = now()
+         WHERE ckyc_expiry_at IS NOT NULL
+           AND ckyc_expiry_at < CURRENT_DATE
+           AND kyc_status IN ('registered', 'verified')
+           AND status = 'active'
+           AND deleted_at IS NULL
+         RETURNING id, name, ckyc_expiry_at, rm_id
+      `);
+      result.kycExpired = kycLapsed.rows.length;
+      for (const row of kycLapsed.rows as Array<{
+        id: string;
+        name: string;
+        ckyc_expiry_at: string;
+        rm_id: string | null;
+      }>) {
+        await tx.insert(eventsOutbox).values({
+          tenantId,
+          kind: "investor.kyc_expired",
+          entityType: "investor",
+          entityId: row.id,
+          after: { name: row.name, expiredAt: row.ckyc_expiry_at, rmId: row.rm_id } as any,
           meta: { scanDate, source: "daily-ops-scanner" } as any,
         } as any).onConflictDoNothing();
       }
@@ -1278,6 +1318,7 @@ export async function runDailyOpsScan(): Promise<{
     minorToMajor: 0,
     dormant: 0,
     kycExpiring: 0,
+    kycExpired: 0,
     riskExpired: 0,
     docsExpiring: 0,
     docsExpired: 0,
@@ -1317,6 +1358,7 @@ export async function runDailyOpsScan(): Promise<{
       totals.minorToMajor += r.minorToMajor;
       totals.dormant += r.dormant;
       totals.kycExpiring += r.kycExpiring;
+      totals.kycExpired += r.kycExpired;
       totals.riskExpired += r.riskExpired;
       totals.docsExpiring += r.docsExpiring;
       totals.docsExpired += r.docsExpired;

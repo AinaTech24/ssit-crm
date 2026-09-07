@@ -13,12 +13,14 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { users } from "@/db/schema";
 import { handleApiError } from "@/lib/api/error-handler";
-import { LEAVE_TYPE_LABELS, getEntitlement, currentFyStart } from "@/lib/leave/policy";
+import { buildLeaveBalanceRows, currentFyStart } from "@/lib/leave/policy";
+import { loadLeavePolicy } from "@/lib/leave/settings";
 import { primaryRoleLabel } from "@/lib/auth/rbac";
 
 export const dynamic = "force-dynamic";
 
-const LEAVE_TYPES = ["casual", "sick", "earned", "comp_off"];
+// The shared pool row is always first; these sit outside it.
+const EXTRA_LEAVE_TYPES = ["comp_off", "unpaid"];
 
 /** GET — the mobile profile bundle (identity, 2FA status, targets, leave, activity). */
 export async function GET() {
@@ -45,7 +47,8 @@ export async function GET() {
             ORDER BY at DESC LIMIT 12
           `)
         ).rows as any[];
-        return { u, leaveRows, activity };
+        const policy = await loadLeavePolicy(tx, session.tenantId);
+        return { u, leaveRows, activity, policy };
       },
       { userId: session.userId, branchId: session.branchId, roles: session.roles }
     );
@@ -54,16 +57,14 @@ export async function GET() {
     const custom = (u.customLeaveEntitlements ?? {}) as Record<string, number>;
     const usedByType: Record<string, number> = {};
     for (const r of data.leaveRows) usedByType[r.leave_type] = Number(r.used) || 0;
-    const leave = LEAVE_TYPES.map((type) => {
-      const entitlement = getEntitlement(type as any, custom);
-      const used = usedByType[type] ?? 0;
-      return {
-        type,
-        label: LEAVE_TYPE_LABELS[type] ?? type,
-        entitlement,
-        used,
-        remaining: entitlement == null ? null : Math.max(0, entitlement - used),
-      };
+    const leave = buildLeaveBalanceRows({
+      usedByType,
+      customEntitlements: custom,
+      tenantEntitlements: data.policy.entitlements,
+      joiningDate: u.joiningDate ?? null,
+      annualTotal: data.policy.annualTotal,
+      monthlyAccrual: data.policy.monthlyAccrual,
+      extraTypes: EXTRA_LEAVE_TYPES,
     });
 
     return NextResponse.json({

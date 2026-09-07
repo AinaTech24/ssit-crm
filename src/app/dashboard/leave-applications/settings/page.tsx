@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
 import { ChevronLeft, CalendarCog } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { loadLeaveEntitlements } from "@/lib/leave/settings";
-import { leaveSettings } from "@/db/schema";
+import { loadLeavePolicy } from "@/lib/leave/settings";
 import { LeaveSettingsForm } from "@/components/leave/LeaveSettingsForm";
 
 export const dynamic = "force-dynamic";
@@ -13,13 +11,7 @@ export default async function LeavePolicyPage() {
   const session = await requireSession();
   const canManage = session.roles.some((r) => ["owner", "branch_head"].includes(r));
 
-  const data = await withTenant(session.tenantId, async (tx) => {
-    const entitlements = await loadLeaveEntitlements(tx, session.tenantId);
-    const row = (
-      await tx.select({ c: leaveSettings.carryForwardEarned }).from(leaveSettings).where(eq(leaveSettings.tenantId, session.tenantId)).limit(1)
-    )[0];
-    return { entitlements, carryForwardEarned: row?.c ?? false };
-  });
+  const data = await withTenant(session.tenantId, async (tx) => loadLeavePolicy(tx, session.tenantId));
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -31,7 +23,8 @@ export default async function LeavePolicyPage() {
         <h1 className="text-2xl font-bold tracking-tight">Leave policy</h1>
       </div>
       <p className="text-sm text-muted-foreground">
-        Firm-wide annual entitlement (days) per leave type. Per-employee overrides still apply.
+        The paid-leave pool every employee earns month by month, plus quotas for the types that sit
+        outside it. Per-employee overrides still apply.
       </p>
       <LeaveSettingsForm initial={data} canManage={canManage} />
     </div>

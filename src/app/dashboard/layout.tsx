@@ -70,7 +70,7 @@ import { tenants, users, tenantUiLayouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { primaryRoleLabel, can } from "@/lib/auth/rbac";
 import { loadTenantLicense } from "@/lib/auth/license";
-import { tenantAccessibleNavKeys, isGatableNav, gatedNavKeyForPath } from "@/config/nav-access";
+import { tenantAccessibleNavKeys, isGatableNav, gatedNavKeyForPath, roleDefaultNavKeys } from "@/config/nav-access";
 import { pickLogo } from "@/lib/branding/logo";
 import type { Metadata } from "next";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
@@ -367,6 +367,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // MFD → team sidebar gate. Owners always see the full firm set; everyone else
   // is limited to the items the owner granted them (a subset of the firm's).
   const isOwnerUser = session.roles.includes("owner");
+  // Sidebar grant actually in force for this user:
+  //   explicit per-user grant  →  role default  →  null ("everything the firm has")
+  // The role default is what scopes back office to its five areas. It is applied
+  // exactly like an explicit grant — including the server-side navBlocked check
+  // below — because hiding an item while leaving its URL reachable is the same
+  // UI-only gating that check exists to close.
+  const effectiveUserModules = userModules ?? roleDefaultNavKeys(session.roles);
 
   // Enforce nav/module access SERVER-SIDE, not just by hiding the sidebar item:
   // if the requested page belongs to a module the firm (or this team member)
@@ -376,7 +383,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const navBlocked =
     gatedKey !== null &&
     (!tenantAllowedSet.has(gatedKey) ||
-      (!isOwnerUser && userModules !== null && !userModules.includes(gatedKey)));
+      (!isOwnerUser && effectiveUserModules !== null && !effectiveUserModules.includes(gatedKey)));
 
   // Per-tenant white-label theme: override the brand CSS variables from the
   // firm's chosen primary/accent colours (Settings → Appearance). Empty string
@@ -422,7 +429,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         // Admin → MFD: the firm must have access to this sidebar item.
         if (!tenantAllowedSet.has(i.href)) return false;
         // MFD → team: owners see all; others limited to their granted items.
-        if (!isOwnerUser && userModules && !userModules.includes(i.href)) return false;
+        if (!isOwnerUser && effectiveUserModules && !effectiveUserModules.includes(i.href)) return false;
       }
       return true;
     }),
@@ -454,7 +461,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     if (moduleControls[href] === "disabled") return false;
     if (isGatableNav(href)) {
       if (!tenantAllowedSet.has(href)) return false;
-      if (!isOwnerUser && userModules && !userModules.includes(href)) return false;
+      if (!isOwnerUser && effectiveUserModules && !effectiveUserModules.includes(href)) return false;
     }
     return true;
   };

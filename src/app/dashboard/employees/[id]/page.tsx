@@ -10,7 +10,8 @@ import { tenantAccessibleNavKeys } from "@/config/nav-access";
 import { formatINR, formatDate } from "@/lib/utils";
 import { EmployeeEditForm } from "@/components/employees/EmployeeEditForm";
 import { RecordProvenance } from "@/components/common/RecordProvenance";
-import { getEntitlement, currentFyStart } from "@/lib/leave/policy";
+import { accruedPoolDays, pooledUsed, POOLED_LEAVE_TYPES, currentFyStart } from "@/lib/leave/policy";
+import { loadLeavePolicy } from "@/lib/leave/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -134,8 +135,10 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         .where(eq(users.id, managerId));
       manager = m ?? null;
     }
+    const policy = await loadLeavePolicy(tx, session.tenantId);
     return {
       emp,
+      policy,
       teammates,
       stats: stats.rows[0] as any,
       manager,
@@ -159,12 +162,16 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   const usedByType: Record<string, number> = {};
   for (const r of data.leaveUsed) usedByType[r.leave_type] = Number(r.used ?? 0);
   const custom = (emp as any).customLeaveEntitlements as Record<string, number> | null;
-  const leaveBalance = (["casual", "sick", "earned"] as const).map((t) => {
-    const ent = getEntitlement(t, custom);
-    const used = usedByType[t] ?? 0;
-    return { type: t, used, entitlement: ent, balance: ent == null ? null : Math.max(0, ent - used) };
+  // One accruing pool across casual/sick/earned. The per-type strip below still
+  // shows where the days went, but the BALANCE is a single number — summing
+  // three per-type balances used to report roughly double the real allowance.
+  const accrued = accruedPoolDays({
+    joiningDate: emp.joiningDate as string | null,
+    annualTotal: data.policy.annualTotal,
+    monthlyAccrual: data.policy.monthlyAccrual,
   });
-  const totalLeaveBalance = leaveBalance.reduce((a, b) => a + (b.balance ?? 0), 0);
+  const leaveBalance = POOLED_LEAVE_TYPES.map((t) => ({ type: t, used: usedByType[t] ?? 0 }));
+  const totalLeaveBalance = Math.max(0, accrued - pooledUsed(usedByType));
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -221,7 +228,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           value={attendancePct != null ? `${attendancePct}%` : "—"}
           accent={attendancePct != null && attendancePct < 80 ? "rose" : attendancePct != null ? "emerald" : "muted"}
         />
-        <Tile icon={CheckCircle2} label="Leave balance (FY)" value={String(totalLeaveBalance)} accent="emerald" />
+        <Tile icon={CheckCircle2} label={`Leave left (of ${accrued} earned)`} value={String(totalLeaveBalance)} accent="emerald" />
         <Tile icon={AlertTriangle} label="Pending leave" value={String(data.pendingLeave)} accent={data.pendingLeave > 0 ? "amber" : "muted"} />
         <div className="card-surface p-3">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
@@ -232,7 +239,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
             {leaveBalance.map((l) => (
               <span key={l.type} className="tabular-nums">
                 <span className="capitalize text-muted-foreground">{l.type}</span>{" "}
-                <span className="font-semibold">{l.used}{l.entitlement != null ? `/${l.entitlement}` : ""}</span>
+                <span className="font-semibold">{l.used}</span>
               </span>
             ))}
           </div>

@@ -6,8 +6,12 @@ import { Loader2, Save, CalendarDays, AlertTriangle, Clock } from "lucide-react"
 import {
   LEAVE_TYPE_LABELS,
   LEAVE_DURATION_LABELS,
-  getEntitlement,
   computeDays,
+  isPooledLeaveType,
+  poolAwareEntitlement,
+  pooledUsed,
+  LEAVE_ANNUAL_TOTAL,
+  LEAVE_MONTHLY_ACCRUAL,
 } from "@/lib/leave/policy";
 import { ThemeSelect } from "@/components/ui/ThemeSelect";
 import { ThemeDate } from "@/components/ui/ThemeDate";
@@ -16,6 +20,8 @@ type Emp = {
   id: string;
   name: string;
   custom_leave_entitlements?: Record<string, number> | null;
+  /** Drives pro-rata accrual for anyone who joined part-way through the FY. */
+  joining_date?: string | null;
 };
 type Usage = { employee_user_id: string; leave_type: string; used: number };
 
@@ -25,6 +31,8 @@ export function LeaveForm({
   currentUserId,
   isManager,
   tenantEntitlements,
+  annualTotal = LEAVE_ANNUAL_TOTAL,
+  monthlyAccrual = LEAVE_MONTHLY_ACCRUAL,
 }: {
   employees: Emp[];
   usage: Usage[];
@@ -32,6 +40,9 @@ export function LeaveForm({
   isManager: boolean;
   /** Firm-wide annual entitlements (overlaid on built-in defaults). */
   tenantEntitlements?: Record<string, number | null> | null;
+  /** Firm paid-leave pool policy (leave_settings). */
+  annualTotal?: number;
+  monthlyAccrual?: number;
 }) {
   const router = useRouter();
   const [employeeId, setEmployeeId] = useState(currentUserId);
@@ -95,8 +106,20 @@ export function LeaveForm({
     return () => { active = false; };
   }, [fromDate, toDate, duration]);
 
-  const entitlement = getEntitlement(leaveType, selectedEmployee?.custom_leave_entitlements, tenantEntitlements);
-  const used = usageMap[employeeId]?.[leaveType] ?? 0;
+  // casual/sick/earned share ONE accruing pool, so the balance must be measured
+  // against days drawn across all three — counting only this type would let
+  // someone spend the same 18 days three times over.
+  const pooled = isPooledLeaveType(leaveType);
+  const entitlement = poolAwareEntitlement(leaveType, {
+    customEntitlements: selectedEmployee?.custom_leave_entitlements,
+    tenantEntitlements,
+    joiningDate: selectedEmployee?.joining_date,
+    annualTotal,
+    monthlyAccrual,
+  });
+  const used = pooled
+    ? pooledUsed(usageMap[employeeId])
+    : usageMap[employeeId]?.[leaveType] ?? 0;
   const remaining = entitlement === null ? null : Math.max(0, entitlement - used);
   const overBalance = remaining !== null && days > remaining;
 
@@ -177,9 +200,16 @@ export function LeaveForm({
         ) : (
           <span className="inline-flex items-center gap-1.5">
             {overBalance && <AlertTriangle className="size-4" />}
-            {LEAVE_TYPE_LABELS[leaveType]} balance: <b>{remaining}</b> of {entitlement} left this FY ({used} used)
+            {pooled ? "Paid leave" : LEAVE_TYPE_LABELS[leaveType]} balance: <b>{remaining}</b> of {entitlement}{" "}
+            {pooled ? "earned so far" : "left"} this FY ({used} used)
             {overBalance && <span className="font-medium"> · this request ({days}) exceeds the balance</span>}
           </span>
+        )}
+        {pooled && (
+          <div className="text-[11px] text-muted-foreground mt-1">
+            Casual, sick and earned leave share one pool of {annualTotal} days a year, earned{" "}
+            {monthlyAccrual} a month.
+          </div>
         )}
       </div>
 
