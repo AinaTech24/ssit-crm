@@ -32,12 +32,12 @@ export async function GET(
 
     const att = await withTenant(session.tenantId, async (tx) => {
       const [m] = await tx
-        .select({ rmId: reviewMeetings.rmId })
+        .select({ createdById: reviewMeetings.createdById, collaboratorIds: reviewMeetings.collaboratorIds, rmId: reviewMeetings.rmId })
         .from(reviewMeetings)
         .where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId)))
         .limit(1);
       if (!m) return null;
-      if (!canAll && m.rmId !== session.userId) return null;
+      if (!canAll && !(m.createdById === session.userId || (Array.isArray(m.collaboratorIds) && m.collaboratorIds.includes(session.userId)) || (!m.createdById && m.rmId === session.userId))) return null;
       const [a] = await tx
         .select()
         .from(reviewMeetingAttachments)

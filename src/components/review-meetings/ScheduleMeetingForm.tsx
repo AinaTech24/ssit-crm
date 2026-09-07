@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, Loader2, Save, Users, Sparkles, Home, ChevronsUpDown, Video, AlertTriangle } from "lucide-react";
+import { CollaboratorSelect } from "@/components/common/CollaboratorSelect";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
@@ -112,7 +113,7 @@ export function ScheduleMeetingForm({
     meetingMode: "online",
     locationOrLink: "",
     discussionPoints: "",
-    rmId: "" as string,
+    collaboratorIds: [] as string[],
     status: "scheduled",
   });
   const [busy, setBusy] = useState(false);
@@ -158,7 +159,7 @@ export function ScheduleMeetingForm({
         meetingMode: form.meetingMode,
         locationOrLink: form.locationOrLink || undefined,
         discussionPoints: form.discussionPoints || undefined,
-        rmId: form.rmId || undefined,
+        collaboratorIds: form.collaboratorIds.length ? form.collaboratorIds : undefined,
         status: form.status,
         force,
       };
@@ -329,11 +330,13 @@ export function ScheduleMeetingForm({
           </SelectField>
         </Field>
 
-        <Field label="Assigned RM">
-          <RmSelector
-            value={form.rmId || null}
-            onChange={(id) => set("rmId", id ?? "")}
-            placeholder={subjectKind === "lead" ? "Use the lead's owner" : "Use the client's RM"}
+        <Field label="Collaborators">
+          {/* Replaces the single "Assigned RM": the meeting belongs to whoever
+              schedules it, and everyone added here can open and edit it too. */}
+          <CollaboratorSelect
+            values={form.collaboratorIds}
+            onChange={(ids) => setForm((f) => ({ ...f, collaboratorIds: ids }))}
+            placeholder="Add colleagues…"
           />
         </Field>
       </div>

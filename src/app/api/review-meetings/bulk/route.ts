@@ -14,7 +14,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -64,13 +64,22 @@ export async function POST(req: NextRequest) {
           .from(users)
           .where(and(eq(users.id, value!), eq(users.tenantId, session.tenantId)))
           .limit(1);
-        if (!u) throw Object.assign(new Error("RM not found in this firm"), { status: 400 });
-        patch.rmId = value;
+        if (!u) throw Object.assign(new Error("User not found in this firm"), { status: 400 });
+        // "Assign" now moves OWNERSHIP of the meeting, since rm_id is gone.
+        patch.createdById = value;
       }
 
       const conds: any[] = [eq(reviewMeetings.tenantId, session.tenantId), inArray(reviewMeetings.id, ids)];
       // Assigned-only managers can only touch meetings they own.
-      if (!canAll) conds.push(eq(reviewMeetings.rmId, session.userId));
+      // Assigned-only managers can only touch meetings they own or collaborate on.
+      if (!canAll) {
+        conds.push(
+          or(
+            eq(reviewMeetings.createdById, session.userId),
+            sql`${reviewMeetings.collaboratorIds} @> ${JSON.stringify([session.userId])}::jsonb`
+          )!
+        );
+      }
 
       const upd = await tx
         .update(reviewMeetings)

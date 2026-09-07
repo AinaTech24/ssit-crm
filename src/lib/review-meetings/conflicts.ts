@@ -25,7 +25,7 @@ export type MeetingConflict = {
 export async function findRmConflicts(
   tx: { execute: (q: any) => Promise<{ rows: any[] }> },
   tenantId: string,
-  rmId: string,
+  ownerId: string,
   startISO: string,
   durationMin: number,
   excludeId?: string
@@ -38,7 +38,10 @@ export async function findRmConflicts(
     LEFT JOIN investors i ON i.id = m.investor_id
     LEFT JOIN leads l ON l.id = m.lead_id
     WHERE m.tenant_id = ${tenantId}::uuid
-      AND m.rm_id = ${rmId}::uuid
+      -- Owner's calendar. Was m.rm_id; meetings now belong to their creator,
+      -- and the fallback keeps pre-0203 rows (created_by_id backfilled from
+      -- rm_id, but null where a meeting never had an RM) in the check.
+      AND COALESCE(m.created_by_id, m.rm_id) = ${ownerId}::uuid
       AND m.status NOT IN ('cancelled', 'completed', 'no_show')
       ${exclude}
       AND m.meeting_date < (${startISO}::timestamptz + make_interval(mins => ${durationMin}))

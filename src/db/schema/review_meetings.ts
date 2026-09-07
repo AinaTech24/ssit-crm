@@ -93,7 +93,15 @@ export const reviewMeetings = pgTable(
     leadId: uuid("lead_id"),
     /** Family-level review (when set, investorId points at the primary). */
     familyId: uuid("family_id"),
+    /**
+     * DEPRECATED — superseded by createdById. Kept so historical rows retain who
+     * owned them; nothing reads it. See 0203_meeting_creator_and_collaborators.
+     */
     rmId: uuid("rm_id"),
+    /** Meeting owner: drives access control AND inherits fanned-out action items. */
+    createdById: uuid("created_by_id"),
+    /** Everyone else invited alongside the creator. */
+    collaboratorIds: jsonb("collaborator_ids").$type<string[]>().notNull().default([]),
 
     /**
      * High-level category — review / new / follow_up. Defaults to 'review'
@@ -178,6 +186,7 @@ export const reviewMeetings = pgTable(
     investorIdx: index("rm_investor_idx").on(t.tenantId, t.investorId, t.meetingDate),
     statusIdx: index("rm_status_idx").on(t.tenantId, t.status, t.meetingDate),
     rmIdx: index("rm_rm_idx").on(t.tenantId, t.rmId, t.meetingDate),
+    createdByIdx: index("rm_created_by_idx").on(t.tenantId, t.createdById, t.meetingDate),
     dateIdx: index("rm_date_idx").on(t.tenantId, t.meetingDate),
     categoryIdx: index("rm_category_idx").on(t.tenantId, t.category, t.meetingDate),
     parentIdx: index("rm_parent_idx").on(t.parentMeetingId),

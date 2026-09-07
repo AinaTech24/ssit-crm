@@ -50,12 +50,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const rows = await withTenant(session.tenantId, async (tx) => {
       const [m] = await tx
-        .select({ rmId: reviewMeetings.rmId })
+        .select({ createdById: reviewMeetings.createdById, collaboratorIds: reviewMeetings.collaboratorIds, rmId: reviewMeetings.rmId })
         .from(reviewMeetings)
         .where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId)))
         .limit(1);
       if (!m) return null;
-      if (!canAll && m.rmId !== session.userId) return null;
+      if (!canAll && !(m.createdById === session.userId || (Array.isArray(m.collaboratorIds) && m.collaboratorIds.includes(session.userId)) || (!m.createdById && m.rmId === session.userId))) return null;
       return tx
         .select({ a: reviewMeetingAttachments, uploaderName: users.name })
         .from(reviewMeetingAttachments)
@@ -114,12 +114,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const [m] = await tx
-        .select({ rmId: reviewMeetings.rmId })
+        .select({ createdById: reviewMeetings.createdById, collaboratorIds: reviewMeetings.collaboratorIds, rmId: reviewMeetings.rmId })
         .from(reviewMeetings)
         .where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId)))
         .limit(1);
       if (!m) return "not_found" as const;
-      if (!canAll && m.rmId !== session.userId) return "forbidden" as const;
+      if (!canAll && !(m.createdById === session.userId || (Array.isArray(m.collaboratorIds) && m.collaboratorIds.includes(session.userId)) || (!m.createdById && m.rmId === session.userId))) return "forbidden" as const;
 
       const inserted = [];
       for (const s of staged) {

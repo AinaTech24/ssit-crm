@@ -40,7 +40,7 @@ const Body = z
     investorId: z.string().uuid().optional(),
     leadId: z.string().uuid().optional(),
     familyId: z.string().uuid().optional(),
-    rmId: z.string().uuid().optional(),
+    collaboratorIds: z.array(z.string().uuid()).max(20).optional(),
     category: z.enum(MEETING_CATEGORIES).default("review"),
     parentMeetingId: z.string().uuid().optional(),
     meetingType: z.enum(REVIEW_MEETING_TYPES),
@@ -175,7 +175,9 @@ export async function POST(req: NextRequest) {
       }
 
       const id = uuid();
-      const rmId = body.rmId ?? subjectRmId ?? session.userId;
+      // The person scheduling owns the meeting. The subject's RM is no longer
+      // an input — invite them as a collaborator instead.
+      const createdById = session.userId;
       const meetingDate = new Date(body.meetingDate);
 
       // ─── Double-booking guard ──────────────────────────────────────
@@ -186,7 +188,7 @@ export async function POST(req: NextRequest) {
         const conflicts = await findRmConflicts(
           tx,
           session.tenantId,
-          rmId,
+          createdById,
           meetingDate.toISOString(),
           body.durationMinutes
         );
@@ -200,7 +202,7 @@ export async function POST(req: NextRequest) {
         id: reminderTaskId,
         tenantId: session.tenantId,
         branchId: session.branchId ?? null,
-        assigneeId: rmId,
+        assigneeId: createdById,
         subjectType,
         subjectId,
         type: "review_meeting_reminder",
@@ -217,7 +219,8 @@ export async function POST(req: NextRequest) {
         investorId: body.investorId ?? null,
         leadId: body.leadId ?? null,
         familyId: body.familyId ?? null,
-        rmId,
+        createdById,
+        collaboratorIds: body.collaboratorIds ?? [],
         category: body.category,
         parentMeetingId: body.parentMeetingId ?? null,
         meetingType: body.meetingType,
@@ -280,7 +283,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return { id, rmId, reminderTaskId };
+      return { id, createdById, reminderTaskId };
     });
 
     // Double-booking: surface the clash so the UI can offer "Schedule anyway".

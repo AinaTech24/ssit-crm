@@ -11,7 +11,7 @@ import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { AddMeetingButton } from "@/components/review-meetings/AddMeetingButton";
 import { MeetingsBulkTable } from "@/components/review-meetings/MeetingsBulkTable";
 import { MeetingsKanban } from "@/components/review-meetings/MeetingsKanban";
-import { LayoutList, KanbanSquare } from "lucide-react";
+import { LayoutList, KanbanSquare, CalendarClock } from "lucide-react";
 
 const MEETINGS_COLUMNS = [
   { key: "date", label: "Date", required: true },
@@ -216,6 +216,12 @@ export default async function ReviewMeetingsPage({
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 border-l border-border ${view === "kanban" ? "bg-brand-cyan text-white" : "bg-card text-muted-foreground hover:bg-secondary"}`}
             >
               <KanbanSquare className="size-3.5" /> Kanban
+            </Link>
+            <Link
+              href="/dashboard/review-meetings/calendar"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border-l border-border bg-card text-muted-foreground hover:bg-secondary"
+            >
+              <CalendarClock className="size-3.5" /> Calendar
             </Link>
           </div>
           <AddMeetingButton />

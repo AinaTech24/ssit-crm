@@ -35,6 +35,19 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
+ * May this user act on the meeting without the firm-wide capability?
+ * True for the creator and for anyone invited as a collaborator. Falls back to
+ * the deprecated rm_id so meetings created before 0203 (where created_by_id was
+ * backfilled but could be null for rows that never had an RM) stay reachable.
+ */
+function canTouchMeeting(m: { createdById?: string | null; collaboratorIds?: unknown; rmId?: string | null }, userId: string): boolean {
+  if (m.createdById && m.createdById === userId) return true;
+  if (Array.isArray(m.collaboratorIds) && (m.collaboratorIds as string[]).includes(userId)) return true;
+  if (!m.createdById && m.rmId && m.rmId === userId) return true;
+  return false;
+}
+
+/**
  * GET /api/review-meetings/[id] — single meeting bundle.
  *
  * Returns the meeting row (snake_case, mirroring the list) with the subject
@@ -128,6 +141,8 @@ const Attendee = z.object({
 });
 
 const Patch = z.object({
+  /** Full replacement of the collaborator list — send the whole set, not a delta. */
+  collaboratorIds: z.array(z.string().uuid()).max(20).optional(),
   status: z.enum(REVIEW_MEETING_STATUSES).optional(),
   subject: z.string().max(300).optional(),
   meetingDate: z.string().optional(),
@@ -165,8 +180,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const result = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return null;
-      // RMs (manage.assigned) may only touch meetings they own.
-      if (!canAll && before.rmId !== session.userId) return { forbidden: true as const };
+      // RMs (manage.assigned) may only touch meetings they own — as the creator
+      // or as an invited collaborator. This replaces the old rm_id check; without
+      // the collaborator arm, inviting someone would show them a meeting they
+      // could not then edit.
+      if (!canAll && !canTouchMeeting(before, session.userId)) {
+        return { forbidden: true as const };
+      }
 
       const patch: any = { ...body, updatedAt: new Date() };
       if (body.meetingDate) patch.meetingDate = new Date(body.meetingDate);
@@ -304,7 +324,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           newTaskRows.push({
             id: taskId,
             tenantId: session.tenantId,
-            assigneeId: it.assigneeId ?? before.rmId ?? session.userId,
+            assigneeId: it.assigneeId ?? before.createdById ?? session.userId,
             subjectType: taskSubjectType,
             subjectId: taskSubjectId,
             relatedInvestorId: before.investorId ?? null,
@@ -341,7 +361,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           await tx.insert(tasks).values({
             id: notesTaskId,
             tenantId: session.tenantId,
-            assigneeId: before.rmId ?? session.userId,
+            assigneeId: before.createdById ?? session.userId,
             subjectType: taskSubjectType,
             subjectId: taskSubjectId,
             relatedInvestorId: before.investorId ?? null,
@@ -385,7 +405,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                 await sp.insert(tasks).values({
                   id: nextReminderId,
                   tenantId: session.tenantId,
-                  assigneeId: before.rmId ?? session.userId,
+                  assigneeId: before.createdById ?? session.userId,
                   subjectType: "investor",
                   subjectId: before.investorId,
                   relatedInvestorId: before.investorId,
@@ -401,7 +421,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                   tenantId: session.tenantId,
                   investorId: before.investorId,
                   familyId: before.familyId ?? null,
-                  rmId: before.rmId,
+                  createdById: before.createdById,
                   category: "review",
                   parentMeetingId: before.id,
                   meetingType: before.meetingType,
@@ -429,7 +449,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         await tx.insert(tasks).values({
           id: uuid(),
           tenantId: session.tenantId,
-          assigneeId: before.rmId ?? session.userId,
+          assigneeId: before.createdById ?? session.userId,
           subjectType: reSubjectType,
           subjectId: reSubjectId,
           relatedInvestorId: before.investorId ?? null,
@@ -476,7 +496,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return "not_found" as const;
-      if (!canAll && before.rmId !== session.userId) return "forbidden" as const;
+      if (!canAll && !canTouchMeeting(before, session.userId)) return "forbidden" as const;
       await tx
         .update(reviewMeetings)
         .set({ status: "cancelled", updatedAt: new Date() } as any)
