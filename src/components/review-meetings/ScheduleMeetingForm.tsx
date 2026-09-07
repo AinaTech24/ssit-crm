@@ -46,6 +46,9 @@ const MODES = [
   ["phone", "Phone"],
 ] as const;
 
+/** Rooms available for an in-office meeting. */
+const OFFICE_ROOMS = ["901", "905"] as const;
+
 /** "portfolio_review" → "Portfolio Review" for conflict-list display. */
 function labelType(t: string): string {
   return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -335,14 +338,30 @@ export function ScheduleMeetingForm({
         </Field>
       </div>
 
-      <Field label="Location / link">
+      <Field label={form.meetingMode === "office" ? "Meeting room" : "Location / link"}>
         <div className="flex gap-2">
+          {form.meetingMode === "office" ? (
+            // In-office meetings happen in one of the firm rooms, so pick rather
+            // than retype an address every time. Add a room by extending
+            // OFFICE_ROOMS — it is a plain list, no deploy-time coupling.
+            <SelectField
+              value={form.locationOrLink}
+              onChange={(e) => set("locationOrLink", e.target.value)}
+              className="w-full"
+            >
+              <option value="">Select a room…</option>
+              {OFFICE_ROOMS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </SelectField>
+          ) : (
           <input
             value={form.locationOrLink}
             onChange={(e) => set("locationOrLink", e.target.value)}
             placeholder={form.meetingMode === "online" ? "Zoom / Meet / Teams URL" : form.meetingMode === "phone" ? "Phone number to call" : "Address"}
             className="input-base flex-1"
           />
+          )}
           {form.meetingMode === "online" && (
             <button
               type="button"

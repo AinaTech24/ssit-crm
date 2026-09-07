@@ -475,7 +475,10 @@ export default function NewTaskPage() {
                 · defaults to you
               </span>
             </div>
+            {/* Tasks are operational work owned by Back Office, so the picker is
+                scoped to that role rather than the whole team. */}
             <RmSelector
+              role="back_office"
               value={form.assigneeId || null}
               onChange={(id) => set("assigneeId", id ?? "")}
               placeholder="Assign to myself"

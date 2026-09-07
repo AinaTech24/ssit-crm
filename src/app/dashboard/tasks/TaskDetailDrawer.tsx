@@ -555,6 +555,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
           <div>
             <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Assigned To</label>
             <RmSelector
+              role="back_office"
               value={assigneeId || null}
               onChange={(id) => setAssigneeId(id ?? "")}
               placeholder="Unassigned (defaults to creator)"
@@ -826,6 +827,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0">Assign</span>
                       <RmSelector
+                        role="back_office"
                         value={c.assigneeId ?? null}
                         onChange={(uid) =>
                           setPointField(c.id, {

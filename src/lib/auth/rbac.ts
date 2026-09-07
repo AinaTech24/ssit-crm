@@ -168,11 +168,26 @@ export type Capability =
  * Capability matrix per role. Roles in the array are allowed.
  * `owner` is granted everything via the special case in `can()`.
  */
+/**
+ * BACK OFFICE is deliberately narrow. It holds exactly enough for its five
+ * areas and nothing else:
+ *   clients (view only)      investor.view.all
+ *   tasks                    task.view.all, task.edit.all
+ *   service requests         service_request.view.all, service_request.manage
+ *   business entries         (guarded by investor.view.all)
+ *   SIP rejections           transactions.view, transactions.execute
+ * plus dashboard.view.ops so they land on a real dashboard rather than the bare
+ * team-member fallback.
+ *
+ * It was previously granted 41 capabilities including family management, KYC,
+ * proposals, workflows, segments and firm settings. If you are adding
+ * back_office to a row below, check that against the list above first.
+ */
 const MATRIX: Record<Capability, Role[]> = {
   // Investor data — back_office sees all, RM sees assigned, marketing blocked.
   "investor.view.all": ["compliance", "back_office", "ops"],
   "investor.view.assigned": ["rm", "branch_head"],
-  "investor.edit.all": ["back_office", "ops"],
+  "investor.edit.all": ["ops"],
   "investor.edit.assigned": ["rm"],
   "investor.bulk_export": ["compliance"],
   // Permanent hard-delete of a client + its owned data subgraph (cascades).
@@ -181,14 +196,14 @@ const MATRIX: Record<Capability, Role[]> = {
   // wins via can(); compliance owns DPDP erasure. RM / back_office / ops do NOT
   // get it — they soft-close instead.
   "investor.delete": ["compliance"],
-  "investor.note.add": ["rm", "back_office", "ops", "branch_head", "compliance"],
+  "investor.note.add": ["rm", "ops", "branch_head", "compliance"],
   // Households: an RM groups their OWN book into families, so they manage.
   // Deleting unlinks every client in the household, so it stays narrower.
-  "family.view": ["rm", "back_office", "ops", "branch_head", "compliance"],
-  "family.create": ["rm", "back_office", "ops", "branch_head"],
-  "family.edit": ["rm", "back_office", "ops", "branch_head"],
-  "family.manage": ["rm", "back_office", "ops", "branch_head"],
-  "family.delete": ["back_office", "ops"],
+  "family.view": ["rm", "ops", "branch_head", "compliance"],
+  "family.create": ["rm", "ops", "branch_head"],
+  "family.edit": ["rm", "ops", "branch_head"],
+  "family.manage": ["rm", "ops", "branch_head"],
+  "family.delete": ["ops"],
 
   // Leads — marketing + owner own pipeline; RM works assigned.
   "lead.view.all": ["marketing", "branch_head", "compliance"],
@@ -201,17 +216,17 @@ const MATRIX: Record<Capability, Role[]> = {
   "transactions.execute": ["back_office", "ops", "rm"],
 
   // Back-office specialties
-  "onboarding.manage": ["back_office", "ops"],
-  "kyc.manage": ["back_office", "ops", "compliance"],
+  "onboarding.manage": ["ops"],
+  "kyc.manage": ["ops", "compliance"],
 
   // Service requests / complaints
   "service_request.view.all": ["back_office", "ops", "compliance"],
   "service_request.view.assigned": ["rm"],
   "service_request.manage": ["back_office", "ops"],
-  "complaint.manage": ["compliance", "back_office", "ops"],
+  "complaint.manage": ["compliance", "ops"],
 
   // Review meetings — back_office plans for all, RM runs assigned
-  "review_meeting.manage.all": ["back_office", "ops", "branch_head"],
+  "review_meeting.manage.all": ["ops", "branch_head"],
   "review_meeting.manage.assigned": ["rm"],
 
   // Tasks — every working role plus limited team_member
@@ -221,18 +236,18 @@ const MATRIX: Record<Capability, Role[]> = {
   "task.edit.assigned": ["rm", "team_member", "compliance", "branch_head"],
 
   // Documents
-  "document.view": ["compliance", "back_office", "ops", "rm", "branch_head", "marketing"],
+  "document.view": ["compliance", "ops", "rm", "branch_head", "marketing"],
   // Induction (team training). Everyone can see their OWN track; managing
   // tracks/questions sits with compliance + branch heads (owner bypasses).
-  "induction.view": ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "team_member"],
+  "induction.view": ["rm", "branch_head", "ops", "marketing", "compliance", "team_member"],
   "induction.manage": ["compliance", "branch_head"],
-  "document.upload": ["back_office", "ops", "rm", "compliance", "team_member", "branch_head"],
+  "document.upload": ["ops", "rm", "compliance", "team_member", "branch_head"],
   "document.delete": ["compliance"],
 
   // Workflows — ops/compliance draft, owner + compliance publish (publishing
   // changes live automation, so it stays close to the compliance gate).
-  "workflow.view": ["compliance", "marketing", "back_office", "ops"],
-  "workflow.edit": ["back_office", "ops", "compliance"],
+  "workflow.view": ["compliance", "marketing", "ops"],
+  "workflow.edit": ["ops", "compliance"],
   "workflow.publish": ["compliance"],
 
   // Templates + campaigns + content calendar
@@ -253,36 +268,36 @@ const MATRIX: Record<Capability, Role[]> = {
   "campaign.send": ["marketing"],
   // Ad-hoc 1:1 client email (Compose) — the front-line + ops who actually
   // correspond with clients; marketing already has campaign.send for bulk.
-  "communication.send": ["rm", "branch_head", "back_office", "ops", "marketing"],
+  "communication.send": ["rm", "branch_head", "ops", "marketing"],
 
   // Segments (audience lists). Marketing builds them for campaigns;
   // back-office reads to seed workflow triggers.
-  "segments.view": ["marketing", "back_office", "ops", "compliance", "branch_head"],
-  "segments.manage": ["marketing", "back_office", "ops"],
+  "segments.view": ["marketing", "ops", "compliance", "branch_head"],
+  "segments.manage": ["marketing", "ops"],
 
   // Proposals — RM/back_office prepare, compliance reviews, owner sends.
-  "proposal.view": ["rm", "branch_head", "back_office", "ops", "compliance", "marketing"],
-  "proposal.write": ["rm", "branch_head", "back_office", "ops"],
+  "proposal.view": ["rm", "branch_head", "ops", "compliance", "marketing"],
+  "proposal.write": ["rm", "branch_head", "ops"],
   // Financial plans are a distinct advisory deliverable — same role set as
   // proposals so no one loses access, but a dedicated capability.
-  "financial_plan.view": ["rm", "branch_head", "back_office", "ops", "compliance", "marketing"],
-  "financial_plan.manage": ["rm", "branch_head", "back_office", "ops"],
+  "financial_plan.view": ["rm", "branch_head", "ops", "compliance", "marketing"],
+  "financial_plan.manage": ["rm", "branch_head", "ops"],
   "proposal.send": ["rm", "branch_head"],
 
   // Insurance — RM + back-office maintain; compliance reads.
-  "insurance.view": ["rm", "branch_head", "back_office", "ops", "compliance"],
-  "insurance.write": ["rm", "branch_head", "back_office", "ops"],
+  "insurance.view": ["rm", "branch_head", "ops", "compliance"],
+  "insurance.write": ["rm", "branch_head", "ops"],
 
   // Compliance + adjacent
   "compliance.view": ["compliance"],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
-  "risk_profile.manage": ["compliance", "back_office", "ops", "rm"],
+  "risk_profile.manage": ["compliance", "ops", "rm"],
   // Goal planning is an RM/back-office advisory task (distinct from risk
   // profiling). branch_head supervises; compliance kept for back-compat with
   // the prior risk_profile.manage gate so no one loses existing access.
-  "goal.manage": ["rm", "branch_head", "back_office", "ops", "compliance"],
-  "consent.manage": ["compliance", "back_office", "ops"],
+  "goal.manage": ["rm", "branch_head", "ops", "compliance"],
+  "consent.manage": ["compliance", "ops"],
   "sop.manage": ["compliance"],
 
   // Reports
@@ -291,16 +306,16 @@ const MATRIX: Record<Capability, Role[]> = {
   // Commission/brokerage MIS — the back-office team that runs reconciliation,
   // branch heads (team payout view) and compliance. Owner sees all via the
   // hard-case in can(). RMs are intentionally excluded (firm-level economics).
-  "reports.commission": ["back_office", "ops", "branch_head", "compliance"],
+  "reports.commission": ["ops", "branch_head", "compliance"],
   // Practice finances (firm P&L + salaries) — owner-grade. Back-office keeps
   // access as the bookkeeper who maintains the expense ledger; ops / branch_head
   // / compliance are deliberately excluded (the firm's profit + team salaries are
   // owner-confidential). Owner wins via the hard-case in can().
-  "finances.view": ["back_office"],
+  "finances.view": [],
   // Custom report builder — can compose reports over any catalog field
   // (incl. PII columns), so it's limited to management/back-office roles.
   // Owner wins via can(). RM/ops excluded until per-field gating lands.
-  "reports.manage": ["branch_head", "compliance", "back_office"],
+  "reports.manage": ["branch_head", "compliance"],
 
   // Dashboards
   "dashboard.view.owner": ["compliance", "branch_head"],
@@ -315,12 +330,12 @@ const MATRIX: Record<Capability, Role[]> = {
   // legitimately maintains, so they're delegable.
   "settings.users": [],
   "settings.billing": [],
-  "settings.masters": ["compliance", "back_office", "ops"],
+  "settings.masters": ["compliance", "ops"],
   "settings.security": ["compliance"],
   // Desks are sub-branch team structure (RM → desk → branch rollup). Branch
   // heads own their branch's desks; ops/back-office admins maintain the org
   // chart. Owner is granted via the hard-case in can().
-  "settings.desks": ["branch_head", "back_office", "ops"],
+  "settings.desks": ["branch_head", "ops"],
 };
 
 /**
