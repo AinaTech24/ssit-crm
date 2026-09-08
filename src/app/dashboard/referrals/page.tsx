@@ -73,7 +73,76 @@ export default async function ReferralsPage({
       LEFT JOIN investors inv ON inv.id = l.converted_investor_id
       WHERE i.deleted_at IS NULL
     `);
-    return { rows: rows.rows as any[], summary: summary.rows[0] as any };
+    // ── Breakdowns ──────────────────────────────────────────────────────
+    // Credited to the REFERRING CLIENT'S RM, not the lead's owner: the referral
+    // came out of that relationship, and the lead may be routed to anyone
+    // afterwards. Branch follows the same RM, which is the only branch link a
+    // lead has.
+    const byRm = await tx.execute(sql`
+      SELECT u.id, COALESCE(u.name, 'Unassigned') AS name,
+             COUNT(l.id)::int AS referrals,
+             COUNT(DISTINCT i.id)::int AS referrers,
+             COUNT(l.id) FILTER (WHERE l.converted_investor_id IS NOT NULL OR l.stage = 'converted')::int AS converted
+        FROM leads l
+        JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
+        LEFT JOIN users u ON u.id = i.rm_id
+       WHERE i.deleted_at IS NULL
+       GROUP BY u.id, u.name
+       ORDER BY referrals DESC
+    `);
+
+    const byBranch = await tx.execute(sql`
+      SELECT br.id, COALESCE(br.name, 'Unassigned') AS name,
+             COUNT(l.id)::int AS referrals,
+             COUNT(l.id) FILTER (WHERE l.converted_investor_id IS NOT NULL OR l.stage = 'converted')::int AS converted
+        FROM leads l
+        JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
+        LEFT JOIN users u ON u.id = i.rm_id
+        LEFT JOIN branches br ON br.id = u.branch_id
+       WHERE i.deleted_at IS NULL
+       GROUP BY br.id, br.name
+       ORDER BY referrals DESC
+    `);
+
+    // Products the referred lead asked about. A lead can name several, so the
+    // array is unnested — the counts therefore sum to MORE than the referral
+    // total, which is correct and worth saying on the card.
+    const byProduct = await tx.execute(sql`
+      SELECT p.product AS name, COUNT(*)::int AS referrals
+        FROM leads l
+        JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
+        CROSS JOIN LATERAL jsonb_array_elements_text(
+          CASE WHEN jsonb_typeof(l.interest_products) = 'array'
+               THEN l.interest_products ELSE '[]'::jsonb END
+        ) AS p(product)
+       WHERE i.deleted_at IS NULL
+       GROUP BY p.product
+       ORDER BY referrals DESC
+    `);
+
+    // Business actually booked for clients who came in as a referral — the
+    // question "was any of this worth it". Counts booked entries, not AUM.
+    const business = await tx.execute(sql`
+      SELECT COALESCE(SUM(e.total_amount::numeric), 0)::numeric AS total,
+             COUNT(DISTINCT e.id)::int AS entries,
+             COUNT(DISTINCT e.investor_id)::int AS clients
+        FROM business_entries e
+       WHERE e.status <> 'cancelled'
+         AND e.investor_id IN (
+           SELECT l.converted_investor_id FROM leads l
+            WHERE l.referred_by_investor_id IS NOT NULL
+              AND l.converted_investor_id IS NOT NULL
+         )
+    `);
+
+    return {
+      rows: rows.rows as any[],
+      summary: summary.rows[0] as any,
+      byRm: byRm.rows as any[],
+      byBranch: byBranch.rows as any[],
+      byProduct: byProduct.rows as any[],
+      business: (business.rows[0] as any) ?? { total: 0, entries: 0, clients: 0 },
+    };
   });
 
   return (
@@ -88,29 +157,93 @@ export default async function ReferralsPage({
         </p>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
+      {/* Each tile drills into the list that produced the number — a count you
+          cannot open is a number you have to go and re-derive by hand. */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Stat
           icon={Users}
           label="Active referrers"
           value={String(data.summary?.active_referrers ?? 0)}
+          href="#referrers"
         />
         <Stat
           icon={Heart}
-          label="Total referrals"
+          label="Total referrals received"
           value={String(data.summary?.total_referrals ?? 0)}
+          href="/dashboard/leads?referred=1"
         />
         <Stat
           icon={CheckCircle2}
           label="Converted"
           value={String(data.summary?.total_converted ?? 0)}
           tone="emerald"
+          href="/dashboard/leads?referred=1&stage=converted"
+        />
+        <Stat
+          icon={TrendingUp}
+          label="Business generated"
+          value={Number(data.business?.total) > 0 ? formatINR(Number(data.business.total)) : "—"}
+          sub={`${Number(data.business?.entries ?? 0)} entries · ${Number(data.business?.clients ?? 0)} clients`}
+          tone="emerald"
+          href="/dashboard/business-entries"
         />
         <Stat
           icon={TrendingUp}
           label="Converted AUM"
           value={data.summary?.converted_aum ? formatINR(Number(data.summary.converted_aum)) : "—"}
           tone="emerald"
+          href="/dashboard/investors"
         />
+      </div>
+
+      {/* RM / branch / product splits. Every row opens the leads it counts. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="card-surface p-4">
+          <h2 className="text-sm font-semibold mb-2">RM-wise referrals</h2>
+          <SplitTable
+            rows={data.byRm.map((r: any) => ({
+              key: r.id,
+              name: r.name,
+              count: Number(r.referrals),
+              extra: `${Number(r.converted)} converted`,
+              href: r.id ? `/dashboard/leads?referred=1&referrerRm=${r.id}` : "/dashboard/leads?referred=1",
+            }))}
+          />
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Credited to the referring client&apos;s RM — the referral came out of that relationship,
+            wherever the lead was routed afterwards.
+          </p>
+        </div>
+
+        <div className="card-surface p-4">
+          <h2 className="text-sm font-semibold mb-2">Branch-wise referrals</h2>
+          <SplitTable
+            rows={data.byBranch.map((r: any) => ({
+              key: r.id,
+              name: r.name,
+              count: Number(r.referrals),
+              extra: `${Number(r.converted)} converted`,
+              href: r.id
+                ? `/dashboard/leads?referred=1&referrerBranch=${r.id}`
+                : "/dashboard/leads?referred=1",
+            }))}
+          />
+        </div>
+
+        <div className="card-surface p-4">
+          <h2 className="text-sm font-semibold mb-2">Product-wise referrals</h2>
+          <SplitTable
+            rows={data.byProduct.map((r: any) => ({
+              key: r.name,
+              name: r.name,
+              count: Number(r.referrals),
+              href: `/dashboard/leads?referred=1&product=${encodeURIComponent(r.name)}`,
+            }))}
+          />
+          <p className="text-[11px] text-muted-foreground mt-2">
+            A lead can name several products, so these sum to more than the referral total.
+          </p>
+        </div>
       </div>
 
       <CompactFilterBar
@@ -128,7 +261,7 @@ export default async function ReferralsPage({
         }
       />
 
-      <div className="card-surface overflow-hidden">
+      <div id="referrers" className="card-surface overflow-hidden scroll-mt-24">
         {data.rows.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">
             <Heart className="size-8 mx-auto text-muted-foreground/50" />
@@ -203,9 +336,23 @@ export default async function ReferralsPage({
   );
 }
 
-function Stat({ icon: Icon, label, value, tone }: { icon: any; label: string; value: string; tone?: "emerald" }) {
-  return (
-    <div className="kpi-card">
+function Stat({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone,
+  href,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  sub?: string;
+  tone?: "emerald";
+  href?: string;
+}) {
+  const body = (
+    <>
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">{label}</span>
         <Icon className="size-3.5 text-muted-foreground" />
@@ -217,6 +364,54 @@ function Stat({ icon: Icon, label, value, tone }: { icon: any; label: string; va
       >
         {value}
       </div>
-    </div>
+      {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
+    </>
+  );
+  if (!href) return <div className="kpi-card">{body}</div>;
+  return (
+    <Link
+      href={href}
+      className="kpi-card block cursor-pointer transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cyan/40"
+    >
+      {body}
+    </Link>
+  );
+}
+
+/** A breakdown list where every row opens the leads behind it. */
+function SplitTable({
+  rows,
+}: {
+  rows: Array<{ key: string | null; name: string; count: number; extra?: string; href: string }>;
+}) {
+  if (rows.length === 0) {
+    return <div className="text-xs text-muted-foreground py-6 text-center">No referrals yet.</div>;
+  }
+  const max = Math.max(...rows.map((r) => r.count), 1);
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-[11px] text-muted-foreground border-b">
+        <tr>
+          <th className="text-left py-1.5 font-medium">Name</th>
+          <th className="text-right py-1.5 font-medium">Referrals</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={r.key ?? `_${i}`} className="border-b last:border-0 hover:bg-accent/50">
+            <td className="py-2 pr-2">
+              <Link href={r.href} className="font-medium hover:underline block truncate max-w-[12rem]">
+                {r.name}
+              </Link>
+              <div className="mt-1 h-1 w-full rounded-full bg-secondary overflow-hidden">
+                <div className="h-full bg-brand-cyan" style={{ width: `${Math.round((r.count / max) * 100)}%` }} />
+              </div>
+              {r.extra && <div className="text-[10px] text-muted-foreground mt-0.5">{r.extra}</div>}
+            </td>
+            <td className="py-2 text-right tabular-nums font-semibold align-top">{r.count}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }

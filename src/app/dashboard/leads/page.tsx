@@ -104,6 +104,15 @@ export default async function LeadsPage({
   const stageFilter = (sp.stage ?? "").split(",").filter(Boolean);
   const sourceFilter = (sp.source ?? "").split(",").filter(Boolean);
   const ownerFilter = (sp.owner ?? "").split(",").filter(Boolean);
+  // The RM / branch of the REFERRING CLIENT — not the lead owner. The referrals
+  // module credits a referral to the relationship it came out of, so its
+  // drill-downs have to filter on the same thing or the count and the list
+  // disagree (they did: an RM row said 2 and opened 0).
+  const referrerRm = (sp.referrerRm ?? "").trim();
+  const referrerBranch = (sp.referrerBranch ?? "").trim();
+  // One entry of the interest_products array. The free-text search covers name,
+  // phone and email only, so it could never find these.
+  const productFilter = (sp.product ?? "").trim();
   // Describes the active narrowing so the empty state can name it.
   const activeFilterLabel = [
     q ? `matching “${q}”` : "",
@@ -126,6 +135,7 @@ export default async function LeadsPage({
   // Quick-filter chip params (from LeadQuickFilters)
   const qf = {
     mine: sp.mine === "1",
+    referred: sp.referred === "1",
     unassigned: sp.unassigned === "1",
     hot: sp.hot === "1",
     stuck: sp.stuck === "1",
@@ -162,6 +172,21 @@ export default async function LeadsPage({
       conds.push(sql`leads.owner_id IN (${sql.join(ownerFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
 
     // Quick-filter conditions — each adds a constraint; AND-combined.
+    // A lead LINKED to a referring client. Deliberately not the same as
+    // source='referral': that is a free-text-ish label anyone can set, while this
+    // is the actual relationship the referrals module counts. The two gave
+    // different totals, so the referral tiles link here instead.
+    if (qf.referred) conds.push(sql`leads.referred_by_investor_id IS NOT NULL`);
+    if (productFilter)
+      conds.push(sql`leads.interest_products @> ${JSON.stringify([productFilter])}::jsonb`);
+    if (referrerRm)
+      conds.push(sql`EXISTS (SELECT 1 FROM investors ri WHERE ri.id = leads.referred_by_investor_id AND ri.rm_id = ${referrerRm}::uuid)`);
+    if (referrerBranch)
+      conds.push(sql`EXISTS (
+        SELECT 1 FROM investors ri
+          JOIN users ru ON ru.id = ri.rm_id
+         WHERE ri.id = leads.referred_by_investor_id AND ru.branch_id = ${referrerBranch}::uuid
+      )`);
     if (qf.mine) conds.push(sql`leads.owner_id = ${userId}`);
     if (qf.unassigned) conds.push(sql`leads.owner_id IS NULL`);
     // "Hot" now means a high deterministic score (persisted), not just a
