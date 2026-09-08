@@ -13,7 +13,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
-import { amcEmpanelments } from "@/db/schema";
+import { amcEmpanelments, EMPANELMENT_CATEGORY_VALUES } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +42,7 @@ const DocumentSchema = z.object({
 
 const PostBody = z.object({
   amcCode: z.string().min(1).max(60),
+  category: z.enum(EMPANELMENT_CATEGORY_VALUES as [string, ...string[]]).nullable().optional(),
   amcName: z.string().min(1).max(200),
   distributorCode: z.string().max(80).nullable().optional(),
   empanelmentDate: z.string().nullable().optional(),

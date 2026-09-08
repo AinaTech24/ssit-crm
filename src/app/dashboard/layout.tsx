@@ -216,7 +216,10 @@ const NAV: NavSection[] = [
       { href: "/dashboard/leave-applications", label: "Leave Applications", icon: CalendarOff },
       { href: "/dashboard/sub-distributors", label: "Sub-Distributors", icon: Network, roles: ["owner", "compliance"] },
       { href: "/dashboard/legal-registrations", label: "Legal Registrations", icon: Stamp, roles: ["owner", "compliance"] },
-      { href: "/dashboard/amc-empanelments", label: "AMC Empanelments", icon: Building2, roles: ["owner", "compliance", "back_office"] },
+      // Branch heads only (owner always passes) — matches amc_empanelment.view
+      // on the page. Compliance and back office lose the link they had; they
+      // never needed the negotiated trail rates.
+      { href: "/dashboard/amc-empanelments", label: "AMC Empanelments", icon: Building2, roles: ["owner", "branch_head"] },
       { href: "/dashboard/schemes", label: "Scheme Master", icon: Boxes, roles: ["owner", "compliance", "back_office", "branch_head", "rm"] },
       { href: "/dashboard/product-offerings", label: "Products & Services", icon: Package, roles: ["owner", "compliance"] },
     ],

@@ -8,12 +8,12 @@
 
 import Link from "next/link";
 import { Plus, Phone, Mail, ExternalLink } from "lucide-react";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
-import { amcEmpanelments } from "@/db/schema";
+import { amcEmpanelments, EMPANELMENT_CATEGORIES, EMPANELMENT_CATEGORY_LABEL } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -27,21 +27,42 @@ const STATUS_TONE: Record<string, string> = {
 export default async function AmcEmpanelmentsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; category?: string }>;
 }) {
   const session = await requireSession();
-  // Viewing the empanelment list is operational data — owner + compliance +
-  // ops/back-office (settings.masters) can read it. Creating/editing stays
-  // gated on compliance.edit at the action + API level.
-  requireAny(session.roles, ["compliance.view", "compliance.edit", "settings.masters"], session.permissions);
+  // Branch heads only. Empanelment terms — distributor codes, trail rates, the
+  // AMC escalation tree — are commercial relationship data, not something every
+  // desk needs. `owner` still passes via the short-circuit in can(), and an
+  // owner can delegate to a specific person with the capability tick.
+  requireAny(session.roles, ["amc_empanelment.view"], session.permissions);
   await assertActiveLicense(session.tenantId, session.roles);
   const sp = await searchParams;
   const statusFilter = sp.status ?? "empanelled";
+  const categoryFilter = sp.category ?? "all";
+  // Preserve the other axis when one filter is clicked, so the two compose
+  // instead of resetting each other.
+  const hrefFor = (patch: { status?: string; category?: string }) => {
+    const q = new URLSearchParams();
+    const st = patch.status ?? statusFilter;
+    const ct = patch.category ?? categoryFilter;
+    if (st) q.set("status", st);
+    if (ct && ct !== "all") q.set("category", ct);
+    return `/dashboard/amc-empanelments?${q.toString()}`;
+  };
 
   const rows = await withTenant(session.tenantId, async (tx) => {
     const where = [eq(amcEmpanelments.tenantId, session.tenantId)];
     if (statusFilter !== "all") {
       where.push(eq(amcEmpanelments.status, statusFilter as any));
+    }
+    if (categoryFilter !== "all") {
+      // "uncategorised" is a real bucket: every row predating migration 0207
+      // has no category, and they need to be findable to be fixed.
+      where.push(
+        categoryFilter === "uncategorised"
+          ? isNull(amcEmpanelments.category)
+          : eq(amcEmpanelments.category, categoryFilter)
+      );
     }
     return tx
       .select()
@@ -57,6 +78,10 @@ export default async function AmcEmpanelmentsListPage({
       .where(eq(amcEmpanelments.tenantId, session.tenantId));
     return {
       total: all.length,
+      byCategory: Object.fromEntries(
+        EMPANELMENT_CATEGORIES.map((c) => [c.value, all.filter((r) => r.category === c.value).length])
+      ) as Record<string, number>,
+      uncategorised: all.filter((r) => !r.category).length,
       empanelled: all.filter((r) => r.status === "empanelled").length,
       underReview: all.filter((r) => r.status === "under_review").length,
       suspended: all.filter((r) => r.status === "suspended").length,
@@ -85,13 +110,43 @@ export default async function AmcEmpanelmentsListPage({
         ].map((s) => (
           <Link
             key={s.value}
-            href={`/dashboard/amc-empanelments?status=${s.value}`}
-            className={`chip text-xs ${statusFilter === s.value
+            href={hrefFor({ status: s.value })}
+            aria-current={statusFilter === s.value ? "page" : undefined}
+            className={`chip text-xs cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cyan/40 ${
+              statusFilter === s.value
                 ? "bg-brand-cyan-deep text-white"
-                : "bg-secondary text-foreground hover:bg-secondary/70"
-              }`}
+                : "bg-secondary text-foreground hover:bg-secondary/70 hover:text-foreground"
+            }`}
           >
             {s.label}
+          </Link>
+        ))}
+      </div>
+
+      {/* Product line — the second filter axis, composed with status above. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] uppercase tracking-wide text-muted-foreground mr-1">Product line</span>
+        {[
+          { value: "all", label: `All · ${counts.total}` },
+          ...EMPANELMENT_CATEGORIES.map((c) => ({
+            value: c.value,
+            label: `${c.label} · ${counts.byCategory[c.value] ?? 0}`,
+          })),
+          ...(counts.uncategorised > 0
+            ? [{ value: "uncategorised", label: `Uncategorised · ${counts.uncategorised}` }]
+            : []),
+        ].map((c) => (
+          <Link
+            key={c.value}
+            href={hrefFor({ category: c.value })}
+            aria-current={categoryFilter === c.value ? "page" : undefined}
+            className={`chip text-xs cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cyan/40 ${
+              categoryFilter === c.value
+                ? "bg-brand-cyan-deep text-white"
+                : "bg-secondary text-foreground hover:bg-secondary/70 hover:text-foreground"
+            }`}
+          >
+            {c.label}
           </Link>
         ))}
       </div>
@@ -114,6 +169,7 @@ export default async function AmcEmpanelmentsListPage({
             <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 text-left">AMC</th>
+                <th className="px-3 py-2 text-left">Product line</th>
                 <th className="px-3 py-2 text-left">Distributor code</th>
                 <th className="px-3 py-2 text-left">Empanelled since</th>
                 <th className="px-3 py-2 text-left">RM contact</th>
@@ -137,6 +193,15 @@ export default async function AmcEmpanelmentsListPage({
                     <div className="text-[10px] text-muted-foreground font-mono">
                       {r.amcCode}
                     </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    {r.category ? (
+                      <span className="chip bg-sky-50 text-sky-700 text-[10px]">
+                        {EMPANELMENT_CATEGORY_LABEL[r.category] ?? r.category}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 font-mono">
                     {r.distributorCode ?? "—"}

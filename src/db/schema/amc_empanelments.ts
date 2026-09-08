@@ -34,6 +34,25 @@ import {
 import { id, tenantId, timestamps } from "./_shared";
 import { tenants } from "./tenants";
 
+/**
+ * Product line an empanelment covers. A firm empanels separately per product —
+ * the MF agreement, the PMS/AIF agreement and the insurance tie-up are
+ * different contracts with different codes and renewal dates.
+ */
+export const EMPANELMENT_CATEGORIES = [
+  { value: "mf", label: "MF" },
+  { value: "pms_aif", label: "PMS / AIF" },
+  { value: "insurance", label: "Insurance" },
+  { value: "las", label: "Loan Against Share" },
+  { value: "unlisted_share", label: "Unlisted Share" },
+] as const;
+
+export const EMPANELMENT_CATEGORY_VALUES = EMPANELMENT_CATEGORIES.map((c) => c.value);
+
+export const EMPANELMENT_CATEGORY_LABEL: Record<string, string> = Object.fromEntries(
+  EMPANELMENT_CATEGORIES.map((c) => [c.value, c.label])
+);
+
 export const EMPANELMENT_STATUSES = [
   "empanelled",
   "under_review",
@@ -52,6 +71,8 @@ export const amcEmpanelments = pgTable(
      * keep new-tenant migration simple (amc_master is seeded async); the
      * UI's AMC picker constrains to valid codes.
      */
+    /** Product line this empanelment covers (migration 0207). NULL = not yet set. */
+    category: text("category"),
     amcCode: text("amc_code").notNull(),
     /** Display name cached for fast list rendering. */
     amcName: text("amc_name").notNull(),

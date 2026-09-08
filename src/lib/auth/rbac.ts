@@ -133,6 +133,7 @@ export type Capability =
   | "insurance.write"
   // Compliance + DDQ + risk profile + consent + SOP
   | "compliance.view"
+  | "amc_empanelment.view"
   | "induction.view"
   | "induction.manage"
   | "compliance.edit"
@@ -277,6 +278,11 @@ const MATRIX: Record<Capability, Role[]> = {
 
   // Compliance + adjacent
   "compliance.view": ["compliance"],
+  // AMC empanelments — distributor codes, negotiated trail rates and the AMC
+  // escalation tree. Commercial relationship data, so branch heads only; owner
+  // passes via the short-circuit above, and an owner can delegate it to a
+  // specific person by ticking it under Customize Access Permissions.
+  "amc_empanelment.view": ["branch_head"],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
   "risk_profile.manage": ["compliance", "back_office", "ops", "rm"],

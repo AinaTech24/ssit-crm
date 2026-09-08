@@ -11,7 +11,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
-import { amcEmpanelments } from "@/db/schema";
+import { amcEmpanelments, EMPANELMENT_CATEGORY_VALUES } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,7 @@ const STATUSES = [
 
 const PatchBody = z.object({
   amcName: z.string().min(1).max(200).optional(),
+  category: z.enum(EMPANELMENT_CATEGORY_VALUES as [string, ...string[]]).nullable().optional(),
   distributorCode: z.string().max(80).nullable().optional(),
   empanelmentDate: z.string().nullable().optional(),
   status: z.enum(STATUSES).optional(),

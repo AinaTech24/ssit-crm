@@ -19,6 +19,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, Loader2, Trash2, Plus, X, ExternalLink } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
+import { EMPANELMENT_CATEGORIES } from "@/db/schema/amc_empanelments";
 import { DateField } from "@/components/ui/DateField";
 
 const STATUSES = [
@@ -47,6 +48,7 @@ type FormValues = {
   id?: string;
   amcCode: string;
   amcName: string;
+  category: string | null;
   distributorCode: string | null;
   empanelmentDate: string | null;
   status: string;
@@ -71,6 +73,7 @@ type FormValues = {
 
 const EMPTY: FormValues = {
   amcCode: "",
+  category: "",
   amcName: "",
   distributorCode: null,
   empanelmentDate: null,
@@ -263,6 +266,20 @@ export function AmcEmpanelmentForm({
               />
             </Field>
           )}
+          <Field label="Product line">
+            <SelectField
+              value={v.category ?? ""}
+              onChange={(e) => field("category", e.target.value || null)}
+              className="text-sm w-full"
+            >
+              <option value="">Uncategorised</option>
+              {EMPANELMENT_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </SelectField>
+          </Field>
           <Field label="Status">
             <SelectField
               value={v.status}
