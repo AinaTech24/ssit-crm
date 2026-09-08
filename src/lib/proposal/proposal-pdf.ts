@@ -60,9 +60,9 @@ const MARGIN = 40;
 let KEEP_RUPEE = false;
 let CUR = "Rs ";
 
-type Col = { h: string; w: number; align?: "l" | "r"; get: (it: any) => string };
+export type Col = { h: string; w: number; align?: "l" | "r"; get: (it: any) => string };
 
-function colsFor(kind: string): Col[] {
+export function colsFor(kind: string): Col[] {
   if (kind === "insurance")
     return [
       { h: "Policy", w: 0.30, get: (it) => it.policyName ?? "-" },
@@ -91,6 +91,32 @@ function colsFor(kind: string): Col[] {
     { h: "Return", w: 0.09, align: "r", get: (it) => pctv(it.expectedReturn) },
     { h: "Projected", w: 0.16, align: "r", get: (it) => amt(it.projectedCorpus) },
   ];
+}
+
+/** A cell the reader gains nothing from: blank, or one of our placeholders. */
+export function isBlankCell(v: string | null | undefined): boolean {
+  const t = String(v ?? "").trim();
+  return t === "" || t === "-" || t === "—";
+}
+
+/**
+ * Drop every column that is empty for ALL rows, then re-normalise the widths so
+ * the surviving columns still fill the table.
+ *
+ * A proposal for a pure-lumpsum plan carried "SIP/mo" and "Term" columns of
+ * dashes; an insurance proposal with no term carried an empty "Term". The
+ * reader cannot tell a column that does not apply from one somebody forgot to
+ * fill in, and it costs width the real columns need.
+ *
+ * The first column is always kept even if blank — a table whose rows have no
+ * identifying label is worse than one dash.
+ */
+export function pruneEmptyCols(cols: Col[], items: any[]): Col[] {
+  if (items.length === 0) return cols;
+  const kept = cols.filter((c, i) => i === 0 || items.some((it) => !isBlankCell(c.get(it))));
+  const total = kept.reduce((a, c) => a + c.w, 0);
+  if (total <= 0) return kept;
+  return kept.map((c) => ({ ...c, w: c.w / total }));
 }
 
 export async function renderProposalPdf(args: { proposal: ProposalData; brand: ProposalBrand; generatedAt?: string }): Promise<Buffer> {
@@ -159,12 +185,15 @@ export async function renderProposalPdf(args: { proposal: ProposalData; brand: P
   }
 
   // ── Summary cards ──
+  // Same rule as the tables: a card with nothing in it is noise, so it is not
+  // drawn at all and the rest widen to fill the row.
   const cards: Array<{ label: string; value: string; tone?: RGB }> = [
     { label: "Total investment", value: amt(p.totalInvestment) },
     { label: "Projected corpus", value: amt(p.expectedCorpus), tone: GREEN },
     { label: "Risk rating", value: p.riskRating ? ascii(p.riskRating) : "-" },
     { label: "Valid until", value: p.validUntil ? fmtDate(p.validUntil) : "-" },
-  ];
+  ].filter((c) => !isBlankCell(c.value));
+  if (cards.length > 0) {
   ensure(70);
   {
     const gap = 10;
@@ -179,6 +208,7 @@ export async function renderProposalPdf(args: { proposal: ProposalData; brand: P
     });
     cur.y -= ch + 26;
   }
+  }
 
   // ── Detailed per-kind product tables ──
   const products = (p.products ?? []) as any[];
@@ -186,7 +216,7 @@ export async function renderProposalPdf(args: { proposal: ProposalData; brand: P
   for (const it of products) (groups[it?.kind ?? "mf"] ??= []).push(it);
 
   for (const [kind, items] of Object.entries(groups)) {
-    const cols = colsFor(kind);
+    const cols = pruneEmptyCols(colsFor(kind), items);
     ensure(40);
     cur.page.drawText(ascii(KIND_TITLE[kind] ?? kind).toUpperCase(), { x: MARGIN, y: cur.y, size: 9, font: bold, color: primary });
     cur.y -= 14;

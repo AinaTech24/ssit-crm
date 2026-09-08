@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileDown, Mail, MessageCircle, Loader2, Check, Link2, CalendarClock, Receipt } from "lucide-react";
+import { FileDown, Mail, MessageCircle, Loader2, Check, Link2, CalendarClock, Receipt, Sheet } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
 import { DownloadButton } from "@/components/common/SecureLinkButtons";
 
@@ -108,8 +108,13 @@ export function StatementActions({
 
       {/* Action buttons */}
       <div className="flex flex-wrap items-center gap-2">
+        {/* Same numbers, two shapes: the PDF is what you send a client, the
+            spreadsheet is what gets sorted, filtered and pasted into a model. */}
         <DownloadButton url={`/api/investors/${investorId}/statement/pdf?download=1`} className="btn-secondary text-xs">
-          <FileDown className="size-3.5" /> Download statement
+          <FileDown className="size-3.5" /> Portfolio PDF
+        </DownloadButton>
+        <DownloadButton url={`/api/investors/${investorId}/statement/xlsx`} className="btn-secondary text-xs">
+          <Sheet className="size-3.5" /> Portfolio Excel
         </DownloadButton>
         <a href={`/dashboard/investors/${investorId}/capital-gains`} className="btn-secondary text-xs">
           <Receipt className="size-3.5" /> Capital gains
