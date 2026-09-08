@@ -12,6 +12,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { investors, tenants } from "@/db/schema";
+import { assertCanViewClient } from "@/lib/investors/access";
 import { valueInvestor } from "@/lib/finance/valuation";
 import { renderValuationStatementPdf } from "@/lib/finance/valuation-pdf";
 
@@ -26,11 +27,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const built = await withTenant(session.tenantId, async (tx) => {
       const [inv] = await tx
-        .select({ id: investors.id, name: investors.name, pan: investors.pan })
+        .select({
+          id: investors.id, name: investors.name, pan: investors.pan,
+          rmId: investors.rmId, branchId: investors.branchId,
+        })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return null;
+      await assertCanViewClient(tx, session, inv);
       const valuation = await valueInvestor(tx, id);
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1);
       const pdf = await renderValuationStatementPdf({

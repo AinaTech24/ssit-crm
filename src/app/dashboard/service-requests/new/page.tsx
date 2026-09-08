@@ -167,14 +167,14 @@ export default function NewServiceRequestPage() {
             <div className="text-xs font-medium mb-1">
               Assign to
               <span className="ml-1 text-[10px] text-muted-foreground font-normal">
-                · defaults to you
+                · back office
               </span>
             </div>
             <RmSelector
               role="back_office"
               value={form.assignedToUserId || null}
               onChange={(id) => setForm({ ...form, assignedToUserId: id ?? "" })}
-              placeholder="— Assign to myself —"
+              placeholder="— Unassigned —"
             />
           </label>
         </div>

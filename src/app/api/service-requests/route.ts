@@ -123,7 +123,14 @@ export async function POST(req: NextRequest) {
         tenantId: session.tenantId,
         ticketNo,
         investorId: body.investorId ?? null,
-        assignedToUserId: body.assignedToUserId ?? session.userId,
+        // Service requests are worked by back office, so an unpicked assignee
+        // leaves the ticket UNASSIGNED rather than silently landing on whoever
+        // raised it. Self-assign is kept for a back-office creator, who is a
+        // legitimate owner. Previously an RM logging a ticket became its
+        // assignee, which the back-office-only picker now contradicts.
+        assignedToUserId:
+          body.assignedToUserId ??
+          (session.roles.includes("back_office") ? session.userId : null),
         type: body.type,
         channel: body.channel,
         subject: body.subject,

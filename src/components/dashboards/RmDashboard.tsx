@@ -111,7 +111,11 @@ export async function RmDashboard({
     `);
     const netSeries = (netSeriesRes.rows as any[]).map((r) => Number(r.net));
 
-    // Reviews due this week
+    // Reviews: everything already overdue, plus what falls due in the next 7
+    // days. The window has no lower bound on purpose — a review missed six
+    // months ago still needs doing — but it USED to be labelled "due this week"
+    // with nothing distinguishing the two, so a long-overdue client read as a
+    // routine one. The row now says which it is and overdue sorts first.
     const reviewsDue = await tx
       .select()
       .from(investors)
@@ -123,7 +127,7 @@ export async function RmDashboard({
         )
       )
       .orderBy(investors.nextReviewAt)
-      .limit(10);
+      .limit(12);
 
     // Today's follow-ups (leads + tasks)
     const followUps = await tx.execute(sql`
@@ -437,7 +441,7 @@ export async function RmDashboard({
           )}
         </Section>
 
-        <Section title="Reviews due this week" count={data.reviewsDue.length}>
+        <Section title="Reviews — overdue &amp; due this week" count={data.reviewsDue.length}>
           {data.reviewsDue.length === 0 ? (
             <DashboardEmptyState
               compact
@@ -446,17 +450,29 @@ export async function RmDashboard({
             />
           ) : (
             <ul className="divide-y">
-              {data.reviewsDue.map((i) => (
-                <li key={i.id} className="py-2 flex items-center justify-between text-sm">
-                  <Link href={`/dashboard/investors/${i.id}`} className="flex items-center gap-2 hover:underline">
-                    <Avatar src={(i as any).avatarUrl ? `/api/investors/${i.id}/avatar` : null} name={i.name} size={26} />
-                    <span>{i.name}</span>
-                  </Link>
-                  <span className="text-xs text-muted-foreground">
-                    {i.segmentTag} · {i.nextReviewAt ? formatDate(i.nextReviewAt) : "—"}
-                  </span>
-                </li>
-              ))}
+              {data.reviewsDue.map((i) => {
+                const due = i.nextReviewAt ? new Date(i.nextReviewAt as any) : null;
+                const overdueDays = due
+                  ? Math.floor((Date.now() - due.getTime()) / 86_400_000)
+                  : 0;
+                const overdue = overdueDays > 0;
+                return (
+                  <li key={i.id} className="py-2 flex items-center justify-between text-sm gap-2">
+                    <Link href={`/dashboard/investors/${i.id}`} className="flex items-center gap-2 hover:underline min-w-0">
+                      <Avatar src={(i as any).avatarUrl ? `/api/investors/${i.id}/avatar` : null} name={i.name} size={26} />
+                      <span className="truncate">{i.name}</span>
+                    </Link>
+                    <span className="text-xs whitespace-nowrap text-right">
+                      <span className={overdue ? "text-rose-600 font-medium" : "text-muted-foreground"}>
+                        {overdue ? `Overdue ${overdueDays}d` : "Upcoming"}
+                      </span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {i.segmentTag} · {due ? formatDate(due) : "—"}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Section>

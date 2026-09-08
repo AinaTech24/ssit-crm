@@ -19,6 +19,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { investors } from "@/db/schema";
+import { assertCanViewClient } from "@/lib/investors/access";
 import { valueInvestor } from "@/lib/finance/valuation";
 
 export const dynamic = "force-dynamic";
@@ -40,11 +41,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const built = await withTenant(session.tenantId, async (tx) => {
       const [inv] = await tx
-        .select({ id: investors.id, name: investors.name, pan: investors.pan })
+        .select({
+          id: investors.id, name: investors.name, pan: investors.pan,
+          rmId: investors.rmId, branchId: investors.branchId,
+        })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return null;
+      // Honours the per-tenant data wall. Without it the export stayed open
+      // even for a firm that had walled its books.
+      await assertCanViewClient(tx, session, inv);
       return { inv, valuation: await valueInvestor(tx, id) };
     });
     if (!built) return NextResponse.json({ error: "not found" }, { status: 404 });

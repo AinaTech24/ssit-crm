@@ -93,3 +93,38 @@ export async function investorScopeSql(tx: any, session: SessionUser, alias = "i
   if (canViewAllInvestors(session)) return sql`TRUE`;
   return sql`${sql.raw(`${alias}.rm_id`)} = ${session.userId}::uuid`;
 }
+
+/**
+ * Throws 403 unless this session may open THIS client's record.
+ *
+ * The single-row counterpart to `investorScopeCondition`, for routes that load
+ * one client by id instead of listing many. It honours the SAME per-tenant
+ * switch, so a firm running a shared book is unaffected and a firm that has
+ * turned the wall on gets it enforced here too.
+ *
+ * Why it exists: the statement exports (PDF + Excel) checked only the
+ * capability, which says the caller may view SOME clients and nothing about
+ * which. With the wall on, an RM could still have pulled any client's holdings,
+ * amounts and PAN by changing the id in the URL — the list was walled and the
+ * export was not.
+ *
+ * Call INSIDE the tenant transaction, after loading the row.
+ */
+export async function assertCanViewClient(
+  tx: any,
+  session: SessionUser,
+  inv: { rmId?: string | null; branchId?: string | null }
+): Promise<void> {
+  requireInvestorView(session);
+  if (!(await isDataScopeRestricted(tx, session.tenantId))) return;
+  if (canViewAllInvestors(session)) return;
+  if (isBranchScoped(session)) {
+    if (inv.branchId !== session.branchId) {
+      throw Object.assign(new Error("forbidden: client is in another branch"), { status: 403 });
+    }
+    return;
+  }
+  if (inv.rmId !== session.userId) {
+    throw Object.assign(new Error("forbidden: client not assigned to you"), { status: 403 });
+  }
+}
