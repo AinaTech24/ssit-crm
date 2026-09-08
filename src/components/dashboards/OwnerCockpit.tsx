@@ -20,6 +20,7 @@ import { AttentionQueuesSection } from "./AttentionQueuesSection";
 import { RmLeaderboard } from "./RmLeaderboard";
 import { LeadFunnelSection } from "./LeadFunnelSection";
 import { AumSegmentSection } from "./AumSegmentSection";
+import { SchemeHoldingsSection } from "./SchemeHoldingsSection";
 import { CardSkeleton, ChartSkeleton, LeaderboardSkeleton } from "./DashboardSkeletons";
 
 /** Build a "?period=…(&pstart=…)" query suffix so drill-down links open scoped
@@ -578,6 +579,11 @@ async function OwnerCockpitBody({
         )}
       </div>
       )}
+
+      {/* ---------- Scheme-wise holdings + total SIF book ---------- */}
+      <Suspense fallback={<ChartSkeleton />}>
+        <SchemeHoldingsSection session={session} />
+      </Suspense>
 
       {/* ---------- SIP Persistency — franchise health metric ---------- */}
       {show("section.sip_persistency") && <SipPersistencyTile session={session} />}

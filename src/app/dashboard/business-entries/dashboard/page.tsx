@@ -172,6 +172,18 @@ export default async function BusinessDashboardPage({
         </Card>
       </div>
 
+      {/* RM-wise and branch-wise splits of the same filtered set. Both carry
+          entry and client counts, because gross alone hides an RM writing one
+          large ticket versus many small ones. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card title="RM-wise business">
+          <OrgTable rows={summary.byRm.map((r) => ({ key: r.rmId, name: r.name, amount: r.amount, entries: r.entries, clients: r.clients }))} />
+        </Card>
+        <Card title="Branch-wise business">
+          <OrgTable rows={summary.byBranch.map((r) => ({ key: r.branchId, name: r.name, amount: r.amount, entries: r.entries, clients: r.clients }))} />
+        </Card>
+      </div>
+
       <Card title="Top clients">
         {summary.topClients.length === 0 ? (
           <div className="text-xs text-muted-foreground py-4">No data.</div>
@@ -192,6 +204,43 @@ export default async function BusinessDashboardPage({
         )}
       </Card>
     </div>
+  );
+}
+
+/** RM / branch split: name, gross, and the counts behind it. */
+function OrgTable({
+  rows,
+}: {
+  rows: Array<{ key: string | null; name: string; amount: number; entries: number; clients: number }>;
+}) {
+  if (rows.length === 0) return <div className="text-xs text-muted-foreground py-4">No data.</div>;
+  const max = Math.max(...rows.map((r) => r.amount), 1);
+  return (
+    <table className="w-full text-sm">
+      <thead className="text-[11px] text-muted-foreground border-b">
+        <tr>
+          <th className="text-left py-1.5 font-medium">Name</th>
+          <th className="text-right py-1.5 font-medium">Entries</th>
+          <th className="text-right py-1.5 font-medium">Clients</th>
+          <th className="text-right py-1.5 font-medium">Gross</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={r.key ?? `_${i}`} className="border-b last:border-0">
+            <td className="py-2 pr-2">
+              <div className="font-medium truncate max-w-[14rem]">{r.name}</div>
+              <div className="mt-1 h-1 w-full rounded-full bg-secondary overflow-hidden">
+                <div className="h-full bg-brand-cyan" style={{ width: `${Math.round((r.amount / max) * 100)}%` }} />
+              </div>
+            </td>
+            <td className="py-2 text-right tabular-nums text-xs text-muted-foreground">{r.entries}</td>
+            <td className="py-2 text-right tabular-nums text-xs text-muted-foreground">{r.clients}</td>
+            <td className="py-2 text-right tabular-nums font-medium">{formatINR(r.amount)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
