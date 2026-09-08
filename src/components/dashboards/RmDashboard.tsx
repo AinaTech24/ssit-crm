@@ -170,6 +170,69 @@ export async function RmDashboard({
       LIMIT 5
     `);
 
+    // Clients not MET in over 100 days. Counts actual meetings, not calls or
+    // emails: a review conversation is the thing that slips quietly, and a
+    // client with no meeting on record at all counts from when they onboarded
+    // (otherwise the people never met once would be the only ones missing).
+    const meetingOverdueRes = await tx.execute(sql`
+      SELECT i.id, i.name, i.segment_tag, i.avatar_url,
+             m.last_met,
+             COALESCE(m.last_met, i.onboarded_at::date) AS since,
+             (CURRENT_DATE - COALESCE(m.last_met, i.onboarded_at::date)) AS days_since
+        FROM investors i
+        LEFT JOIN LATERAL (
+          SELECT MAX(rm.meeting_date)::date AS last_met
+            FROM review_meetings rm
+           WHERE rm.investor_id = i.id
+             AND rm.tenant_id = i.tenant_id
+             AND rm.status = 'completed'
+        ) m ON true
+       WHERE i.rm_id = ${userId}
+         AND i.status = 'active'
+         AND i.deleted_at IS NULL
+         AND COALESCE(m.last_met, i.onboarded_at::date) IS NOT NULL
+         AND COALESCE(m.last_met, i.onboarded_at::date)
+             < CURRENT_DATE - ${thresholds.meetingOverdueDays}::int
+       ORDER BY days_since DESC
+       LIMIT 8
+    `);
+
+    // SIPs running a year or more at the same amount — the step-up conversation
+    // nobody schedules. Keyed on the SIP's own start date rather than the
+    // client record, so a client with one old SIP and one new one still shows
+    // the old one.
+    const stepUpRes = await tx.execute(sql`
+      SELECT s.id, s.scheme_name, s.amount, s.start_date,
+             i.id AS investor_id, i.name AS investor_name, i.avatar_url,
+             (CURRENT_DATE - s.start_date::date) AS days_running
+        FROM sips s
+        JOIN investors i ON i.id = s.investor_id AND i.tenant_id = s.tenant_id
+       WHERE i.rm_id = ${userId}
+         AND i.deleted_at IS NULL
+         AND s.status = 'active'
+         AND s.start_date IS NOT NULL
+         AND s.start_date::date <= CURRENT_DATE - INTERVAL '1 year'
+         AND s.updated_at < now() - INTERVAL '1 year'
+       ORDER BY s.start_date ASC
+       LIMIT 8
+    `);
+
+    // Dormant money: no transaction in years. Distinct from the dormancy FLAG
+    // the scanner sets (that one closes the client); this is a live nudge for
+    // accounts still counted as active.
+    const staleRes = await tx.execute(sql`
+      SELECT i.id, i.name, i.segment_tag, i.avatar_url, i.aum, i.last_transaction_at,
+             (CURRENT_DATE - i.last_transaction_at::date) AS days_since
+        FROM investors i
+       WHERE i.rm_id = ${userId}
+         AND i.status = 'active'
+         AND i.deleted_at IS NULL
+         AND i.last_transaction_at IS NOT NULL
+         AND i.last_transaction_at < now() - (${thresholds.staleTransactionYears}::int * INTERVAL '1 year')
+       ORDER BY i.last_transaction_at ASC
+       LIMIT 8
+    `);
+
     // SIP rejection follow-ups — rejected SIPs within the configured look-back
     // window (getDashboardThresholds.sipRejectionWindowDays) for my clients.
     const sipRejections = await tx.execute(sql`
@@ -237,6 +300,9 @@ export async function RmDashboard({
       birthdays: birthdays.rows as any[],
       myTasks,
       topUps: topUpRes.rows as any[],
+      meetingOverdue: meetingOverdueRes.rows as any[],
+      stepUps: stepUpRes.rows as any[],
+      staleClients: staleRes.rows as any[],
       sipRejections: sipRejections.rows as any[],
       anniversaries: anniversaries.rows as any[],
       myServiceReqs: myServiceReqs.rows as any[],
@@ -396,6 +462,120 @@ export async function RmDashboard({
         </Section>
       </div>
 
+      <Section title={`${who} open tasks`} count={data.myTasks.length}>
+        {data.myTasks.length === 0 ? (
+          <DashboardEmptyState
+            compact
+            title="No open tasks 🎉"
+            hint="Your task list is clear. Nice work staying on top of things."
+          />
+        ) : (
+          <ul className="divide-y">
+            {data.myTasks.map((t) => (
+              <li key={t.id} className="py-2 flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" className="size-3.5 rounded" />
+                  <span>{t.title}</span>
+                  <span className="text-xs uppercase text-muted-foreground">{t.priority}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {t.dueAt ? formatRelative(t.dueAt) : "no due"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Not MET in over 100 days. Meetings only — a client you have emailed
+            but not sat with is exactly the one this is looking for. */}
+        <Section title={`Client meetings overdue (${thresholds.meetingOverdueDays}+ days)`} count={data.meetingOverdue.length}>
+          {data.meetingOverdue.length === 0 ? (
+            <DashboardEmptyState
+              compact
+              title="Everyone has been seen recently 🎉"
+              hint={`No client of yours has gone ${thresholds.meetingOverdueDays} days without a completed meeting.`}
+            />
+          ) : (
+            <ul className="divide-y">
+              {data.meetingOverdue.map((c: any) => (
+                <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
+                  <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
+                    <Avatar src={c.avatar_url ? `/api/investors/${c.id}/avatar` : null} name={c.name} size={26} />
+                    <span className="truncate">{c.name}</span>
+                  </Link>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {Number(c.days_since)} days
+                    {c.last_met ? "" : " · never met"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        {/* SIPs a year old at the same amount — the step-up nobody schedules. */}
+        <Section title="SIP step-ups pending (1 yr+)" count={data.stepUps.length}>
+          {data.stepUps.length === 0 ? (
+            <DashboardEmptyState
+              compact
+              title="No step-ups pending"
+              hint="No SIP of yours has been running a year or more at an unchanged amount."
+            />
+          ) : (
+            <ul className="divide-y">
+              {data.stepUps.map((sp: any) => (
+                <li key={sp.id} className="py-2 flex items-center justify-between text-sm gap-2">
+                  <Link href={`/dashboard/investors/${sp.investor_id}`} className="flex items-center gap-2 hover:underline min-w-0">
+                    <Avatar src={sp.avatar_url ? `/api/investors/${sp.investor_id}/avatar` : null} name={sp.investor_name} size={26} />
+                    <span className="min-w-0">
+                      <span className="block truncate">{sp.investor_name}</span>
+                      <span className="block text-[11px] text-muted-foreground truncate">{sp.scheme_name}</span>
+                    </span>
+                  </Link>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap text-right">
+                    {formatINR(Number(sp.amount ?? 0))}/mo
+                    <span className="block text-[11px]">{Math.floor(Number(sp.days_running) / 365)} yr+</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
+
+      {/* Active clients whose money has not moved in years. */}
+      <Section
+        title={`No transaction in ${thresholds.staleTransactionYears}+ years`}
+        count={data.staleClients.length}
+      >
+        {data.staleClients.length === 0 ? (
+          <DashboardEmptyState
+            compact
+            title="Every client has transacted recently"
+            hint={`No active client of yours has been silent for ${thresholds.staleTransactionYears} years or more.`}
+          />
+        ) : (
+          <ul className="divide-y">
+            {data.staleClients.map((c: any) => (
+              <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
+                <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
+                  <Avatar src={c.avatar_url ? `/api/investors/${c.id}/avatar` : null} name={c.name} size={26} />
+                  <span className="truncate">{c.name}</span>
+                </Link>
+                <span className="text-xs text-muted-foreground whitespace-nowrap text-right">
+                  {formatINR(Number(c.aum ?? 0))}
+                  <span className="block text-[11px]">
+                    last moved {c.last_transaction_at ? formatDate(c.last_transaction_at) : "—"}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       {!limited && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -539,30 +719,6 @@ export async function RmDashboard({
         </>
       )}
 
-      <Section title={`${who} open tasks`} count={data.myTasks.length}>
-        {data.myTasks.length === 0 ? (
-          <DashboardEmptyState
-            compact
-            title="No open tasks 🎉"
-            hint="Your task list is clear. Nice work staying on top of things."
-          />
-        ) : (
-          <ul className="divide-y">
-            {data.myTasks.map((t) => (
-              <li key={t.id} className="py-2 flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" className="size-3.5 rounded" />
-                  <span>{t.title}</span>
-                  <span className="text-xs uppercase text-muted-foreground">{t.priority}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {t.dueAt ? formatRelative(t.dueAt) : "no due"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
 
       {/* ---------- RM Insights — service-first cockpit additions ---------- */}
       {!limited && <RmInsightsSection session={session} targetUserId={targetUserId} />}

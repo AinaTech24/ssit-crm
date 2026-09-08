@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function HolidaysPage() {
   const session = await requireSession();
-  const canManage = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const canManage = session.roles.includes("owner");
 
   const rows = await withTenant(session.tenantId, async (tx) => {
     return tx

@@ -203,7 +203,7 @@ export function ServiceRequestDetailEditor({
       {/* Reassign */}
       <div className="card-surface p-5 space-y-2">
         <h3 className="font-semibold flex items-center gap-2"><UserCog className="size-4 text-brand-cyan" /> Assigned to</h3>
-        <div className="max-w-sm"><RmSelector value={assignee} onChange={setAssignee} placeholder="— Unassigned —" /></div>
+        <div className="max-w-sm"><RmSelector role="back_office" value={assignee} onChange={setAssignee} placeholder="— Unassigned —" /></div>
       </div>
 
       {/* Remarks */}

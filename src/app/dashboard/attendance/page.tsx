@@ -24,7 +24,7 @@ export default async function AttendancePage({
   const q = (sp.q ?? "").trim();
   const statusFilter = (sp.status ?? "").split(",").filter(Boolean);
   const todayOnly = sp.today === "1";
-  const canManage = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const canManage = session.roles.includes("owner");
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 

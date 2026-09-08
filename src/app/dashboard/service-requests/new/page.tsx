@@ -171,6 +171,7 @@ export default function NewServiceRequestPage() {
               </span>
             </div>
             <RmSelector
+              role="back_office"
               value={form.assignedToUserId || null}
               onChange={(id) => setForm({ ...form, assignedToUserId: id ?? "" })}
               placeholder="— Assign to myself —"

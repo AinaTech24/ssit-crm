@@ -8,6 +8,9 @@ import {
   Filter,
   LayoutGrid,
   List,
+  CalendarPlus,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { leads, users } from "@/db/schema";
@@ -217,7 +220,30 @@ export default async function LeadsPage({
       WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
       ORDER BY name ASC
     `);
-    return { rows, rms: rmRows.rows as any[], total };
+    // Headline counts. Deliberately NOT filtered by the list's stage/search
+    // filters — "total leads" has to mean the book, not the current view — but
+    // scoped by the same leadScopeSql, so an RM's cards match their own list.
+    // Converted and lost live OUTSIDE the list (it shows live pipeline only),
+    // which is exactly why they need surfacing here.
+    const kpiRes = await tx.execute(sql`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE leads.created_at::date = CURRENT_DATE)::int AS created_today,
+        -- Either signal counts: the link is set when a lead is converted through
+        -- the app, but a lead moved to the converted STAGE by hand has no link
+        -- and would otherwise be invisible here.
+        COUNT(*) FILTER (
+          WHERE leads.converted_investor_id IS NOT NULL OR leads.stage = $$converted$$
+        )::int AS converted,
+        COUNT(*) FILTER (WHERE leads.stage IN ('lost', 'not_interested'))::int AS lost
+      FROM leads
+      WHERE leads.tenant_id = ${session.tenantId}::uuid
+        AND leads.lost_reason IS DISTINCT FROM '__deleted__'
+        AND ${leadScopeSql(session, "leads")}
+    `);
+    const kpi = (kpiRes.rows[0] as any) ?? { total: 0, created_today: 0, converted: 0, lost: 0 };
+
+    return { rows, rms: rmRows.rows as any[], total, kpi };
   });
 
   const rmOptions = (data.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -296,6 +322,13 @@ export default async function LeadsPage({
             <Plus className="size-4" /> New lead
           </Link>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <LeadKpi label="Total leads" value={data.kpi.total} icon={UserPlus} />
+        <LeadKpi label="Created today" value={data.kpi.created_today} icon={CalendarPlus} />
+        <LeadKpi label="Converted" value={data.kpi.converted} icon={CheckCircle2} tone="emerald" />
+        <LeadKpi label="Lost" value={data.kpi.lost} icon={XCircle} tone="rose" />
       </div>
 
       {/* Quick-filter chip strip — server-side counts, deep links into same page */}
@@ -447,6 +480,31 @@ export default async function LeadsPage({
         </div>
       )}
 
+    </div>
+  );
+}
+
+/** Headline count tile for the leads header strip. */
+function LeadKpi({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number;
+  icon: any;
+  tone?: "emerald" | "rose";
+}) {
+  const toneC =
+    tone === "emerald" ? "text-emerald-600" : tone === "rose" ? "text-rose-600" : "text-foreground";
+  return (
+    <div className="card-surface p-4">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{label}</span>
+        <Icon className="size-3.5" />
+      </div>
+      <div className={`text-xl font-bold mt-1 tabular-nums ${toneC}`}>{value}</div>
     </div>
   );
 }

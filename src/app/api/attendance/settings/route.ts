@@ -54,7 +54,9 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   try {
     const session = await requireSession();
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    // Firm-admin only: this is the calendar and week-off policy for the whole
+    // firm, not a per-branch setting.
+    const isManager = session.roles.includes("owner");
     if (!isManager) {
       return NextResponse.json({ error: "only a manager can change attendance settings" }, { status: 403 });
     }

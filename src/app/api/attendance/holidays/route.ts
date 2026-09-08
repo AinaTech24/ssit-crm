@@ -7,7 +7,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  *   DELETE /api/attendance/holidays?id=...      — remove one
  *
  * Read is allowed for any authenticated user. Add/Delete require a manager
- * (owner / branch_head).
+ * (firm admin only — the holiday calendar is firm-wide).
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = session.roles.includes("owner");
     if (!isManager) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
     const parse = AddBody.safeParse(await req.json().catch(() => ({})));
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   try {
     const session = await requireSession();
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = session.roles.includes("owner");
     if (!isManager) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
     const id = req.nextUrl.searchParams.get("id");

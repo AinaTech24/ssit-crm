@@ -115,7 +115,7 @@ export function ServiceRequestsTable({ rows }: { rows: any[] }) {
       )}
       {bulk && (
         <div className="border-b bg-secondary/40 px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
-          {bulk === "assign" && <div className="min-w-[240px]"><RmSelector value={assignRm} onChange={setAssignRm} placeholder="— Choose assignee (or unassign) —" /></div>}
+          {bulk === "assign" && <div className="min-w-[240px]"><RmSelector role="back_office" value={assignRm} onChange={setAssignRm} placeholder="— Choose assignee (or unassign) —" /></div>}
           {bulk === "status" && (
             <select value={statusVal} onChange={(e) => setStatusVal(e.target.value)} className="input-base text-sm">
               {STATUSES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}

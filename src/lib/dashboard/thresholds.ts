@@ -20,6 +20,10 @@ export const DEFAULT_DASHBOARD_THRESHOLDS = {
   rejectionRecentDays: 7,
   /** Window before a minor turns major (guardian → self) to surface early. */
   minorToMajorDays: 90,
+  /** Days since the last COMPLETED meeting before a client is "not met lately". */
+  meetingOverdueDays: 100,
+  /** Years without a transaction before an active client counts as stale. */
+  staleTransactionYears: 3,
 };
 
 export type DashboardThresholds = typeof DEFAULT_DASHBOARD_THRESHOLDS;

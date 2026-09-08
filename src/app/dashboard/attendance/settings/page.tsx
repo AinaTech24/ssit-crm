@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AttendanceSettingsPage() {
   const session = await requireSession();
-  const canManage = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const canManage = session.roles.includes("owner");
 
   const settings = await withTenant(session.tenantId, async (tx) => {
     const policy = await loadAttendancePolicy(tx, session.tenantId);
