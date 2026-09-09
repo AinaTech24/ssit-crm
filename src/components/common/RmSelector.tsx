@@ -115,7 +115,7 @@ export function RmSelector({
 
   if (err) {
     return (
-      <div className={`input-base text-rose-600 text-xs ${className}`}>
+      <div className={`input-base text-destructive text-xs ${className}`}>
         Couldn't load team — {err}
       </div>
     );

@@ -65,7 +65,7 @@ export function CustomFieldsCard({
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />} Save
         </button>
       </div>
-      {err && <div className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-md px-3 py-2">{err}</div>}
+      {err && <div className="text-xs text-destructive bg-destructive/5 border border-destructive/30 rounded-md px-3 py-2">{err}</div>}
       {saved && <div className="text-xs text-emerald-700 bg-emerald-50 rounded-md px-3 py-1.5">✓ Saved</div>}
       <CustomFieldInputs
         defs={defs}

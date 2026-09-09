@@ -132,7 +132,7 @@ export function BulkTable<T extends { id: string }>({
             <button
               type="button"
               onClick={() => setConfirmDelete(true)}
-              className="btn-ghost text-xs text-rose-600 inline-flex items-center gap-1"
+              className="btn-ghost text-xs text-destructive inline-flex items-center gap-1"
             >
               <Trash2 className="size-3.5" /> {deleteAction.label ?? "Delete"}
             </button>

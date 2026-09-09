@@ -402,7 +402,7 @@ export function FloatingBulkBar({
 
           {activeModal === "delete" && (
             <div className="space-y-3">
-              <p className="text-rose-600 font-medium">
+              <p className="text-destructive font-medium">
                 Are you sure you want to delete {selectedCount} selected records?
               </p>
               <p className="text-muted-foreground">They will be moved to the Trash bin and can be restored by an Owner.</p>
@@ -426,7 +426,7 @@ export function FloatingBulkBar({
             </div>
           )}
 
-          {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
+          {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
         </div>
       )}
     </div>

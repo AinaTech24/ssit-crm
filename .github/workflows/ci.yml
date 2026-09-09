@@ -5,7 +5,12 @@ name: CI
 # effectively never ran: the checks below — typecheck, RBAC gating, migration
 # numbering, RLS coverage — only fired on branches nobody pushes to.
 on:
+  # main only. deploy/aws carries the SAME commit (we push main -> deploy/aws to
+  # release), so leaving this unfiltered ran every check twice per release on an
+  # identical SHA. The deploy workflow re-runs typecheck against the built image
+  # on the box anyway, which is the check that actually gates a release.
   push:
+    branches: [main]
   pull_request:
 
 jobs:

@@ -152,7 +152,7 @@ export function CustomFieldInputs({
         <label key={d.id} className={`block ${["textarea", "multiselect"].includes(d.type) ? "sm:col-span-2" : ""}`}>
           <div className="text-xs font-medium mb-1">
             {d.label}
-            {d.required && <span className="text-rose-500"> *</span>}
+            {d.required && <span className="text-destructive"> *</span>}
           </div>
           <Field d={d} value={values[d.key]} onChange={(v) => set(d.key, v)} />
         </label>
