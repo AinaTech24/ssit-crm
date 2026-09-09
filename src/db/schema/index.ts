@@ -13,6 +13,7 @@ export * from "./tasks";
 export * from "./task_comments";
 export * from "./task_time_logs";
 export * from "./task_attachments";
+export * from "./activity_entries";
 export * from "./task_watchers";
 export * from "./daily_trackers";
 export * from "./kra_targets";

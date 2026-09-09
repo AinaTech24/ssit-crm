@@ -230,9 +230,9 @@ const MATRIX: Record<Capability, Role[]> = {
 
   // Tasks — every working role plus limited team_member
   "task.view.all": ["compliance", "back_office", "ops", "marketing", "branch_head"],
-  "task.view.assigned": ["rm", "team_member", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
+  "task.view.assigned": ["rm", "team_member", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
   "task.edit.all": ["back_office", "ops", "marketing"],
-  "task.edit.assigned": ["rm", "team_member", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
+  "task.edit.assigned": ["rm", "team_member", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
 
   // Documents
   "document.view": ["compliance", "back_office", "ops", "rm", "branch_head", "marketing", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],

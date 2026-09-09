@@ -39,6 +39,9 @@ export async function sendSystemEmail(args: {
   html?: string;
   /** Stable key so a retried send dedupes provider-side. */
   idempotencyKey?: string;
+  /** In-memory files to attach. The SMTP adapter already supported these; this
+   *  just stops system emails being the one path that could not use them. */
+  attachments?: Array<{ filename: string; content: Buffer }>;
 }): Promise<SystemEmailResult> {
   // Resolve the platform SMTP config — DB (Equitywala Admin → Email) first, env (SMTP_*)
   // as fallback.
@@ -94,6 +97,7 @@ export async function sendSystemEmail(args: {
       smtp,
       fromOverride: from,
       idempotencyKey: args.idempotencyKey,
+      attachments: args.attachments,
     });
     return { sent: true };
   } catch (e: any) {

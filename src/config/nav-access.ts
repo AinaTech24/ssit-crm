@@ -39,6 +39,8 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
       { key: "/dashboard/command-center", label: "Command Center" },
       { key: "/dashboard/next-best-action", label: "Next Best Action" },
       { key: "/dashboard/tasks", label: "Tasks", module: "tasks" },
+      { key: "/dashboard/activity-tracker", label: "Activity Tracker" },
+      { key: "/dashboard/research-tracker", label: "Daily Activity Tracker" },
       { key: "/dashboard/review-meetings", label: "Meetings", module: "review_meetings" },
       { key: "/dashboard/calendar", label: "Calendar" },
       { key: "/dashboard/attendance", label: "Attendance" },
@@ -143,6 +145,25 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
  * employee who is also an RM keeps the full RM sidebar.
  */
 export const ROLE_DEFAULT_NAV: Record<string, string[]> = {
+  // Marketing works two things: the tasks RMs assign them, and the log of what
+  // they produced. Explicitly NOT the CRM — no clients, leads or pipeline.
+  // Attendance, leave and announcements stay because every employee needs their
+  // own HR self-service whatever desk they sit at.
+  marketing: [
+    "/dashboard/tasks",
+    "/dashboard/activity-tracker",
+    "/dashboard/attendance",
+    "/dashboard/leave-applications",
+    "/dashboard/announcements",
+  ],
+  // Research: the same shape, with the research log instead.
+  ra_research: [
+    "/dashboard/tasks",
+    "/dashboard/research-tracker",
+    "/dashboard/attendance",
+    "/dashboard/leave-applications",
+    "/dashboard/announcements",
+  ],
   // Back office works five areas, per the firm policy:
   //   clients (view) · tasks · service requests · business entries · SIP rejections
   // The trailing four are employee self-service — every staff member needs to

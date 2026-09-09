@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
     const sp = req.nextUrl.searchParams;
-    const role = sp.get("role")?.trim() || null;
+    const roleList = sp.getAll("role").map((r) => r.trim()).filter(Boolean);
     const q = sp.get("q")?.trim() || null;
 
     const rows = await withTenant(session.tenantId, async (tx) => {
@@ -33,9 +33,10 @@ export async function GET(req: NextRequest) {
       if (q) {
         conds.push(or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)));
       }
-      if (role) {
-        // roles[] array contains the requested role — use Postgres @> operator.
-        conds.push(sql`${users.roles} @> ARRAY[${role}]::text[]`);
+      if (roleList.length) {
+        // ANY of the requested roles — overlap, not containment, so a picker can
+        // offer back office + marketing + research from one call.
+        conds.push(sql`${users.roles} && ARRAY[${sql.join(roleList.map((r) => sql`${r}`), sql`, `)}]::text[]`);
       }
       return await tx
         .select({

@@ -59,8 +59,9 @@ export function RmSelector({
 }: {
   value: string | null | undefined;
   onChange: (id: string | null) => void;
-  /** Filter the list to one role (e.g. "rm"). Omit for all team members. */
-  role?: string;
+  /** Filter the list to a role, or several (e.g. ["back_office", "marketing"]).
+   *  Omit for all team members. */
+  role?: string | string[];
   placeholder?: string;
   /** Adds an "— Unassigned —" option that emits null on select. */
   allowClear?: boolean;
@@ -69,7 +70,8 @@ export function RmSelector({
   className?: string;
   id?: string;
 }) {
-  const cacheKey = role ?? "_all";
+  const roleList = Array.isArray(role) ? role : role ? [role] : [];
+  const cacheKey = roleList.length ? roleList.join(",") : "_all";
   const [rows, setRows] = useState<Employee[] | null>(() => {
     const c = cache.get(cacheKey);
     return c && Date.now() - c.at < CACHE_TTL_MS ? c.rows : null;
@@ -84,7 +86,8 @@ export function RmSelector({
       return;
     }
     const params = new URLSearchParams();
-    if (role) params.set("role", role);
+    // The API matches ANY of the listed roles.
+    for (const r of roleList) params.append("role", r);
     fetch(`/api/employees${params.toString() ? `?${params}` : ""}`)
       .then(async (r) => {
         if (!r.ok) {

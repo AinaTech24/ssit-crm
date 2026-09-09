@@ -320,7 +320,7 @@ export function TaskList({ initialRows, currentUserId, canManageAll = false, ini
             </SelectField>
           </div>
           <div className="w-44">
-            <RmSelector role="back_office" value={null} onChange={(id) => id && runBulk("assign", id)} placeholder="Reassign to…" />
+            <RmSelector role={["back_office", "marketing", "ria", "ra_research", "ra_sales"]} value={null} onChange={(id) => id && runBulk("assign", id)} placeholder="Reassign to…" />
           </div>
           {/* Bulk reschedule — clear an overdue backlog fast. */}
           <div className="inline-flex items-center gap-1">
