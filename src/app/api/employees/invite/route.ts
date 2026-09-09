@@ -16,6 +16,7 @@ import crypto from "node:crypto";
 import { desc, eq, isNull, and, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
+import { wouldExceedFirmAdminCap, MAX_FIRM_ADMINS_MESSAGE } from "@/lib/auth/firm-admin-guard";
 import { requireSession } from "@/lib/auth/session";
 import { userInvites, tenants, users, branches } from "@/db/schema";
 import { require as requireCap, areAssignableRoles } from "@/lib/auth/rbac";
@@ -88,6 +89,11 @@ export async function POST(req: NextRequest) {
           .where(and(eq(branches.id, body.branchId), eq(branches.tenantId, session.tenantId)))
           .limit(1);
         if (!b) return { error: "That branch doesn't belong to your firm.", status: 400 as const };
+      }
+      // Two firm admins, no more. Checked at INVITE rather than at accept so the
+      // sender finds out now, not after the invitee has set a password.
+      if (body.roles.includes("owner") && (await wouldExceedFirmAdminCap(tx, session.tenantId))) {
+        return { error: MAX_FIRM_ADMINS_MESSAGE, status: 409 as const };
       }
       // Don't invite an address that's already an active member…
       const [u] = await tx

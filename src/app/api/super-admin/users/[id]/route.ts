@@ -23,12 +23,19 @@ import { withPlatformAdmin } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requirePlatform } from "@/lib/auth/rbac";
 import { PLATFORM_TENANT_ID } from "@/lib/platform";
+import {
+  activeSuperAdminCount,
+  demoteOtherSuperAdmins,
+  TRANSFER_SUPER_ADMIN_MESSAGE,
+} from "@/lib/auth/super-admin-guard";
 
 export const dynamic = "force-dynamic";
 
 const Patch = z.object({
   name: z.string().min(2).max(120).optional(),
   role: z.enum(["platform_admin", "platform_support"]).optional(),
+  /** Confirms handing the single Super Admin seat over, demoting the incumbent. */
+  transferSuperAdmin: z.boolean().optional(),
   status: z.enum(["active", "suspended"]).optional(),
   password: z.string().min(8).max(200).optional(),
 });
@@ -76,6 +83,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!row) return { error: "not found", status: 404 };
 
       const wasSuper = (row.roles ?? []).includes("platform_admin");
+
+      // Upper bound. Two ways to end up with a second Super Admin: promoting an
+      // Admin, or re-activating a suspended Super Admin while another is live.
+      // Both are blocked; the lower bound below still stops the last one going.
+      const willBeSuper = body.role ? body.role === "platform_admin" : wasSuper;
+      const willBeActive = body.status ? body.status === "active" : row.status === "active";
+      const wasCounted = wasSuper && row.status === "active";
+      if (willBeSuper && willBeActive && !wasCounted) {
+        if ((await activeSuperAdminCount(tx, id)) > 0) {
+          // A transfer is the ONLY way past this, and it must be asked for —
+          // silently demoting whoever currently holds the role would be a
+          // surprising side effect of editing someone else's record.
+          if (!body.transferSuperAdmin) {
+            return { error: TRANSFER_SUPER_ADMIN_MESSAGE, status: 409 };
+          }
+          await demoteOtherSuperAdmins(tx, id);
+        }
+      }
+
       if (wasSuper && (demoting || suspending)) {
         if ((await otherActiveSuperAdmins(tx, id)) === 0) {
           return {

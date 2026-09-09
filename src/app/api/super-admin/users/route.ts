@@ -13,6 +13,7 @@ import { withPlatformAdmin } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requirePlatform } from "@/lib/auth/rbac";
 import { PLATFORM_TENANT_ID } from "@/lib/platform";
+import { activeSuperAdminCount, ONE_SUPER_ADMIN_MESSAGE } from "@/lib/auth/super-admin-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,12 @@ export async function POST(req: NextRequest) {
       // sees every tenant.) This closes two gaps the (tenant_id, email) index left
       // open: cross-tenant collisions, and case-only differences.
       const existing = await tx.execute(sql`SELECT 1 FROM users WHERE lower(email) = ${email} LIMIT 1`);
-      if (existing.rows.length > 0) return true;
+      if (existing.rows.length > 0) return "email" as const;
+
+      // One Super Admin, firm-wide. Admins (platform_support) are unlimited.
+      if (body.role === "platform_admin" && (await activeSuperAdminCount(tx)) > 0) {
+        return "super" as const;
+      }
 
       const rolesLiteral = sql.raw(`ARRAY['${body.role}']::text[]`);
       await tx.execute(sql`
@@ -49,10 +55,13 @@ export async function POST(req: NextRequest) {
         VALUES (${id}, ${PLATFORM_TENANT_ID}::uuid, ${email}, ${body.name},
                 ${hash}, ${rolesLiteral}, 'active', now(), now(), now())
       `);
-      return false;
+      return null;
     });
-    if (conflict) {
+    if (conflict === "email") {
       return NextResponse.json({ error: "That email is already in use and can't be reused for an admin." }, { status: 409 });
+    }
+    if (conflict === "super") {
+      return NextResponse.json({ error: ONE_SUPER_ADMIN_MESSAGE }, { status: 409 });
     }
     return NextResponse.json({ id }, { status: 201 });
   } catch (err: any) {

@@ -17,6 +17,7 @@ import { withTenant, type Tx } from "@/db/client";
 import { users, branches } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, areAssignableRoles, areKnownCapabilities } from "@/lib/auth/rbac";
+import { wouldExceedFirmAdminCap, MAX_FIRM_ADMINS_MESSAGE } from "@/lib/auth/firm-admin-guard";
 import { areKnownNavKeys } from "@/config/nav-access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { offboardUser, type OffboardSummary } from "@/lib/offboarding";
@@ -175,6 +176,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           (body.roles !== undefined && !body.roles.includes("owner")));
       if (losesOwner && (await countOtherActiveOwners(tx, session.tenantId, id)) === 0) {
         throw Object.assign(new Error("cannot remove the last active owner of the firm"), { status: 409 });
+      }
+
+      // Upper bound, mirroring the lower one above. Two ways to gain a seat:
+      // being granted the role, or being re-activated while already holding it.
+      // `id` is excluded from the count so re-saving an existing owner is not
+      // read as adding a third.
+      const willBeOwner = body.roles !== undefined ? body.roles.includes("owner") : wasOwner;
+      const willBeActive =
+        body.status !== undefined ? body.status === "active" : existing.status === "active";
+      const heldSeat = wasOwner && existing.status === "active";
+      if (willBeOwner && willBeActive && !heldSeat) {
+        if (await wouldExceedFirmAdminCap(tx, session.tenantId, id)) {
+          throw Object.assign(new Error(MAX_FIRM_ADMINS_MESSAGE), { status: 409 });
+        }
       }
 
       const patch: any = { updatedAt: new Date() };

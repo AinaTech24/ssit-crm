@@ -1,93 +1,27 @@
-"use client";
+import { requireSession } from "@/lib/auth/session";
+import { requirePlatform } from "@/lib/auth/rbac";
+import { withPlatformAdmin } from "@/db/client";
+import { activeSuperAdminCount } from "@/lib/auth/super-admin-guard";
+import { NewPlatformStaffForm } from "./NewPlatformStaffForm";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+export const dynamic = "force-dynamic";
 
-export default function NewPlatformStaffPage() {
-  const router = useRouter();
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    password: "",
-    role: "platform_admin",
-  });
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+/**
+ * Server wrapper for the add-platform-staff form.
+ *
+ * It exists only to answer one question before the form renders: is the single
+ * Super Admin seat already taken? The API refuses a second either way, but a
+ * form that offers an option it will then reject is a worse way to learn the
+ * rule than a disabled radio that says why.
+ */
+export default async function NewPlatformStaffPage() {
+  const session = await requireSession();
+  requirePlatform(session.roles, "platform.staff.manage");
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    try {
-      const res = await fetch("/api/super-admin/users", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      const j = await res.json();
-      if (!res.ok) {
-        setErr(j.error ?? "Create failed");
-        return;
-      }
-      router.push("/super-admin/users");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="space-y-4 max-w-2xl">
-      <Link href="/super-admin/users" className="text-sm text-muted-foreground hover:underline flex items-center gap-1">
-        <ChevronLeft className="size-4" /> Back to platform staff
-      </Link>
-      <h1 className="text-2xl font-bold tracking-tight">Add admin</h1>
-      <p className="text-sm text-muted-foreground">
-        Admins get full cross-tenant access to the SaaS. Both Admin and Super Admin
-        can create other Admins and Super Admins. The email must not already be in use.
-      </p>
-
-      <form onSubmit={submit} className="border rounded-lg bg-card p-5 space-y-3">
-        <label className="block">
-          <div className="text-xs font-medium mb-1">Name<span className="text-rose-600">*</span></div>
-          <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full border rounded-md px-3 py-2 text-sm bg-background" />
-        </label>
-        <label className="block">
-          <div className="text-xs font-medium mb-1">Work email<span className="text-rose-600">*</span></div>
-          <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="name@ssit.com" className="w-full border rounded-md px-3 py-2 text-sm bg-background" />
-        </label>
-        <label className="block">
-          <div className="text-xs font-medium mb-1">Initial password (8+)<span className="text-rose-600">*</span></div>
-          <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="w-full border rounded-md px-3 py-2 text-sm bg-background" />
-        </label>
-        <div>
-          <div className="text-xs font-medium mb-2">Role</div>
-          <div className="space-y-2">
-            <label className="flex items-start gap-2 border rounded p-3 cursor-pointer hover:bg-accent/40">
-              <input type="radio" name="role" checked={form.role === "platform_admin"} onChange={() => setForm({ ...form, role: "platform_admin" })} className="mt-1" />
-              <div>
-                <div className="font-medium text-sm">Super Admin</div>
-                <div className="text-xs text-muted-foreground">Full cross-tenant read + write — tenants, packages, billing, staff. The top tier.</div>
-              </div>
-            </label>
-            <label className="flex items-start gap-2 border rounded p-3 cursor-pointer hover:bg-accent/40">
-              <input type="radio" name="role" checked={form.role === "platform_support"} onChange={() => setForm({ ...form, role: "platform_support" })} className="mt-1" />
-              <div>
-                <div className="font-medium text-sm">Admin</div>
-                <div className="text-xs text-muted-foreground">Same full powers as Super Admin — including creating other Admins and Super Admins.</div>
-              </div>
-            </label>
-          </div>
-        </div>
-        {err && <div className="text-sm text-rose-600">{err}</div>}
-        <div className="flex flex-wrap justify-end gap-2 pt-2 border-t">
-          <Link href="/super-admin/users" className="rounded-md border px-4 py-2 text-sm">Cancel</Link>
-          <button disabled={busy || !form.email || form.password.length < 8} className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium disabled:opacity-50">
-            {busy ? "Creating…" : "Add staff member"}
-          </button>
-        </div>
-      </form>
-    </div>
+  const superAdminExists = await withPlatformAdmin(
+    session.userId,
+    async (tx) => (await activeSuperAdminCount(tx)) > 0
   );
+
+  return <NewPlatformStaffForm superAdminExists={superAdminExists} />;
 }
