@@ -103,6 +103,9 @@ export default async function LeadsPage({
   const q = (sp.q ?? "").trim();
   const stageFilter = (sp.stage ?? "").split(",").filter(Boolean);
   const sourceFilter = (sp.source ?? "").split(",").filter(Boolean);
+  // The event a lead came from. Stored in source_campaign — the same field the
+  // {{lead.event_name}} merge field reads, so the filter and the template agree.
+  const eventFilter = (sp.event ?? "").split(",").filter(Boolean);
   const ownerFilter = (sp.owner ?? "").split(",").filter(Boolean);
   // The RM / branch of the REFERRING CLIENT — not the lead owner. The referrals
   // module credits a referral to the relationship it came out of, so its
@@ -168,6 +171,8 @@ export default async function LeadsPage({
     }
     if (sourceFilter.length)
       conds.push(sql`leads.source IN (${sql.join(sourceFilter.map((v) => sql`${v}`), sql`, `)})`);
+    if (eventFilter.length)
+      conds.push(sql`leads.source_campaign IN (${sql.join(eventFilter.map((v) => sql`${v}`), sql`, `)})`);
     if (ownerFilter.length)
       conds.push(sql`leads.owner_id IN (${sql.join(ownerFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
 
@@ -250,6 +255,17 @@ export default async function LeadsPage({
     // scoped by the same leadScopeSql, so an RM's cards match their own list.
     // Converted and lost live OUTSIDE the list (it shows live pipeline only),
     // which is exactly why they need surfacing here.
+    const eventRes = await tx.execute(sql`
+      SELECT DISTINCT leads.source_campaign AS name
+        FROM leads
+       WHERE leads.tenant_id = ${session.tenantId}::uuid
+         AND leads.source_campaign IS NOT NULL
+         AND btrim(leads.source_campaign) <> ''
+         AND leads.lost_reason IS DISTINCT FROM '__deleted__'
+       ORDER BY name ASC
+       LIMIT 200
+    `);
+
     const kpiRes = await tx.execute(sql`
       SELECT
         COUNT(*)::int AS total,
@@ -268,10 +284,13 @@ export default async function LeadsPage({
     `);
     const kpi = (kpiRes.rows[0] as any) ?? { total: 0, created_today: 0, converted: 0, lost: 0 };
 
-    return { rows, rms: rmRows.rows as any[], total, kpi };
+    return { rows, rms: rmRows.rows as any[], total, kpi, events: eventRes.rows as any[] };
   });
 
   const rmOptions = (data.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
+  // Hidden entirely when the firm has run no events — an empty dropdown is
+  // worse than no dropdown.
+  const eventOptions = (data.events ?? []).map((e: any) => ({ value: String(e.name), label: String(e.name) }));
 
   // Enrich rows for the table view with a deterministic priority score, and
   // sort hottest-first by default (or most-recent when ?sort=recent).
@@ -371,6 +390,9 @@ export default async function LeadsPage({
             label: "Stage",
             options: STAGES.map((s) => ({ value: s.key, label: s.label })),
           },
+          ...(eventOptions.length
+            ? [{ type: "multi" as const, key: "event", label: "Event", options: eventOptions }]
+            : []),
           {
             type: "multi",
             key: "source",

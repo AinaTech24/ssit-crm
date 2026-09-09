@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { ClipboardList, AlertCircle, FileWarning } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { formatINR } from "@/lib/utils";
 import type { SessionUser } from "@/lib/auth/session";
 import { OnboardingFunnelChart } from "./OnboardingFunnelChart";
 import { BackOfficeInsightsSection } from "./BackOfficeInsightsSection";
@@ -94,6 +95,24 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
       recentSr: recentSr.rows as any[],
       funnelData,
       totalOnboarding,
+      book: (await tx.execute(sql`
+        SELECT
+          (SELECT count(*)::int FROM investors
+            WHERE status = 'active' AND deleted_at IS NULL)                       AS clients,
+          (SELECT count(*)::int FROM tasks
+            WHERE status IN ('open', 'in_progress') AND deleted_at IS NULL)       AS tasks_open,
+          (SELECT count(*)::int FROM tasks
+            WHERE status IN ('open', 'in_progress') AND deleted_at IS NULL
+              AND due_at IS NOT NULL AND due_at < now())                          AS tasks_overdue,
+          (SELECT count(*)::int FROM service_requests
+            WHERE status NOT IN ('resolved', 'closed'))                           AS sr_open,
+          (SELECT count(*)::int FROM business_entries
+            WHERE status <> 'cancelled'
+              AND business_date >= date_trunc('month', current_date))             AS entries_mtd,
+          (SELECT COALESCE(SUM(total_amount), 0)::numeric FROM business_entries
+            WHERE status <> 'cancelled'
+              AND business_date >= date_trunc('month', current_date))             AS gross_mtd
+      `)).rows[0] as any,
     };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
@@ -102,6 +121,26 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Operations queues</h1>
         <p className="text-muted-foreground text-sm">All the things waiting on the back office.</p>
+      </div>
+
+      {/* The four books back office works, before the exception queues below.
+          Each opens the list it counts. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Queue href="/dashboard/investors" label="All clients" value={Number(data.book?.clients ?? 0)} />
+        <Queue
+          href="/dashboard/tasks"
+          label="Open tasks"
+          value={Number(data.book?.tasks_open ?? 0)}
+          sub={Number(data.book?.tasks_overdue ?? 0) > 0 ? `${data.book.tasks_overdue} overdue` : undefined}
+          tone={Number(data.book?.tasks_overdue ?? 0) > 0 ? "amber" : "muted"}
+        />
+        <Queue href="/dashboard/service-requests" label="Service requests" value={Number(data.book?.sr_open ?? 0)} />
+        <Queue
+          href="/dashboard/business-entries"
+          label="Business entries (MTD)"
+          value={Number(data.book?.entries_mtd ?? 0)}
+          sub={formatINR(Number(data.book?.gross_mtd ?? 0))}
+        />
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -229,11 +268,14 @@ function Queue({
   href,
   label,
   value,
+  sub,
   tone,
 }: {
   href: string;
   label: string;
   value: number;
+  /** Second line — the amount behind a count, or why it is amber. */
+  sub?: string;
   tone?: "rose" | "amber" | "muted";
 }) {
   const color = tone === "rose" ? "text-rose-600" : tone === "amber" ? "text-amber-600" : "text-foreground";
@@ -248,6 +290,7 @@ function Queue({
         )}
       </div>
       <div className={`text-2xl font-bold mt-2 tracking-tight ${color}`}>{value}</div>
+      {sub && <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>}
     </Link>
   );
 }
