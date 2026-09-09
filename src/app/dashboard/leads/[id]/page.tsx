@@ -57,6 +57,7 @@ const LEAD_DETAIL_SECTIONS: RelatedListDef[] = [
   { key: "edit_panel", label: "Editable details" },
   { key: "emails", label: "Emails" },
   { key: "whatsapp", label: "WhatsApp" },
+  { key: "meetings", label: "Meetings" },
   { key: "activity", label: "Activity timeline" },
 ];
 
@@ -64,7 +65,7 @@ const LEAD_DETAIL_SECTIONS: RelatedListDef[] = [
 const LEAD_DETAIL_TABS = [
   { key: "overview", label: "Overview", sections: ["signals", "blueprint", "onboarding", "converted_banner"] },
   { key: "details", label: "Details", sections: ["edit_panel"] },
-  { key: "activity", label: "Activity", sections: ["whatsapp", "emails", "activity"] },
+  { key: "activity", label: "Activity", sections: ["whatsapp", "emails", "meetings", "activity"] },
 ];
 
 export const dynamic = "force-dynamic";
