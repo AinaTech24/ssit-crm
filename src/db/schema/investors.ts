@@ -245,6 +245,9 @@ export const investors = pgTable(
 
     /** Relationship */
     rmId: uuid("rm_id").references(() => users.id),
+    /** RM who SERVICES this client day-to-day (migration 0209). Distinct from
+     *  rmId, the relationship owner that reporting and scoping use. */
+    serviceRmId: uuid("service_rm_id").references(() => users.id),
     onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
     lastTransactionAt: timestamp("last_transaction_at", { withTimezone: true }),
     lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
@@ -362,6 +365,7 @@ export const investors = pgTable(
       .on(t.tenantId, t.pan)
       .where(sql`dedup_pan AND pan IS NOT NULL`),
     rmIdx: index("investors_rm_idx").on(t.tenantId, t.rmId),
+    serviceRmIdx: index("investors_service_rm_idx").on(t.tenantId, t.serviceRmId),
     segmentIdx: index("investors_segment_idx").on(t.tenantId, t.segmentTag),
     lastReviewIdx: index("investors_last_review_idx").on(t.tenantId, t.lastReviewAt),
     lastTransactionIdx: index("investors_last_tx_idx").on(t.tenantId, t.lastTransactionAt),

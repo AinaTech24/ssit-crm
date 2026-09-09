@@ -19,6 +19,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { notifyGiftDelivered } from "@/lib/gifts/notify";
+import { GIFT_CATEGORIES, isValidGrade } from "@/lib/gifts/catalogue";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,9 @@ const AddBody = z.object({
   notes: z.string().max(500).optional(),
   /** Set when the gift has already reached the client — intimates the RM. */
   deliveredOn: DateStr.nullish(),
+  /** Catalogue category + grade, so the gift is countable on the engagement board. */
+  category: z.enum(GIFT_CATEGORIES).nullish(),
+  grade: z.string().max(4).nullish(),
 });
 
 const BudgetBody = z.object({
@@ -42,6 +46,8 @@ function mapGift(r: any) {
   return {
     id: r.id as string,
     occasion: r.occasion as string,
+    category: (r.category as string | null) ?? null,
+    grade: (r.grade as string | null) ?? null,
     title: r.title as string,
     amount: Number(r.amount ?? 0),
     givenOn: r.given_on as string,
@@ -66,7 +72,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       if (!inv) return null;
 
       const giftRes = await tx.execute(sql`
-        SELECT id, occasion, title, amount, given_on, delivered_on, notes, created_at
+        SELECT id, occasion, category, grade, title, amount, given_on, delivered_on, notes, created_at
         FROM client_gifts
         WHERE tenant_id = ${session.tenantId}::uuid AND investor_id = ${id}::uuid
         ORDER BY given_on DESC, created_at DESC
@@ -100,6 +106,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
     }
     const body = parse.data;
+    if (body.category && !isValidGrade(body.category, body.grade)) {
+      return NextResponse.json(
+        { error: `grade ${body.grade} is not available for a ${body.category}` },
+        { status: 400 }
+      );
+    }
 
     const result = await withTenant(session.tenantId, async (tx) => {
       // Verify the investor is visible in-tenant before inserting.
@@ -114,10 +126,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const inv = invRes.rows[0] as { name: string | null; rm_id: string | null };
 
       const ins = await tx.execute(sql`
-        INSERT INTO client_gifts (tenant_id, investor_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
+        INSERT INTO client_gifts (tenant_id, investor_id, category, grade, rm_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
         VALUES (
           ${session.tenantId}::uuid,
           ${id}::uuid,
+          ${body.category ?? null},
+          ${body.grade ?? null},
+          ${inv.rm_id}::uuid,
           ${body.occasion},
           ${body.title},
           ${body.amount},
@@ -126,7 +141,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           ${body.notes ?? null},
           ${session.userId}::uuid
         )
-        RETURNING id, occasion, title, amount, given_on, delivered_on, notes, created_at
+        RETURNING id, occasion, category, grade, title, amount, given_on, delivered_on, notes, created_at
       `);
       const gift = mapGift(ins.rows[0]);
 

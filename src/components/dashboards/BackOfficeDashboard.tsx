@@ -7,6 +7,16 @@ import type { SessionUser } from "@/lib/auth/session";
 import { OnboardingFunnelChart } from "./OnboardingFunnelChart";
 import { BackOfficeInsightsSection } from "./BackOfficeInsightsSection";
 
+/** The four books back office works, as returned by the raw `tx.execute`. */
+type BackOfficeBook = {
+  clients: number;
+  tasks_open: number;
+  tasks_overdue: number;
+  sr_open: number;
+  entries_mtd: number;
+  gross_mtd: string;
+};
+
 /**
  * Back office dashboard — operational queues.
  * Per spec section 2:
@@ -112,7 +122,7 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
           (SELECT COALESCE(SUM(total_amount), 0)::numeric FROM business_entries
             WHERE status <> 'cancelled'
               AND business_date >= date_trunc('month', current_date))             AS gross_mtd
-      `)).rows[0] as any,
+      `)).rows[0] as unknown as BackOfficeBook | undefined,
     };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
@@ -131,7 +141,7 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
           href="/dashboard/tasks"
           label="Open tasks"
           value={Number(data.book?.tasks_open ?? 0)}
-          sub={Number(data.book?.tasks_overdue ?? 0) > 0 ? `${data.book.tasks_overdue} overdue` : undefined}
+          sub={Number(data.book?.tasks_overdue ?? 0) > 0 ? `${data.book?.tasks_overdue} overdue` : undefined}
           tone={Number(data.book?.tasks_overdue ?? 0) > 0 ? "amber" : "muted"}
         />
         <Queue href="/dashboard/service-requests" label="Service requests" value={Number(data.book?.sr_open ?? 0)} />

@@ -76,6 +76,7 @@ function NewInvestorPageInner() {
     secondHolderMaritalStatus: "",
     // Relationship & review
     rmId: "" as string | null | "",
+    serviceRmId: "" as string | null | "",
     onboardedAt: "",
     anniversaryDate: "",
     lastReviewAt: "", // Last Meeting Date
@@ -172,6 +173,7 @@ function NewInvestorPageInner() {
           secondHolderMotherName: u(form.secondHolderMotherName),
           secondHolderMaritalStatus: u(form.secondHolderMaritalStatus),
           rmId: form.rmId || undefined,
+          serviceRmId: form.serviceRmId || undefined,
           nominees: (() => {
             const list = nominees.filter((n) => (n.name ?? "").trim());
             return list.length ? list : undefined;
@@ -348,6 +350,20 @@ function NewInvestorPageInner() {
               <span className="ml-1 text-[10px] text-muted-foreground font-normal">· optional — defaults to the firm owner</span>
             </label>
             <RmSelector value={form.rmId || null} onChange={(id) => setForm((s) => ({ ...s, rmId: id ?? "" }))} role="rm" placeholder="— Use firm default (owner) —" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-xs font-medium block mb-1">
+              Service RM
+              <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                · who handles day-to-day servicing, if different from the owner
+              </span>
+            </label>
+            <RmSelector
+              value={form.serviceRmId || null}
+              onChange={(id) => setForm((s) => ({ ...s, serviceRmId: id ?? "" }))}
+              role="rm"
+              placeholder="— Same as assigned RM —"
+            />
           </div>
           <Field label="Date of onboarding" type="date" value={form.onboardedAt} onChange={(v) => set("onboardedAt", v)} />
           <Field label="Anniversary date" type="date" value={form.anniversaryDate} onChange={(v) => set("anniversaryDate", v)} />

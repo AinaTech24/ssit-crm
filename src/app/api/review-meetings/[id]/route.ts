@@ -23,6 +23,7 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
 import { computeNextReview } from "@/lib/investors/review-cadence";
+import { propagateFamilyReview } from "@/lib/investors/family-review";
 import {
   reviewMeetings,
   investors,
@@ -284,6 +285,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               updatedAt: new Date(),
             } as any)
             .where(and(eq(investors.id, before.investorId), eq(investors.tenantId, session.tenantId)));
+
+          // Reviewing the head of a family reviews the family — the meeting
+          // covered the whole household's portfolio.
+          await propagateFamilyReview(tx, session.tenantId, before.investorId, new Date(reviewedAt));
         }
 
         // ─── Smart blueprint advance — meeting completed ──────────────

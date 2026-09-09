@@ -15,6 +15,7 @@ import {
   ClipboardCheck,
   ScrollText,
   HeartHandshake,
+  Gift,
   Share2,
   Target,
   TrendingUp,
@@ -148,6 +149,11 @@ const NAV: NavSection[] = [
       // Client Onboarding module retired — its 11-stage pipeline is now
       // covered by the unified 30-stage blueprint engine that owns both
       // Leads (1-10) and Clients (11-30). Page redirects to /dashboard/leads.
+      // The gifting programme. Firm-wide reads (per-RM league table), so the
+      // roles here match the capability the page requires — no "rm", same
+      // reasoning as Referrals above.
+      { href: "/dashboard/engagement", label: "Client Engagement", icon: Gift, module: "client_master",
+        roles: ["owner", "back_office", "ops", "compliance"] },
       { href: "/dashboard/risk-profiles", label: "Risk Profile", icon: Gauge, module: "risk_profile",
         roles: ["owner", "compliance", "back_office", "ops", "rm"] },
       { href: "/dashboard/discovery", label: "Client Discovery", icon: ClipboardList,

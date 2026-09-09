@@ -284,13 +284,19 @@ export default async function LeadsPage({
     `);
     const kpi = (kpiRes.rows[0] as any) ?? { total: 0, created_today: 0, converted: 0, lost: 0 };
 
-    return { rows, rms: rmRows.rows as any[], total, kpi, events: eventRes.rows as any[] };
+    return {
+      rows,
+      rms: rmRows.rows as any[],
+      total,
+      kpi,
+      events: eventRes.rows as unknown as { name: string }[],
+    };
   });
 
   const rmOptions = (data.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
   // Hidden entirely when the firm has run no events — an empty dropdown is
   // worse than no dropdown.
-  const eventOptions = (data.events ?? []).map((e: any) => ({ value: String(e.name), label: String(e.name) }));
+  const eventOptions = (data.events ?? []).map((e) => ({ value: String(e.name), label: String(e.name) }));
 
   // Enrich rows for the table view with a deterministic priority score, and
   // sort hottest-first by default (or most-recent when ?sort=recent).

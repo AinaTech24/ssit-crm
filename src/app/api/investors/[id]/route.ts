@@ -27,6 +27,7 @@ import { NomineesArray } from "@/lib/investors/nominee";
 import { ReferralsArray } from "@/lib/investors/referral";
 import { registerNomineePanDocs } from "@/lib/investors/nominee-docs";
 import { recomputeFamilyHealthForInvestor } from "@/lib/families/health-persist";
+import { propagateFamilyReview } from "@/lib/investors/family-review";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
 import {
   investors,
@@ -88,6 +89,7 @@ const Patch = z.object({
   segmentTag: z.enum(["HNI", "Affluent", "Retail", "NRI", "Corporate"]).optional(),
   investorCategory: z.enum(["individual", "huf", "corporate", "company", "trust", "nri", "minor", "other"]).optional(),
   rmId: z.string().uuid().optional(),
+  serviceRmId: z.string().uuid().nullable().optional(),
   // Client-service preferences
   statementCadence: z.enum(["off", "monthly", "quarterly"]).optional(),
   languagePref: z.enum(["en", "hi", "gu", "mr", "ta", "te", "kn", "bn", "ml", "pa"]).optional(),
@@ -460,6 +462,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         after: after[0] as any,
         meta: { userId: session.userId } as any,
       } as any);
+
+      // A family is reviewed as a household. When the head's review date moves,
+      // carry it to the members so they stop reading as overdue.
+      if (reviewPatch.lastReviewAt instanceof Date) {
+        await propagateFamilyReview(tx, session.tenantId, id, reviewPatch.lastReviewAt);
+      }
 
       // Attribute the edit on the audit trail so "last modified by" reflects it
       // (the change-log drawer + RecordProvenance read this).

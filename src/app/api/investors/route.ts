@@ -47,6 +47,7 @@ const CreateBody = z.object({
     .enum(["individual", "huf", "corporate", "company", "trust", "nri", "minor", "other"])
     .default("individual"),
   rmId: z.string().uuid().optional(),
+  serviceRmId: z.string().uuid().nullish(),
   familyId: z.string().uuid().optional(),
   bseUccCode: z.string().optional(),
   nseCanCode: z.string().optional(),
@@ -235,6 +236,9 @@ export async function POST(req: NextRequest) {
           // Assigned-only callers may only create into their own book, so a
         // supplied rmId is ignored for them.
         rmId: (canAssignAnyRm ? body.rmId : undefined) ?? session.userId,
+        // Servicing RM is a plain assignment — it grants no scope of its own,
+        // so it is not gated the way the owning rmId is.
+        serviceRmId: body.serviceRmId ?? null,
           familyId: body.familyId ?? null,
           address: body.address,
           notes: body.notes,

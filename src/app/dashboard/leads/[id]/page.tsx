@@ -7,13 +7,14 @@ import {
   Mail,
   MessageCircle,
   CalendarCheck,
+  CalendarClock,
   ListChecks,
   ClipboardList,
   CheckCircle2,
   Flame,
 } from "lucide-react";
 import { withTenant } from "@/db/client";
-import { users, tasks, communications, riskProfileResponses, proposals } from "@/db/schema";
+import { users, tasks, communications, riskProfileResponses, proposals, reviewMeetings } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { loadViewableLead } from "@/lib/leads/access";
 import { formatDate, formatRelative } from "@/lib/utils";
@@ -97,7 +98,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     // Run the 5 secondary queries in parallel — they're all independent of
     // each other and only depend on `lead.id`. This cuts the page's TTFB
     // from ~5x query-latency to ~1x query-latency on slow links.
-    const [owner, relatedTasks, relatedComms, latestRiskList, latestProposalList] = await Promise.all([
+    const [owner, relatedTasks, relatedComms, latestRiskList, latestProposalList, meetings] = await Promise.all([
       lead.ownerId
         ? tx.select().from(users).where(eq(users.id, lead.ownerId)).limit(1).then((r) => r[0])
         : Promise.resolve(null),
@@ -125,6 +126,22 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         .where(and(eq(proposals.leadId, id)))
         .orderBy(desc(proposals.createdAt))
         .limit(1),
+      tx
+        .select({
+          id: reviewMeetings.id,
+          subject: reviewMeetings.subject,
+          meetingDate: reviewMeetings.meetingDate,
+          meetingType: reviewMeetings.meetingType,
+          meetingMode: reviewMeetings.meetingMode,
+          locationOrLink: reviewMeetings.locationOrLink,
+          status: reviewMeetings.status,
+          outcome: reviewMeetings.outcome,
+          nextReviewDate: reviewMeetings.nextReviewDate,
+        })
+        .from(reviewMeetings)
+        .where(eq(reviewMeetings.leadId, id))
+        .orderBy(desc(reviewMeetings.meetingDate))
+        .limit(25),
     ]);
     return {
       lead,
@@ -133,6 +150,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       relatedComms,
       latestRisk: latestRiskList[0],
       latestProposal: latestProposalList[0],
+      meetings,
     };
   });
   if (!data) notFound();
@@ -358,6 +376,51 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       <RelatedListSection moduleKey="leads-detail" sectionKey="emails">
         <EmailRelatedList entityType="lead" entityId={l.id} entityName={l.name} entityEmail={l.email} />
+      </RelatedListSection>
+
+      {/* Meetings held with this lead. review_meetings carries lead_id as well
+          as investor_id, so a prospect meeting lives in the same place a client
+          meeting does — it just had nowhere to show until now. */}
+      <RelatedListSection moduleKey="leads-detail" sectionKey="meetings">
+        <div className="border rounded-lg bg-card">
+          <div className="border-b px-4 py-2.5 font-medium flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <CalendarClock className="size-4" /> Meetings
+              <span className="text-xs text-muted-foreground font-normal">({data.meetings.length})</span>
+            </span>
+            <Link
+              href={`/dashboard/review-meetings/new?leadId=${l.id}`}
+              className="text-xs text-brand-cyan-deep hover:underline font-medium"
+            >
+              Schedule →
+            </Link>
+          </div>
+          {data.meetings.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground text-center">
+              No meetings recorded with this lead yet.
+            </div>
+          ) : (
+            <ul className="divide-y">
+              {data.meetings.map((m: any) => (
+                <li key={m.id} className="px-4 py-2.5 flex items-start justify-between gap-3 text-sm">
+                  <div className="min-w-0">
+                    <Link href={`/dashboard/review-meetings/${m.id}`} className="font-medium hover:underline truncate block">
+                      {m.subject || "Meeting"}
+                    </Link>
+                    <div className="text-[11px] text-muted-foreground">
+                      {[m.meetingType, m.meetingMode, m.locationOrLink].filter(Boolean).join(" · ") || "—"}
+                      {m.outcome ? ` · ${m.outcome}` : ""}
+                    </div>
+                  </div>
+                  <div className="text-xs text-right whitespace-nowrap">
+                    <div>{m.meetingDate ? formatDate(m.meetingDate) : "—"}</div>
+                    <span className="text-[10px] text-muted-foreground capitalize">{m.status ?? ""}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </RelatedListSection>
 
       {/* Activity timeline */}

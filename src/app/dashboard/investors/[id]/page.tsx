@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { ChevronLeft, Phone, Mail, MessageCircle, MapPin, AlertTriangle, User2, ShieldCheck, Sparkles, ArrowRight, Wallet } from "lucide-react";
+import { ChevronLeft, Phone, Mail, MessageCircle, MapPin, AlertTriangle, User2, ShieldCheck, Sparkles, ArrowRight, Wallet, ClipboardList, LifeBuoy } from "lucide-react";
 import { withTenant } from "@/db/client";
 import {
   investors,
@@ -108,6 +108,8 @@ const INVESTOR_DETAIL_SECTIONS: RelatedListDef[] = [
   { key: "kyc_data", label: "Captured KYC data" },
   { key: "master", label: "Client details" },
   { key: "risk_history", label: "Risk profile history" },
+  { key: "task_log", label: "Task history (all)" },
+  { key: "sr_log", label: "Service request history (all)" },
   { key: "related", label: "Folios · SIPs · Goals · Tasks · SRs · Consent" },
 ];
 
@@ -118,7 +120,7 @@ const INVESTOR_DETAIL_TABS = [
   { key: "profile", label: "KYC & Profile", sections: ["nominees", "referrals", "custom_fields", "master"] },
   { key: "engagement", label: "Engagement", sections: ["family", "documents", "emails", "whatsapp", "gifts", "blueprint", "related"] },
   // Rarely-opened detail — tucked behind "More" so the core tabs stay uncluttered.
-  { key: "more", label: "More", sections: ["completeness", "kyc_data", "risk_history"] },
+  { key: "more", label: "More", sections: ["completeness", "kyc_data", "risk_history", "task_log", "sr_log"] },
 ];
 
 export const dynamic = "force-dynamic";
@@ -169,7 +171,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
     // Soft-deleted clients live in the Trash bin, not on the detail page.
     if ((inv as any).deletedAt) return null;
 
-    const [foliosRows, sipsRows, goalsRows, commsRows, tasksRows, srRows, consentsRows, rmRow, familyRow, lumpsumSum, valuation, reviewMeetingsRows, riskHistoryRows, recentTxRows, txCountRow, sipBouncesRow] = await Promise.all([
+    const [foliosRows, sipsRows, goalsRows, commsRows, tasksRows, srRows, consentsRows, taskLogRows, srLogRows, serviceRmRow, rmRow, familyRow, lumpsumSum, valuation, reviewMeetingsRows, riskHistoryRows, recentTxRows, txCountRow, sipBouncesRow] = await Promise.all([
       tx.select().from(folios).where(eq(folios.investorId, id)),
       tx.select().from(sips).where(eq(sips.investorId, id)),
       tx.select().from(goals).where(eq(goals.investorId, id)),
@@ -186,6 +188,41 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
         .limit(20),
       tx.select().from(serviceRequests).where(eq(serviceRequests.investorId, id)).limit(20),
       tx.select().from(consents).where(eq(consents.investorId, id)),
+      tx
+        .select({
+          id: tasks.id,
+          title: tasks.title,
+          type: tasks.type,
+          status: tasks.status,
+          priority: tasks.priority,
+          dueAt: tasks.dueAt,
+          completedAt: tasks.completedAt,
+          createdAt: tasks.createdAt,
+          assigneeName: sql<string | null>`(SELECT u.name FROM users u WHERE u.id = ${tasks.assigneeId})`,
+        })
+        .from(tasks)
+        .where(and(eq(tasks.subjectId, id), eq(tasks.subjectType, "investor"), isNull(tasks.deletedAt)))
+        .orderBy(desc(tasks.createdAt))
+        .limit(100),
+      tx
+        .select({
+          id: serviceRequests.id,
+          ticketNo: serviceRequests.ticketNo,
+          subject: serviceRequests.subject,
+          type: serviceRequests.type,
+          status: serviceRequests.status,
+          priority: serviceRequests.priority,
+          createdAt: serviceRequests.createdAt,
+          resolvedAt: serviceRequests.resolvedAt,
+          assigneeName: sql<string | null>`(SELECT u.name FROM users u WHERE u.id = ${serviceRequests.assignedToUserId})`,
+        })
+        .from(serviceRequests)
+        .where(eq(serviceRequests.investorId, id))
+        .orderBy(desc(serviceRequests.createdAt))
+        .limit(100),
+      inv.serviceRmId
+        ? tx.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.id, inv.serviceRmId)).limit(1).then((r) => r[0] ?? null)
+        : Promise.resolve(null),
       inv.rmId
         ? tx.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.id, inv.rmId)).limit(1).then((r) => r[0] ?? null)
         : Promise.resolve(null),
@@ -275,6 +312,9 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       serviceRequests: srRows,
       consents: consentsRows,
       rm: rmRow,
+      serviceRm: serviceRmRow,
+      taskLog: taskLogRows,
+      srLog: srLogRows,
       family: familyRow,
       totalLumpsum: lumpsumSum,
       valuation,
@@ -743,6 +783,110 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       <KycDataViewer kycData={(inv as any).kycData ?? null} />
       </RelatedListSection>
 
+      {/* Full task ledger -- every task ever raised on this client, not just the
+          open ones in the side panel. Who it went to, when, and how it ended. */}
+      <RelatedListSection moduleKey="investors-detail" sectionKey="task_log">
+        <div className="border rounded-lg bg-card">
+          <div className="border-b px-4 py-2.5 font-medium flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <ClipboardList className="size-4" /> Tasks
+              <span className="text-xs text-muted-foreground font-normal">({data.taskLog.length})</span>
+            </span>
+            <Link href="/dashboard/tasks/new" className="text-xs text-brand-cyan-deep hover:underline font-medium">
+              New task →
+            </Link>
+          </div>
+          {data.taskLog.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground text-center">No tasks raised for this client.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground bg-muted/40">
+                  <tr>
+                    <th className="text-left font-medium px-4 py-2">Task</th>
+                    <th className="text-left font-medium px-3 py-2">Assigned to</th>
+                    <th className="text-left font-medium px-3 py-2">Created</th>
+                    <th className="text-left font-medium px-3 py-2">Due</th>
+                    <th className="text-left font-medium px-3 py-2">Completed</th>
+                    <th className="text-left font-medium px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.taskLog.map((t: any) => (
+                    <tr key={t.id} className="hover:bg-accent/30">
+                      <td className="px-4 py-2">
+                        <Link href={`/dashboard/tasks?focus=${t.id}`} className="font-medium hover:underline">
+                          {t.title}
+                        </Link>
+                        <div className="text-[11px] text-muted-foreground">
+                          {[t.type, t.priority].filter(Boolean).join(" · ")}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">{t.assigneeName ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{t.createdAt ? formatDate(t.createdAt) : "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{t.dueAt ? formatDate(t.dueAt) : "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{t.completedAt ? formatDate(t.completedAt) : "—"}</td>
+                      <td className="px-3 py-2 capitalize whitespace-nowrap">{String(t.status ?? "").replace(/_/g, " ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </RelatedListSection>
+
+      {/* Same idea for tickets: the side panel shows what is still open, this
+          shows the whole service history including everything already closed. */}
+      <RelatedListSection moduleKey="investors-detail" sectionKey="sr_log">
+        <div className="border rounded-lg bg-card">
+          <div className="border-b px-4 py-2.5 font-medium flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <LifeBuoy className="size-4" /> Service requests
+              <span className="text-xs text-muted-foreground font-normal">({data.srLog.length})</span>
+            </span>
+            <Link href="/dashboard/service-requests" className="text-xs text-brand-cyan-deep hover:underline font-medium">
+              Open module →
+            </Link>
+          </div>
+          {data.srLog.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground text-center">No service requests for this client.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground bg-muted/40">
+                  <tr>
+                    <th className="text-left font-medium px-4 py-2">Ticket</th>
+                    <th className="text-left font-medium px-3 py-2">Assigned to</th>
+                    <th className="text-left font-medium px-3 py-2">Raised</th>
+                    <th className="text-left font-medium px-3 py-2">Resolved</th>
+                    <th className="text-left font-medium px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.srLog.map((r: any) => (
+                    <tr key={r.id} className="hover:bg-accent/30">
+                      <td className="px-4 py-2">
+                        <span className="font-medium">{r.subject}</span>
+                        <div className="text-[11px] text-muted-foreground">
+                          #{r.ticketNo}
+                          {r.type ? ` · ${String(r.type).replace(/_/g, " ")}` : ""}
+                          {r.priority ? ` · ${r.priority}` : ""}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">{r.assigneeName ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{r.createdAt ? formatDate(r.createdAt) : "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{r.resolvedAt ? formatDate(r.resolvedAt) : "—"}</td>
+                      <td className="px-3 py-2 capitalize whitespace-nowrap">{String(r.status ?? "").replace(/_/g, " ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </RelatedListSection>
+
       {/* ----------------------------- Master record -----------------------------
         Every field the spec calls out under § 6 Module 4 Client Master, grouped
         logically so RM/back-office can scan it in one read.
@@ -834,6 +978,10 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
           <KV label="Family head name" value={inv.familyOwnerName ?? "—"} />
           <KV label="Referral client" value={inv.referralClientName ?? "—"} />
           {showRm && <KV label="Assigned RM" value={data.rm?.name ?? "—"} sub={data.rm?.email} />}
+          {/* Servicing is often a different person from the relationship owner. */}
+          {showRm && data.serviceRm && (
+            <KV label="Service RM" value={data.serviceRm.name ?? "—"} sub={data.serviceRm.email} />
+          )}
           <KV label="Family group" value={data.family?.familyName ?? "—"} sub={inv.familyRole ?? undefined} />
         </Group>
 
