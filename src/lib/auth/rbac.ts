@@ -35,6 +35,14 @@ export type Role =
   | "compliance"
   | "branch_head"
   | "team_member"
+  // Distribution + advisory verticals. Each works its OWN book — none of them
+  // gets a .all scope by default, because "sees every client in the firm" is a
+  // decision an owner makes per person, not something a job title confers.
+  | "sub_broker"
+  | "ra_research"
+  | "ra_sales"
+  | "ria"
+  | "insurance"
   | "investor";
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -48,6 +56,11 @@ export const ROLE_LABELS: Record<string, string> = {
   compliance: "Compliance / DDQ Executive",
   branch_head: "Branch Head",
   team_member: "Limited Team Member",
+  sub_broker: "Sub Broker",
+  ra_research: "RA — Research",
+  ra_sales: "RA — Sales",
+  ria: "RIA",
+  insurance: "Insurance",
   investor: "Investor (Client App)",
 };
 
@@ -172,9 +185,9 @@ export type Capability =
 const MATRIX: Record<Capability, Role[]> = {
   // Investor data — back_office sees all, RM sees assigned, marketing blocked.
   "investor.view.all": ["compliance", "back_office", "ops"],
-  "investor.view.assigned": ["rm", "branch_head"],
+  "investor.view.assigned": ["rm", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
   "investor.edit.all": ["back_office", "ops"],
-  "investor.edit.assigned": ["rm"],
+  "investor.edit.assigned": ["rm", "ria"],
   "investor.bulk_export": ["compliance"],
   // Permanent hard-delete of a client + its owned data subgraph (cascades).
   // Deliberately NARROWER than investor.edit.all: editing a phone number must
@@ -182,23 +195,23 @@ const MATRIX: Record<Capability, Role[]> = {
   // wins via can(); compliance owns DPDP erasure. RM / back_office / ops do NOT
   // get it — they soft-close instead.
   "investor.delete": ["compliance"],
-  "investor.note.add": ["rm", "back_office", "ops", "branch_head", "compliance"],
+  "investor.note.add": ["rm", "back_office", "ops", "branch_head", "compliance", "sub_broker", "ra_sales", "ria", "insurance"],
   // Households: an RM groups their OWN book into families, so they manage.
   // Deleting unlinks every client in the household, so it stays narrower.
-  "family.view": ["rm", "back_office", "ops", "branch_head", "compliance"],
-  "family.create": ["rm", "back_office", "ops", "branch_head"],
-  "family.edit": ["rm", "back_office", "ops", "branch_head"],
-  "family.manage": ["rm", "back_office", "ops", "branch_head"],
+  "family.view": ["rm", "back_office", "ops", "branch_head", "compliance", "ria"],
+  "family.create": ["rm", "back_office", "ops", "branch_head", "ria"],
+  "family.edit": ["rm", "back_office", "ops", "branch_head", "ria"],
+  "family.manage": ["rm", "back_office", "ops", "branch_head", "ria"],
   "family.delete": ["back_office", "ops"],
 
   // Leads — marketing + owner own pipeline; RM works assigned.
   "lead.view.all": ["marketing", "branch_head", "compliance"],
-  "lead.view.assigned": ["rm"],
+  "lead.view.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
   "lead.edit.all": ["marketing", "branch_head"],
-  "lead.edit.assigned": ["rm"],
+  "lead.edit.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
 
   // Transactions — execute by back_office + RM; everyone in ops/compliance views.
-  "transactions.view": ["back_office", "ops", "rm", "branch_head", "compliance"],
+  "transactions.view": ["back_office", "ops", "rm", "branch_head", "compliance", "sub_broker", "ra_sales", "ria"],
   "transactions.execute": ["back_office", "ops", "rm"],
 
   // Back-office specialties
@@ -207,25 +220,25 @@ const MATRIX: Record<Capability, Role[]> = {
 
   // Service requests / complaints
   "service_request.view.all": ["back_office", "ops", "compliance"],
-  "service_request.view.assigned": ["rm"],
+  "service_request.view.assigned": ["rm", "sub_broker", "ria", "insurance"],
   "service_request.manage": ["back_office", "ops"],
   "complaint.manage": ["compliance", "back_office", "ops"],
 
   // Review meetings — back_office plans for all, RM runs assigned
   "review_meeting.manage.all": ["back_office", "ops", "branch_head"],
-  "review_meeting.manage.assigned": ["rm"],
+  "review_meeting.manage.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
 
   // Tasks — every working role plus limited team_member
   "task.view.all": ["compliance", "back_office", "ops", "marketing", "branch_head"],
-  "task.view.assigned": ["rm", "team_member", "branch_head"],
+  "task.view.assigned": ["rm", "team_member", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
   "task.edit.all": ["back_office", "ops", "marketing"],
-  "task.edit.assigned": ["rm", "team_member", "compliance", "branch_head"],
+  "task.edit.assigned": ["rm", "team_member", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
 
   // Documents
-  "document.view": ["compliance", "back_office", "ops", "rm", "branch_head", "marketing"],
+  "document.view": ["compliance", "back_office", "ops", "rm", "branch_head", "marketing", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
   // Induction (team training). Everyone can see their OWN track; managing
   // tracks/questions sits with compliance + branch heads (owner bypasses).
-  "induction.view": ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "team_member"],
+  "induction.view": ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "team_member", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
   "induction.manage": ["compliance", "branch_head"],
   "document.upload": ["back_office", "ops", "rm", "compliance", "team_member", "branch_head"],
   "document.delete": ["compliance"],
@@ -237,7 +250,7 @@ const MATRIX: Record<Capability, Role[]> = {
   "workflow.publish": ["compliance"],
 
   // Templates + campaigns + content calendar
-  "template.view": ["marketing", "compliance"],
+  "template.view": ["marketing", "compliance", "ra_research", "ra_sales"],
   // AUTHORING a template — create, edit, new version, submit for approval,
   // archive — is firm-admin only. An approved template is what the firm is
   // allowed to say to investors, so writing one is a compliance decision rather
@@ -256,25 +269,25 @@ const MATRIX: Record<Capability, Role[]> = {
   "campaign.send": ["marketing"],
   // Ad-hoc 1:1 client email (Compose) — the front-line + ops who actually
   // correspond with clients; marketing already has campaign.send for bulk.
-  "communication.send": ["rm", "branch_head", "back_office", "ops", "marketing"],
+  "communication.send": ["rm", "branch_head", "back_office", "ops", "marketing", "sub_broker", "ra_sales", "ria", "insurance"],
 
   // Segments (audience lists). Marketing builds them for campaigns;
   // back-office reads to seed workflow triggers.
-  "segments.view": ["marketing", "back_office", "ops", "compliance", "branch_head"],
+  "segments.view": ["marketing", "back_office", "ops", "compliance", "branch_head", "ra_research"],
   "segments.manage": ["marketing", "back_office", "ops"],
 
   // Proposals — RM/back_office prepare, compliance reviews, owner sends.
-  "proposal.view": ["rm", "branch_head", "back_office", "ops", "compliance", "marketing"],
-  "proposal.write": ["rm", "branch_head", "back_office", "ops"],
+  "proposal.view": ["rm", "branch_head", "back_office", "ops", "compliance", "marketing", "sub_broker", "ra_sales", "ria", "insurance"],
+  "proposal.write": ["rm", "branch_head", "back_office", "ops", "ra_sales", "ria", "insurance"],
   // Financial plans are a distinct advisory deliverable — same role set as
   // proposals so no one loses access, but a dedicated capability.
-  "financial_plan.view": ["rm", "branch_head", "back_office", "ops", "compliance", "marketing"],
-  "financial_plan.manage": ["rm", "branch_head", "back_office", "ops"],
-  "proposal.send": ["rm", "branch_head"],
+  "financial_plan.view": ["rm", "branch_head", "back_office", "ops", "compliance", "marketing", "ria"],
+  "financial_plan.manage": ["rm", "branch_head", "back_office", "ops", "ria"],
+  "proposal.send": ["rm", "branch_head", "ra_sales", "ria", "insurance"],
 
   // Insurance — RM + back-office maintain; compliance reads.
-  "insurance.view": ["rm", "branch_head", "back_office", "ops", "compliance"],
-  "insurance.write": ["rm", "branch_head", "back_office", "ops"],
+  "insurance.view": ["rm", "branch_head", "back_office", "ops", "compliance", "ria", "insurance"],
+  "insurance.write": ["rm", "branch_head", "back_office", "ops", "insurance"],
 
   // Compliance + adjacent
   "compliance.view": ["compliance"],
@@ -285,16 +298,16 @@ const MATRIX: Record<Capability, Role[]> = {
   "amc_empanelment.view": ["branch_head"],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
-  "risk_profile.manage": ["compliance", "back_office", "ops", "rm"],
+  "risk_profile.manage": ["compliance", "back_office", "ops", "rm", "ra_sales", "ria"],
   // Goal planning is an RM/back-office advisory task (distinct from risk
   // profiling). branch_head supervises; compliance kept for back-compat with
   // the prior risk_profile.manage gate so no one loses existing access.
-  "goal.manage": ["rm", "branch_head", "back_office", "ops", "compliance"],
+  "goal.manage": ["rm", "branch_head", "back_office", "ops", "compliance", "ra_sales", "ria"],
   "consent.manage": ["compliance", "back_office", "ops"],
   "sop.manage": ["compliance"],
 
   // Reports
-  "reports.business": ["compliance", "branch_head"],
+  "reports.business": ["compliance", "branch_head", "ra_research"],
   "reports.team": ["branch_head"],
   // Commission/brokerage MIS — the back-office team that runs reconciliation,
   // branch heads (team payout view) and compliance. Owner sees all via the
@@ -313,9 +326,9 @@ const MATRIX: Record<Capability, Role[]> = {
   // Dashboards
   "dashboard.view.owner": ["compliance", "branch_head"],
   "dashboard.view.compliance": ["compliance"],
-  "dashboard.view.marketing": ["marketing"],
+  "dashboard.view.marketing": ["marketing", "ra_research"],
   "dashboard.view.ops": ["back_office", "ops"],
-  "dashboard.view.rm": ["rm"],
+  "dashboard.view.rm": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
 
   // Org admin. User management + billing stay owner-only by design (account
   // ownership boundary) — owner is granted them via the hard-case in can().
@@ -349,6 +362,11 @@ export const ASSIGNABLE_ROLES: Role[] = [
   "compliance",
   "branch_head",
   "team_member",
+  "sub_broker",
+  "ra_research",
+  "ra_sales",
+  "ria",
+  "insurance",
 ];
 
 const ASSIGNABLE_ROLE_SET = new Set<string>(ASSIGNABLE_ROLES);

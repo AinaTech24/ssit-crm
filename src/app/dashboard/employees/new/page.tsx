@@ -16,6 +16,11 @@ const ROLES: { key: string; label: string; hint?: string }[] = [
   { key: "marketing", label: "Marketing" },
   { key: "compliance", label: "Compliance / DDQ" },
   { key: "branch_head", label: "Branch Head" },
+  { key: "sub_broker", label: "Sub Broker" },
+  { key: "ra_research", label: "RA — Research" },
+  { key: "ra_sales", label: "RA — Sales" },
+  { key: "ria", label: "RIA" },
+  { key: "insurance", label: "Insurance" },
   { key: "team_member", label: "Limited Team Member" },
 ];
 

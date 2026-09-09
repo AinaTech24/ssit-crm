@@ -28,7 +28,10 @@ const CAT_TONE: Record<string, string> = {
   urgent: "bg-rose-50 text-rose-700",
 };
 
-const ROLE_OPTS = ["owner", "branch_head", "rm", "ops", "back_office", "compliance", "marketing"];
+const ROLE_OPTS = [
+  "owner", "branch_head", "rm", "ops", "back_office", "compliance", "marketing",
+  "sub_broker", "ra_research", "ra_sales", "ria", "insurance",
+];
 
 export function AnnouncementBoard({
   rows,
