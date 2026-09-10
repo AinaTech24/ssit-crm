@@ -3,7 +3,9 @@ import { and, eq, ne } from "drizzle-orm";
 import { ChevronLeft, ShieldCheck, AlertTriangle } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { users } from "@/db/schema";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +37,8 @@ const FIELDS = ["nism_expiry_at", "arn_expiry_at", "euin_expiry_at", "dsc_expiry
 
 export default async function TeamLicensingPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const session = await requireSession();
+  // Team management is firm-admin only — same gate as the Employees list.
+  if (!can(session.roles, "settings.users", session.permissions)) redirect("/dashboard");
   const sp = await searchParams;
   const filter = sp.filter ?? "all"; // all | expiring | expired
 

@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { eq, sql, and, inArray } from "drizzle-orm";
 import { ChevronLeft, UserCog, Briefcase, Users, IndianRupee, CheckCircle2, AlertTriangle, Calendar } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { users, complianceDocuments, tasks, reviewMeetings } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { loadTenantLicense } from "@/lib/auth/license";
 import { tenantAccessibleNavKeys } from "@/config/nav-access";
 import { formatINR, formatDate } from "@/lib/utils";
@@ -17,6 +18,8 @@ export const dynamic = "force-dynamic";
 
 export default async function EmployeeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
+  // Team management is firm-admin only — same gate as the Employees list.
+  if (!can(session.roles, "settings.users", session.permissions)) redirect("/dashboard");
   const { id } = await params;
   // The modules the tenant has — the pool an owner can grant to a team member.
   const license = await loadTenantLicense(session.tenantId, session.roles);

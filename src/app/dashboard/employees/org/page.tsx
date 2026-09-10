@@ -3,8 +3,9 @@ import { and, eq, ne } from "drizzle-orm";
 import { ChevronLeft, Network } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { users } from "@/db/schema";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
-import { ROLE_LABELS } from "@/lib/auth/rbac";
+import { can, ROLE_LABELS } from "@/lib/auth/rbac";
 import { Avatar } from "@/components/ui/Avatar";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,8 @@ type Node = {
 
 export default async function OrgChartPage() {
   const session = await requireSession();
+  // Team management is firm-admin only — same gate as the Employees list.
+  if (!can(session.roles, "settings.users", session.permissions)) redirect("/dashboard");
 
   const rows = await withTenant(session.tenantId, async (tx) =>
     tx

@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { sql } from "drizzle-orm";
 import { Plus, UserCog, AlertTriangle, Target, IndianRupee, ShieldCheck, Network, Upload } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { ROLE_LABELS } from "@/lib/auth/rbac";
+import { ROLE_LABELS, can } from "@/lib/auth/rbac";
 import { formatDate, formatINR } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -26,6 +27,11 @@ export default async function EmployeesPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
+  // The team roster — names, roles, targets, AUM, status — is firm-admin only.
+  // The page previously authenticated but never checked a capability, so any
+  // signed-in user who typed the URL got the whole list, and the row actions
+  // then failed at the API with "missing settings.users". Gate it once, here.
+  if (!can(session.roles, "settings.users", session.permissions)) redirect("/dashboard");
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const deptFilter = (sp.department ?? "").split(",").filter(Boolean);
