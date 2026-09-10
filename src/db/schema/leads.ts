@@ -183,6 +183,9 @@ export const leads = pgTable(
     subDistributorId: uuid("sub_distributor_id"),
 
     ownerId: uuid("owner_id").references(() => users.id),
+    /** Soft delete — the source of truth. See migration 0213. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id),
     lastContactAt: timestamp("last_contact_at", { withTimezone: true }),
     lastFollowUpAt: timestamp("last_follow_up_at", { withTimezone: true }),
     nextFollowUpAt: timestamp("next_follow_up_at", { withTimezone: true }),

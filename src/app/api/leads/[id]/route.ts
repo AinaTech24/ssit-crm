@@ -165,17 +165,38 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await assertActiveLicense(session.tenantId, session.roles);
 
     const clientMeta = clientMetaFromHeaders(req.headers);
+    // Default delete = soft-delete into Trash (recoverable). `?purge=1`, which
+    // Trash → "Delete permanently" calls, is the irreversible hard delete: the
+    // row goes, and migration 0213's cascades take its proposals, financial
+    // plans and message log with it.
+    const purge = req.nextUrl.searchParams.get("purge") === "1";
     await withTenant(session.tenantId, async (tx) => {
       const before = await loadEditableLead(tx, session, id);
+
+      if (purge) {
+        await tx.delete(leads).where(and(eq(leads.id, id), eq(leads.tenantId, session.tenantId)));
+        await recordAudit(tx, {
+          tenantId: session.tenantId,
+          actorUserId: session.userId,
+          action: "lead.purge",
+          entityType: "lead",
+          entityId: id,
+          before: { name: before?.name ?? null },
+          ...clientMeta,
+        });
+        return;
+      }
+
       await tx
         .update(leads)
         .set({
           stage: "not_qualified",
           stageChangedAt: new Date(),
-          // Distinct sentinel so deleted leads are HIDDEN from every lead list /
-          // kanban / KPI (filtered out), instead of polluting the genuine
-          // "Not qualified" bucket. (A real archived_at column is staged for the
-          // next migration; this is the no-migration equivalent.)
+          // deleted_at is the real thing (migration 0213) — it puts the lead in
+          // Trash, where it can be restored or removed for good. The sentinel is
+          // still written because older readers filter on it.
+          deletedAt: new Date(),
+          deletedBy: session.userId,
           lostReason: "__deleted__",
           lostAt: new Date(),
           updatedAt: new Date(),

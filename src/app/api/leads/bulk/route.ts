@@ -101,6 +101,8 @@ export async function POST(req: NextRequest) {
         patch.stageChangedAt = new Date();
         patch.lostAt = new Date();
         patch.lostReason = "__deleted__";
+        patch.deletedAt = new Date();
+        patch.deletedBy = session.userId;
         break;
     }
 

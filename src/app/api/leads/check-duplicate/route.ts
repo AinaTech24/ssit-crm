@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
         FROM leads
         WHERE (${where})
           AND coalesce(lost_reason, '') <> '__deleted__'
+          AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT 5
       `);

@@ -111,6 +111,7 @@ export async function GET(req: NextRequest) {
         const conds: any[] = [
           sql`leads.stage IN (${sql.join(LEAD_PHASE_STAGES.map((s) => sql`${s}`), sql`, `)})`,
           sql`leads.lost_reason IS DISTINCT FROM '__deleted__'`,
+          sql`leads.deleted_at IS NULL`,
           sql`leads.converted_investor_id IS NULL`,
           leadScopeSql(session, "leads"),
         ];

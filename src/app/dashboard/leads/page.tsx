@@ -154,6 +154,7 @@ export default async function LeadsPage({
       isNull(leads.convertedInvestorId),
       // Hide soft-deleted (archived) leads — they carry the __deleted__ sentinel.
       sql`leads.lost_reason IS DISTINCT FROM '__deleted__'`,
+      sql`leads.deleted_at IS NULL`,
       // Role scope: RMs see only their own leads, branch heads only their
       // branch, owner/managers the whole book. RLS isolates by TENANT only, so
       // this owner/branch slice MUST be applied in the query (the API enforces
@@ -262,6 +263,7 @@ export default async function LeadsPage({
          AND leads.source_campaign IS NOT NULL
          AND btrim(leads.source_campaign) <> ''
          AND leads.lost_reason IS DISTINCT FROM '__deleted__'
+         AND leads.deleted_at IS NULL
        ORDER BY name ASC
        LIMIT 200
     `);
@@ -280,6 +282,7 @@ export default async function LeadsPage({
       FROM leads
       WHERE leads.tenant_id = ${session.tenantId}::uuid
         AND leads.lost_reason IS DISTINCT FROM '__deleted__'
+        AND leads.deleted_at IS NULL
         AND ${leadScopeSql(session, "leads")}
     `);
     const kpi = (kpiRes.rows[0] as any) ?? { total: 0, created_today: 0, converted: 0, lost: 0 };

@@ -7,11 +7,11 @@
 
 import { redirect } from "next/navigation";
 import { and, desc, eq, inArray, isNotNull, or } from "drizzle-orm";
-import { Trash2, Info, Users, ListChecks, UserCog } from "lucide-react";
+import { Trash2, Info, Users, ListChecks, UserCog, UserPlus } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, ROLE_LABELS } from "@/lib/auth/rbac";
-import { investors, tasks, users } from "@/db/schema";
+import { investors, leads, tasks, users } from "@/db/schema";
 import { DEFAULT_SOFT_DELETE_RETENTION_DAYS } from "@/lib/platform/retention";
 import { formatINR, formatDate } from "@/lib/utils";
 import { TrashTable, type TrashColumn } from "@/components/trash/TrashTable";
@@ -27,11 +27,33 @@ export default async function TrashPage() {
   const canTasksOwn = can(session.roles, "task.edit.assigned", session.permissions);
   const canTasks = canTasksAll || canTasksOwn;
   const canEmployees = can(session.roles, "settings.users", session.permissions);
-  if (!canInvestors && !canTasks && !canEmployees) redirect("/dashboard");
+  // Deleting a lead rides on the lead edit capability, so seeing them in Trash
+  // does too — the same people who can delete one can get it back.
+  const canLeads =
+    can(session.roles, "lead.edit.all", session.permissions) ||
+    can(session.roles, "lead.edit.assigned", session.permissions);
+  if (!canInvestors && !canTasks && !canEmployees && !canLeads) redirect("/dashboard");
 
   const retention = DEFAULT_SOFT_DELETE_RETENTION_DAYS;
 
-  const { invRows, taskRows, empRows, deleterNameById } = await withTenant(session.tenantId, async (tx) => {
+  const { invRows, leadRows, taskRows, empRows, deleterNameById } = await withTenant(session.tenantId, async (tx) => {
+    const leadRows = canLeads
+      ? await tx
+          .select({
+            id: leads.id,
+            name: leads.name,
+            email: leads.email,
+            phone: leads.phone,
+            source: leads.source,
+            deletedAt: leads.deletedAt,
+            deletedBy: leads.deletedBy,
+          })
+          .from(leads)
+          .where(and(eq(leads.tenantId, session.tenantId), isNotNull(leads.deletedAt)))
+          .orderBy(desc(leads.deletedAt))
+          .limit(500)
+      : [];
+
     const invRows = canInvestors
       ? await tx
           .select({
@@ -91,7 +113,7 @@ export default async function TrashPage() {
     // Resolve the "deleted by" user ids to display names in one lookup.
     const deleterIds = [
       ...new Set(
-        [...invRows, ...taskRows, ...empRows]
+        [...invRows, ...leadRows, ...taskRows, ...empRows]
           .map((r: any) => r.deletedBy as string | null)
           .filter((v): v is string => !!v)
       ),
@@ -101,12 +123,28 @@ export default async function TrashPage() {
       : [];
     const deleterNameById = new Map(deleters.map((u) => [u.id, u.name]));
 
-    return { invRows, taskRows, empRows, deleterNameById };
+    return { invRows, leadRows, taskRows, empRows, deleterNameById };
   });
 
   const deleterName = (id: string | null | undefined) => (id && deleterNameById.get(id)) || "—";
 
   const isEmpty = invRows.length === 0 && taskRows.length === 0 && empRows.length === 0;
+
+  const leadTrashRows = leadRows.map((r) => ({
+    id: r.id,
+    label: r.name ?? "—",
+    name: r.name ?? "—",
+    contact: [r.email, r.phone].filter(Boolean).join(" · ") || "—",
+    source: r.source ?? "—",
+    deletedAt: r.deletedAt ? formatDate(r.deletedAt) : "—",
+    deletedBy: deleterName(r.deletedBy),
+  }));
+  const leadCols: TrashColumn[] = [
+    { header: "Lead", field: "name", kind: "primary", subField: "contact", truncate: true },
+    { header: "Source", field: "source" },
+    { header: "Deleted", field: "deletedAt" },
+    { header: "By", field: "deletedBy" },
+  ];
 
   // Precompute serializable rows + column specs for the reusable TrashTable
   // (Server Component can't pass render functions across the RSC boundary).
@@ -203,6 +241,22 @@ export default async function TrashPage() {
               restoreTemplate="/api/investors/{id}/restore"
               purgeTemplate="/api/investors/{id}?purge=1"
               itemLabel="client"
+            />
+          )}
+
+          {/* ── Leads ───────────────────────────────────────────────────── */}
+          {canLeads && leadTrashRows.length > 0 && (
+            <TrashTable
+              title="Leads"
+              count={leadTrashRows.length}
+              icon={<UserPlus className="size-4 text-muted-foreground" />}
+              rows={leadTrashRows}
+              columns={leadCols}
+              restoreTemplate="/api/leads/{id}/restore"
+              purgeTemplate="/api/leads/{id}?purge=1"
+              itemLabel="lead"
+              purgeButtonLabel="Delete permanently"
+              purgeMessage="This removes the lead for good, along with its proposals, financial plans and message history. It cannot be undone."
             />
           )}
 
