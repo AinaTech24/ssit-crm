@@ -351,6 +351,16 @@ export default async function RuleDetailPage({
                     >
                       {e.status}
                     </span>
+                    {(() => {
+                      const outs = (e.instantOutcomes as { status?: string; error?: string; detail?: string }[]) ?? [];
+                      const why = outs.find((o) => o.status === "failed")?.error
+                        ?? outs.find((o) => o.status === "skipped")?.detail;
+                      return why ? (
+                        <div className="text-[11px] text-muted-foreground mt-0.5 max-w-md" title={why}>
+                          {why}
+                        </div>
+                      ) : null;
+                    })()}
                   </td>
                   <td className="py-2 text-right tabular-nums">{(e.instantOutcomes as any[])?.length ?? 0}</td>
                   <td className="py-2 text-right pr-4 tabular-nums">{e.scheduledQueued}</td>

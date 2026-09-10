@@ -75,6 +75,16 @@ export interface DispatchInput {
   bypassConsent?: boolean;
   /** Sending RM — when set, email prefers that user's personal mailbox. */
   actorUserId?: string;
+  /**
+   * Let the send fall back to the firm mailbox when the actor has none.
+   *
+   * Interactive sends must NOT set this: a person pressing Send is told to
+   * connect their mailbox rather than having their name replaced by the firm's.
+   * Automations MUST set it — a rule firing at 2am with no one watching should
+   * still deliver, and failing the whole run because one RM never connected a
+   * mailbox is a worse outcome than sending as the firm.
+   */
+  allowFirmFallback?: boolean;
 }
 
 export interface DispatchResult {
@@ -527,7 +537,9 @@ export async function dispatch(tx: Tx, input: DispatchInput): Promise<DispatchRe
       // One resolver decides the sender: the acting RM's own mailbox → the firm
       // mailbox (SMTP / OAuth) → Resend with the firm's sender identity. OAuth
       // mailboxes get a freshly-minted access token inside resolveEmailSender.
-      const sender = await resolveEmailSender(tx, input.tenantId, input.actorUserId);
+      const sender = await resolveEmailSender(tx, input.tenantId, input.actorUserId, {
+        allowFirmFallback: input.allowFirmFallback,
+      });
       adapterResult = await emailAdapter.send({
         tenantId: input.tenantId,
         templateVersion: version,

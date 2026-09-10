@@ -358,6 +358,7 @@ async function applyRule(tx: any, rule: any, ctx: ApplyRuleContext): Promise<Run
         subjectId: ctx.subjectId,
         record,
         tx,
+        ruleCreatedBy: rule.createdBy ?? null,
       });
       instantOutcomes.push(out);
     } catch (e: any) {

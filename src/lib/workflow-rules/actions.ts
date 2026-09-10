@@ -41,6 +41,11 @@ export interface ActionContext {
   subjectId: string;
   record: Record<string, unknown>;
   tx: any;
+  /**
+   * Who built the rule. A rule is that person's standing instruction, so its
+   * email goes out over their name rather than an anonymous firm address.
+   */
+  ruleCreatedBy?: string | null;
 }
 
 export interface ActionResult {
@@ -345,12 +350,15 @@ async function runSendEmail(config: Record<string, unknown>, ctx: ActionContext)
     const ai = await maybeAiMinutes(config, ctx);
     if (ai.kind === "skip") return { type: "send_email", status: "skipped", detail: ai.reason };
     const aiVars = ai.kind === "ok" ? { minutes: ai.minutes } : {};
-    // "Send from": record_owner → the client's RM mailbox (resolveEmailSender
-    // prefers the acting user's own mailbox, falling back to the firm mailbox).
+    // Who it comes from, most specific first:
+    //   "record_owner" → the client's own RM
+    //   otherwise      → whoever built this rule
+    // allowFirmFallback below keeps an unattended rule delivering as the firm
+    // when that person has no mailbox connected, rather than failing the run.
     const actorUserId =
-      config.fromAddress === "record_owner" && ctx.subjectType === "investor"
+      (config.fromAddress === "record_owner" && ctx.subjectType === "investor"
         ? ((ctx.record as { rm_id?: string | null })?.rm_id ?? undefined)
-        : undefined;
+        : undefined) ?? ctx.ruleCreatedBy ?? undefined;
     const res = await dispatch(ctx.tx, {
       tenantId: ctx.tenantId,
       channel: "email",
@@ -361,6 +369,7 @@ async function runSendEmail(config: Record<string, unknown>, ctx: ActionContext)
       investorId: target.investorId,
       leadId: target.leadId,
       actorUserId,
+      allowFirmFallback: true,
     });
     return { type: "send_email", status: res.status === "skipped" ? "skipped" : "succeeded", externalId: res.externalId, detail: res.skipped?.reason };
   } catch (e: any) {

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { dispatch } from "@/lib/comms/pipeline";
 import { resolveExpression, resolveRecord } from "../context";
 import type { ActionHandler } from "./index";
@@ -17,14 +18,26 @@ export const sendEmailHandler: ActionHandler<any> = {
     }
     if (!recipient) throw new Error("send_email: recipient unresolved");
 
-    // "Send from" choice (Zoho-style). "record_owner" sends from the client's RM
-    // mailbox — resolveEmailSender prefers the acting user's own connected mailbox
-    // and falls back to the firm mailbox if that RM hasn't connected one. Default
-    // ("organization" / unset) → firm mailbox, unchanged.
-    const actorUserId =
+    // Who the mail comes from, most specific first:
+    //   "record_owner" → the client's own RM
+    //   otherwise      → whoever BUILT this rule. A workflow is that person's
+    //                    standing instruction, so it goes out over their name
+    //                    rather than an anonymous firm address.
+    // Either way the send may fall back to the firm mailbox (below) — an
+    // unattended rule must not die because someone never connected a mailbox.
+    let actorUserId: string | undefined =
       cfg.fromAddress === "record_owner" && ctx.subjectType === "investor"
         ? (ctx.subject?.rm_id ?? ctx.subject?.rmId ?? undefined)
         : undefined;
+    if (!actorUserId) {
+      const owner = await tx.execute(
+        sql`SELECT created_by FROM workflows
+             WHERE id = ${ctx.workflowId}::uuid AND tenant_id = ${ctx.tenantId}::uuid
+             LIMIT 1`
+      );
+      const createdBy = (owner.rows[0] as { created_by?: string | null } | undefined)?.created_by;
+      if (createdBy) actorUserId = String(createdBy);
+    }
 
     const result = await dispatch(tx, {
       tenantId: ctx.tenantId,
@@ -36,6 +49,9 @@ export const sendEmailHandler: ActionHandler<any> = {
       investorId: ctx.subjectType === "investor" ? ctx.subjectId ?? undefined : undefined,
       leadId: ctx.subjectType === "lead" ? ctx.subjectId ?? undefined : undefined,
       actorUserId,
+      // Unattended: deliver as the firm rather than fail if the author's
+      // mailbox is not connected.
+      allowFirmFallback: true,
       workflowRunId: ctx.runId,
       workflowRunStepId: ctx.stepId,
       // Stable across step retries (stepId is regenerated each attempt) so Resend
