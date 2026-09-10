@@ -128,7 +128,14 @@ export default async function TrashPage() {
 
   const deleterName = (id: string | null | undefined) => (id && deleterNameById.get(id)) || "—";
 
-  const isEmpty = invRows.length === 0 && taskRows.length === 0 && empRows.length === 0;
+  // Every module that can render a section must be counted here. Leaving one
+  // out does not just hide that section — isEmpty short-circuits the whole
+  // list, so purging the last employee made 15 deleted leads look destroyed.
+  const isEmpty =
+    invRows.length === 0 &&
+    leadRows.length === 0 &&
+    taskRows.length === 0 &&
+    empRows.length === 0;
 
   const leadTrashRows = leadRows.map((r) => ({
     id: r.id,
@@ -226,7 +233,7 @@ export default async function TrashPage() {
         <div className="card-surface flex flex-col items-center justify-center gap-2 py-16 text-center">
           <Trash2 className="size-10 text-muted-foreground/30" />
           <div className="text-sm font-medium">Trash is empty</div>
-          <div className="text-xs text-muted-foreground">Deleted clients, tasks, and employees will appear here.</div>
+          <div className="text-xs text-muted-foreground">Deleted clients, leads, tasks, and employees will appear here.</div>
         </div>
       ) : (
         <div className="space-y-3">

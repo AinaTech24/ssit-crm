@@ -54,6 +54,15 @@ export default async function EmployeesPage({
       conds.push(
         sql`u.status IN (${sql.join(statusFilter.map((v) => sql`${v}`), sql`, `)})`
       );
+    } else {
+      // Offboarded people are ex-staff, not team members. Removing one
+      // permanently from Trash marks them offboarded rather than deleting the
+      // row — dozens of tables FK to users with RESTRICT, so the record has to
+      // survive for the leads, clients and tasks that still point at it. It
+      // just should not sit in the roster afterwards, which made a permanent
+      // removal look like it had done nothing. Still reachable by filtering
+      // Status explicitly.
+      conds.push(sql`u.status <> 'offboarded'`);
     }
     const whereSql = conds.length ? sql` WHERE ${sql.join(conds, sql` AND `)}` : sql``;
 
