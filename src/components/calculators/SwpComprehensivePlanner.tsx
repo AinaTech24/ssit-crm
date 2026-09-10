@@ -203,7 +203,7 @@ export function SwpComprehensivePlanner() {
           <CalcChart
             data={result.yearRows.map((r) => ({ year: r.year, balance: r.endBalance }))}
             xKey="year"
-            series={[{ key: "balance", name: "Corpus balance", color: "#0ea5e9" }]}
+            series={[{ key: "balance", name: "Corpus balance", color: "#d22e32" }]}
           />
           <div className="max-h-96 overflow-y-auto print:max-h-none print:overflow-visible">
             <Table

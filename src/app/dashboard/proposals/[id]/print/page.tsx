@@ -65,8 +65,8 @@ export default async function ProposalPrintPage({
   if (!data) notFound();
   const { p, tenant, preparedBy } = data;
   const products = ((p.products ?? []) as any[]) || [];
-  const primary = (tenant as any)?.primaryColor || "#0e2557";
-  const accent = (tenant as any)?.accentColor || "#0ea5e9";
+  const primary = (tenant as any)?.primaryColor || "#841f21";
+  const accent = (tenant as any)?.accentColor || "#d22e32";
 
   // Group products by kind for the report
   const grouped: Record<string, any[]> = {};

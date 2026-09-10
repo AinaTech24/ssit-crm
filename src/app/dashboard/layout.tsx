@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Settings,
   Sparkles,
+  Crosshair,
   Send,
   ClipboardCheck,
   ScrollText,
@@ -113,7 +114,7 @@ const NAV: NavSection[] = [
       // Dashboard + My Dashboards are merged into the DashboardNavDropdown
       // rendered at the top of CustomizableNav.
       { href: "/dashboard/command-center", label: "My Day", icon: Inbox,
-        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
+        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance", "insurance"] },
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks, module: "tasks" },
       // Marketing logs what it produced; RA/RIA log what they researched.
       { href: "/dashboard/activity-tracker", label: "Activity Tracker", icon: Megaphone,
@@ -122,7 +123,7 @@ const NAV: NavSection[] = [
         roles: ["owner", "branch_head", "ria", "ra_research", "ra_sales"] },
       { href: "/dashboard/service-requests", label: "Service Requests", icon: LifeBuoy, module: "service_requests" },
       { href: "/dashboard/review-meetings", label: "Meetings", icon: Presentation, module: "review_meetings",
-        roles: ["owner", "rm", "branch_head", "back_office", "ops"] },
+        roles: ["owner", "rm", "branch_head", "back_office", "ops", "insurance"] },
       { href: "/dashboard/attendance", label: "Attendance", icon: CalendarCheck },
       { href: "/dashboard/trash", label: "Trash", icon: Trash2, roles: ["owner", "compliance"] },
       // Team Dashboard now lives inside the top "Dashboards" dropdown
@@ -146,6 +147,12 @@ const NAV: NavSection[] = [
       // requireAny), so an RM would only get a locked door.
       { href: "/dashboard/referrals", label: "Referrals", icon: Share2, module: "client_master",
         roles: ["owner", "branch_head", "back_office", "ops", "compliance"] },
+      // Cross-sell whitespace, inverted: the client page records one product
+      // status per client, this reads the whole book at once. Scoped per-RM
+      // inside the page, so unlike Referrals an RM gets a useful view, not a
+      // locked door.
+      { href: "/dashboard/opportunities", label: "Opportunities", icon: Crosshair, module: "client_master",
+        roles: ["owner", "rm", "branch_head", "back_office", "ops"] },
       // Client Onboarding module retired — its 11-stage pipeline is now
       // covered by the unified 30-stage blueprint engine that owns both
       // Leads (1-10) and Clients (11-30). Page redirects to /dashboard/leads.
@@ -170,7 +177,7 @@ const NAV: NavSection[] = [
       // now tabs inside the module (see ModuleTabs INSURANCE_TABS), so every
       // view is still one click away without five nav rows.
       { href: "/dashboard/insurance", label: "Insurance", icon: Shield, module: "insurance",
-        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
+        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance", "insurance"] },
     ],
   },
   {
@@ -395,12 +402,30 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // UI-only gating that check exists to close.
   const effectiveUserModules = userModules ?? roleDefaultNavKeys(session.roles);
 
+  // The FIRM ADMIN sees every module the product has, full stop.
+  //
+  // The per-firm sidebar grant (subscriptions.allowed_nav, set in Equitywala
+  // Admin -> Module & Field Access Center) is a FROZEN LIST: it stores the exact
+  // hrefs that existed when an admin last saved it. Every sidebar item shipped
+  // AFTER that save is therefore missing from the list and invisible to the firm
+  // forever — which is why Referrals disappeared for firms whose grant predates
+  // it, and why Opportunities would have gone the same way. An owner losing a
+  // module because of when their firm's row was last touched is never what
+  // anyone intends.
+  //
+  // Suspension is unaffected: tenants.status is a separate gate (license
+  // .isRestricted) and still locks a suspended firm down to support + logout.
+  // The grant also still applies in full to every NON-owner role, so an owner
+  // can keep scoping their own team.
+  const navUnrestricted = isOwnerUser;
+
   // Enforce nav/module access SERVER-SIDE, not just by hiding the sidebar item:
   // if the requested page belongs to a module the firm (or this team member)
   // wasn't granted, block the render. (Audit: UI-only gating was bypassable by
   // typing the URL directly.)
   const gatedKey = gatedNavKeyForPath(pathname);
   const navBlocked =
+    !navUnrestricted &&
     gatedKey !== null &&
     (!tenantAllowedSet.has(gatedKey) ||
       (!isOwnerUser && effectiveUserModules !== null && !effectiveUserModules.includes(gatedKey)));
@@ -445,7 +470,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       // Platform kill-switch — a globally-disabled sidebar item is hidden for everyone.
       if (moduleControls[i.href] === "disabled") return false;
       if (i.roles && !session.roles.some((r) => i.roles!.includes(r) || r === "owner")) return false;
-      if (isGatableNav(i.href)) {
+      if (isGatableNav(i.href) && !navUnrestricted) {
         // Admin → MFD: the firm must have access to this sidebar item.
         if (!tenantAllowedSet.has(i.href)) return false;
         // MFD → team: owners see all; others limited to their granted items.
@@ -479,7 +504,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const canSeeTeam = session.roles.some((r) => r === "owner" || r === "branch_head");
   const dashSubGated = (href: string): boolean => {
     if (moduleControls[href] === "disabled") return false;
-    if (isGatableNav(href)) {
+    if (isGatableNav(href) && !navUnrestricted) {
       if (!tenantAllowedSet.has(href)) return false;
       if (!isOwnerUser && effectiveUserModules && !effectiveUserModules.includes(href)) return false;
     }

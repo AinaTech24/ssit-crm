@@ -137,7 +137,7 @@ function digestHtml(userName: string, s: WeekStats): string {
     <h3 style="margin:20px 0 4px;font-size:13px;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">The week ahead</h3>
     <table style="width:100%;border-collapse:collapse;">${nextWeek}</table>
     <p style="margin:24px 0 0;">
-      <a href="${url}" style="display:inline-block;background:#0E2557;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:8px;">Open Reports &amp; MIS</a>
+      <a href="${url}" style="display:inline-block;background:#841F21;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:10px 18px;border-radius:8px;">Open Reports &amp; MIS</a>
     </p>
     <p style="font-size:11px;color:#94a3b8;margin-top:20px;border-top:1px solid #e2e8f0;padding-top:10px;">You receive this every Monday because you manage this firm on Growth OS.</p>
   </div>`;

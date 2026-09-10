@@ -55,6 +55,7 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
       { key: "/dashboard/investors", label: "Clients", module: "client_master" },
       { key: "/dashboard/families", label: "Family Mapping", module: "family_mapping" },
       { key: "/dashboard/referrals", label: "Referrals", module: "client_master" },
+      { key: "/dashboard/opportunities", label: "Opportunities", module: "client_master" },
       { key: "/dashboard/engagement", label: "Client Engagement", module: "client_master" },
       { key: "/dashboard/risk-profiles", label: "Risk Profile", module: "risk_profile" },
       { key: "/dashboard/discovery", label: "Discovery & Suitability" },

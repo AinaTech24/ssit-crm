@@ -36,6 +36,6 @@ export function emailLogoHeaderHtml(
     return `<div style="text-align:center;margin:0 0 18px;"><img src="${safeUrl}" alt="${esc(name || "Logo")}" height="40" style="height:40px;max-height:48px;display:inline-block;border:0;outline:none;"/></div>`;
   }
   if (!name) return "";
-  const color = esc(String(brandColor || "#0e2557"));
+  const color = esc(String(brandColor || "#841f21"));
   return `<div style="text-align:center;margin:0 0 18px;"><span style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.3px;color:${color};line-height:1.2;">${esc(name)}</span></div>`;
 }

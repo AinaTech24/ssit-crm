@@ -38,7 +38,7 @@ export function JourneyToFreedom() {
   const lines = [
     { label: "Your corpus", color: "#10b981", values: res.rows.map((r) => r.corpus) },
     ...(freedomFinite
-      ? [{ label: "Freedom line", color: "#0e2557", values: res.rows.map(() => res.freedomCorpus) }]
+      ? [{ label: "Freedom line", color: "#841f21", values: res.rows.map(() => res.freedomCorpus) }]
       : []),
   ];
 

@@ -92,7 +92,7 @@ export function AdminShell({
 
         <div className="relative px-4 py-4 flex items-center gap-2.5 border-b border-white/10">
           <div className="size-9 rounded-xl grid place-items-center font-black shadow-lg shadow-black/30"
-            style={{ background: "linear-gradient(135deg,#fff, #dbe6ff)", color: "#0E2557" }}>S</div>
+            style={{ background: "linear-gradient(135deg,#fff, #dbe6ff)", color: "#841F21" }}>S</div>
           <div className="leading-tight">
             <div className="font-bold tracking-tight">Equitywala</div>
             <div className="text-[10px] text-white/55 font-medium uppercase tracking-wider">Platform Admin</div>
@@ -109,11 +109,11 @@ export function AdminShell({
                 onClick={() => router.push(n.href)}
                 className={`group w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
                   active
-                    ? "bg-white text-[#0E2557] shadow-md shadow-black/20"
+                    ? "bg-white text-[#841F21] shadow-md shadow-black/20"
                     : "text-white/75 hover:text-white hover:bg-white/10"
                 }`}
               >
-                <n.icon className={`size-4 shrink-0 ${active ? "text-[#0E2557]" : "text-white/60 group-hover:text-white"}`} />
+                <n.icon className={`size-4 shrink-0 ${active ? "text-[#841F21]" : "text-white/60 group-hover:text-white"}`} />
                 <span className="truncate">{n.label}</span>
               </button>
             );
@@ -154,7 +154,7 @@ export function AdminShell({
             className="w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 hover:bg-white/10 transition-colors text-left"
           >
             <div className="size-8 rounded-full grid place-items-center text-xs font-bold shrink-0"
-              style={{ background: "linear-gradient(135deg,#fff,#dbe6ff)", color: "#0E2557" }}>
+              style={{ background: "linear-gradient(135deg,#fff,#dbe6ff)", color: "#841F21" }}>
               {initialsOf(name)}
             </div>
             <div className="min-w-0 flex-1">

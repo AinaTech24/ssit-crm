@@ -229,8 +229,8 @@ function paint(
   ctx.drawImage(img, 0, 0, w, h);
 
   const stripH = Math.round((h * heightPct) / 100);
-  const primary = tenant.primaryColor || "#0e2557";
-  const accent = "#0ea5e9";
+  const primary = tenant.primaryColor || "#841f21";
+  const accent = "#d22e32";
 
   if (position === "bottom" || position === "both") {
     drawStrip(ctx, 0, h - stripH, w, stripH, primary, accent, logo, tenant);

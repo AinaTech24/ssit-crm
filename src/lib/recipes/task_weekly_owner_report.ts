@@ -102,8 +102,8 @@ export const taskWeeklyOwnerReportRecipe: RecipeDef = {
         subject: "Weekly task report · {{open_total}} open ({{overdue}} overdue)",
         preheader: "{{week_start}} – {{week_end}} · {{overdue}} overdue · {{sla_at_risk}} SLA-at-risk",
         theme: {
-          brandColor: "#0ea5e9",
-          accentColor: "#0e2557",
+          brandColor: "#d22e32",
+          accentColor: "#841f21",
           pageBackground: "#f5f7fb",
           cardBackground: "#ffffff",
           textColor: "#111827",

@@ -266,10 +266,10 @@ export function PublicRiskForm({
         </p>
         <div
           className="mt-6 rounded-lg border-2 p-5"
-          style={{ borderColor: done.color ?? "#0ea5e9", background: `${done.color ?? "#0ea5e9"}15` }}
+          style={{ borderColor: done.color ?? "#d22e32", background: `${done.color ?? "#d22e32"}15` }}
         >
           <div className="text-xs uppercase tracking-wide font-semibold opacity-70">Your category</div>
-          <div className="text-2xl font-bold mt-1" style={{ color: done.color ?? "#0e2557" }}>{done.bandLabel}</div>
+          <div className="text-2xl font-bold mt-1" style={{ color: done.color ?? "#841f21" }}>{done.bandLabel}</div>
           <div className="text-sm tabular-nums mt-1 text-muted-foreground">Score: {done.total}</div>
           {done.description && <div className="text-xs text-muted-foreground mt-2">{done.description}</div>}
         </div>
@@ -355,7 +355,7 @@ export function PublicRiskForm({
 
             <div
               className="rounded-lg border-2 p-4"
-              style={{ borderColor: live.band.color ?? "#0ea5e9", background: `${live.band.color ?? "#0ea5e9"}15` }}
+              style={{ borderColor: live.band.color ?? "#d22e32", background: `${live.band.color ?? "#d22e32"}15` }}
             >
               <div className="flex items-center justify-between">
                 <div>

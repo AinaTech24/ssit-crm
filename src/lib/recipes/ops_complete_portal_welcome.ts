@@ -96,8 +96,8 @@ export const opsCompletePortalWelcomeRecipe: RecipeDef = {
         subject: "Welcome aboard, {{client_name}} — your portal is ready 🎉",
         preheader: "Login details inside. Track your investments anytime.",
         theme: {
-          brandColor: "#0ea5e9",
-          accentColor: "#0e2557",
+          brandColor: "#d22e32",
+          accentColor: "#841f21",
           pageBackground: "#f5f7fb",
           cardBackground: "#ffffff",
           textColor: "#111827",

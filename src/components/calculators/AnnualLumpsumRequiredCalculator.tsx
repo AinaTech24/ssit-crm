@@ -90,7 +90,7 @@ export function AnnualLumpsumRequiredCalculator() {
         <CalcChart
           data={s1.schedule.map((r) => ({ year: r.year, value: r.yearEndValue }))}
           xKey="year"
-          series={[{ key: "value", name: "Corpus", color: "#0ea5e9" }]}
+          series={[{ key: "value", name: "Corpus", color: "#d22e32" }]}
         />
         <div className="max-h-96 overflow-y-auto print:max-h-none print:overflow-visible">
           <Table

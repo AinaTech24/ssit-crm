@@ -64,7 +64,7 @@ export function CroreRaceCalculator() {
           value: r.months != null ? r.months / 12 : 0,
           display: r.months != null ? `${(r.months / 12).toFixed(1)} yrs` : "60+ yrs",
           caption: r.months != null ? dateAfterMonths(today, r.months).label : "—",
-          color: r.sip === yourSip ? "#0e2557" : "#0891b2",
+          color: r.sip === yourSip ? "#841f21" : "#0891b2",
         }))}
       />
 

@@ -110,8 +110,8 @@ export function EmailDesigner({
   const theme: EmailTheme = useMemo(
     () =>
       (value.theme ?? {
-        brandColor: tenant?.brandColor ?? "#0ea5e9",
-        accentColor: "#0e2557",
+        brandColor: tenant?.brandColor ?? "#d22e32",
+        accentColor: "#841f21",
         pageBackground: "#f5f7fb",
         cardBackground: "#ffffff",
         textColor: "#111827",
@@ -1135,11 +1135,11 @@ const DEFAULT_HTML_TEMPLATE = `<!-- Custom HTML email - merge fields {{investor.
   <tr><td align="center">
     <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;">
       <tr><td style="padding:32px;">
-        <h1 style="color:#0e2557;margin:0 0 12px;">Welcome, {{investor.name}}</h1>
+        <h1 style="color:#841f21;margin:0 0 12px;">Welcome, {{investor.name}}</h1>
         <p>Hi {{investor.first_name}},</p>
         <p>Thank you for choosing {{tenant.displayName}}.</p>
         <p style="margin-top:24px;">
-          <a href="{{system.dashboard_url}}" style="background:#0ea5e9;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">
+          <a href="{{system.dashboard_url}}" style="background:#d22e32;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;">
             View dashboard
           </a>
         </p>

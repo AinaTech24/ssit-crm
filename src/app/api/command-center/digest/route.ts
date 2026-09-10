@@ -65,7 +65,7 @@ export async function POST(_req: NextRequest) {
              <thead><tr style="background:#f8fafc;text-align:left;">
                <th style="padding:8px 10px;">What</th><th style="padding:8px 10px;">When</th><th style="padding:8px 10px;text-align:right;">Count</th>
              </tr></thead><tbody>${rows}</tbody></table>`}
-      <p style="margin:18px 0;"><a href="${origin}/dashboard/command-center" style="background:#0e2557;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;display:inline-block;">Open Command Center</a></p>
+      <p style="margin:18px 0;"><a href="${origin}/dashboard/command-center" style="background:#841f21;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;display:inline-block;">Open Command Center</a></p>
       <div style="margin-top:18px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;">${esc(firmName)} · automated daily briefing</div>
     </div>`;
 

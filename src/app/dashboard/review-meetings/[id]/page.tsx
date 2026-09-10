@@ -5,6 +5,7 @@ import { ChevronLeft, Calendar, Wallet, CalendarClock, LifeBuoy, Repeat, Target 
 import { withTenant } from "@/db/client";
 import { reviewMeetings, investors, leads, users } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { formatINR, formatRelative } from "@/lib/utils";
 import { ReviewMeetingDetailEditor } from "@/components/review-meetings/ReviewMeetingDetailEditor";
 import { MeetingPrepButton } from "@/components/review-meetings/MeetingPrepButton";
@@ -22,6 +23,12 @@ export default async function ReviewMeetingDetailPage({
   const data = await withTenant(session.tenantId, async (tx) => {
     const m = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
     if (!m) return null;
+    // Same scope as the list: a viewer who only holds
+    // review_meeting.manage.assigned sees the meetings they are the RM on, so
+    // a guessed/pasted id must not be a way around that.
+    if (!can(session.roles, "review_meeting.manage.all", session.permissions) && m.rmId !== session.userId) {
+      return null;
+    }
     // The meeting subject is either an investor (client) or a lead — exactly one.
     const inv = m.investorId
       ? (await tx.select().from(investors).where(and(eq(investors.id, m.investorId), eq(investors.tenantId, session.tenantId))).limit(1))[0]

@@ -379,9 +379,9 @@ export function RiskProfileWizard({
             <div
               className="border-2 rounded-lg p-5"
               style={{
-                borderColor: live.band.color ?? "#0ea5e9",
-                background: `${live.band.color ?? "#0ea5e9"}15`,
-                color: live.band.color ?? "#0e2557",
+                borderColor: live.band.color ?? "#d22e32",
+                background: `${live.band.color ?? "#d22e32"}15`,
+                color: live.band.color ?? "#841f21",
               }}
             >
               <div className="flex items-center justify-between">

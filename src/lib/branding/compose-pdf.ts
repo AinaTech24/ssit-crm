@@ -42,11 +42,11 @@ export type ComposePdfOpts = {
   logoBytes?: Buffer | Uint8Array | null;
 };
 
-const ACCENT: RGB = rgb(0.055, 0.647, 0.914); // #0ea5e9
+const ACCENT: RGB = rgb(0.055, 0.647, 0.914); // #d22e32
 const SLATE: RGB = rgb(0.2, 0.255, 0.333); // #334155
 const MUTED: RGB = rgb(0.58, 0.64, 0.72); // #94a3b8
 const WHITE: RGB = rgb(1, 1, 1);
-const DEFAULT_PRIMARY: RGB = rgb(0.055, 0.145, 0.341); // #0e2557
+const DEFAULT_PRIMARY: RGB = rgb(0.055, 0.145, 0.341); // #841f21
 
 const DISCLAIMER =
   "Mutual Fund investments are subject to market risks. Read all scheme related documents carefully.";

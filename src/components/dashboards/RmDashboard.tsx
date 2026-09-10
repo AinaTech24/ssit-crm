@@ -332,7 +332,17 @@ export async function RmDashboard({
         <NbaDateFilter from={from ?? ""} to={to ?? ""} />
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* One container, five distinct cards. The KPI row used to be five
+          free-floating glass panels sitting straight on the page background, so it
+          read as five unrelated widgets. Grouping them inside a single surface —
+          the same one the "Reviews — overdue & due this week" panel uses — makes
+          the row read as one "today at a glance" unit while each metric keeps its
+          own card. */}
+      <div className="card-surface glass-card p-4">
+        <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-3">
+          {viewingOther ? `${targetName ?? "Team member"} at a glance` : "At a glance"}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <Kpi label={`${who} clients`} value={String(data.myClients)} sub={formatINR(data.myAum) + " AUM"} />
         <Kpi label={`${who} SIP book`} value={formatINR(data.mySipBook)} sub="per month" />
         <Kpi
@@ -351,7 +361,7 @@ export async function RmDashboard({
         <Kpi label="Open leads" value={String(data.openLeads)} sub={`${data.convertedMtd} converted · ${periodLabel}`} />
         {/* Sales Quota Ring — driven by users.annual_target / 12 */}
         {data.monthlyTarget > 0 ? (
-          <div className="card-surface glass-card p-4 flex flex-col items-center justify-center text-center">
+          <div className="rounded-xl border bg-background/60 p-4 flex flex-col items-center justify-center text-center">
             <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">MTD Sales Quota</div>
             <div className="relative size-16 flex items-center justify-center">
               <svg className="size-full transform -rotate-90">
@@ -399,7 +409,7 @@ export async function RmDashboard({
         ) : (
           <Link
             href="/dashboard/settings/targets"
-            className="card-surface glass-card p-4 flex flex-col items-center justify-center text-center hover:bg-accent/40 transition-colors"
+            className="rounded-xl border bg-background/60 p-4 flex flex-col items-center justify-center text-center hover:bg-accent/40 transition-colors"
           >
             <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">MTD Quota</div>
             <div className="size-16 rounded-full border-2 border-dashed border-border flex items-center justify-center">
@@ -410,6 +420,7 @@ export async function RmDashboard({
             </div>
           </Link>
         )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -754,7 +765,7 @@ function Kpi({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="card-surface glass-card p-5 hover-glow-cyan">
+    <div className="rounded-xl border bg-background/60 p-4 hover-glow-cyan transition-colors">
       <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">{label}</div>
       <div className="text-2xl font-bold mt-2 tracking-tight text-gradient">{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-1 font-medium">{sub}</div>}

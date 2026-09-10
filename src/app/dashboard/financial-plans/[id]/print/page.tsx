@@ -56,8 +56,8 @@ export default async function FinancialPlanPrintPage({
 
   const { p, tenant, client, preparedBy } = data;
 
-  const primary = (tenant as any)?.primaryColor || "#0e2557";
-  const accent = (tenant as any)?.accentColor || "#0ea5e9";
+  const primary = (tenant as any)?.primaryColor || "#841f21";
+  const accent = (tenant as any)?.accentColor || "#d22e32";
 
   const monthlyInc = Number(p.monthlyIncome ?? 0);
   const monthlyExp = Number(p.monthlyExpenses ?? 0);

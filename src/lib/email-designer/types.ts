@@ -24,9 +24,9 @@ export const EmailThemeSchema = z.object({
   logoAlign: z.enum(["left", "center", "right"]).default("center"),
 
   /** Brand color (primary). Used by buttons, links, accent strips. */
-  brandColor: z.string().default("#0ea5e9"),
+  brandColor: z.string().default("#d22e32"),
   /** Accent / heading color (usually darker). */
-  accentColor: z.string().default("#0e2557"),
+  accentColor: z.string().default("#841f21"),
   /** Outer page bg (around the email card). */
   pageBackground: z.string().default("#f5f7fb"),
   /** Email card bg. */

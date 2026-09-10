@@ -43,7 +43,7 @@ type Template = {
   requireEmailOtp: boolean;
 };
 
-const SWATCHES = ["#10b981", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#0ea5e9", "#64748b", "#ec4899"];
+const SWATCHES = ["#10b981", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#d22e32", "#64748b", "#ec4899"];
 
 export function RiskTemplateEditor({
   initial,
@@ -461,7 +461,7 @@ export function RiskTemplateEditor({
             <div key={b.id + "_" + bi} className="card-surface p-3 flex items-center gap-2">
               <input
                 type="color"
-                value={b.color ?? "#0ea5e9"}
+                value={b.color ?? "#d22e32"}
                 onChange={(e) => updateBand(bi, { color: e.target.value })}
                 className="h-9 w-10 rounded border"
               />
@@ -506,7 +506,7 @@ export function RiskTemplateEditor({
           <div className="mt-2 space-y-2">
             {t.bands.map((b, bi) => (
               <div key={bi} className="flex items-start gap-2">
-                <span className="chip text-[10px]" style={{ background: `${b.color ?? "#0ea5e9"}22`, color: b.color ?? "#0e2557" }}>
+                <span className="chip text-[10px]" style={{ background: `${b.color ?? "#d22e32"}22`, color: b.color ?? "#841f21" }}>
                   {b.label}
                 </span>
                 <textarea
@@ -534,7 +534,7 @@ export function RiskTemplateEditor({
                   <div
                     key={i}
                     className="flex items-center justify-center text-[10px] font-semibold text-white"
-                    style={{ background: b.color ?? "#0ea5e9", width: `${pct}%` }}
+                    style={{ background: b.color ?? "#d22e32", width: `${pct}%` }}
                     title={`${b.label} · ${b.minScore}–${b.maxScore}`}
                   >
                     {b.label}

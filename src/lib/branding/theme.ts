@@ -20,8 +20,8 @@
 
 export type ThemeColors = { primary: string; accent: string };
 
-/** The stock Equitywala palette — deep navy + electric cyan (matches globals.css). */
-export const DEFAULT_THEME: ThemeColors = { primary: "#0e2557", accent: "#0ea5e9" };
+/** The stock Equitywala palette — logo red over deep maroon (matches globals.css). */
+export const DEFAULT_THEME: ThemeColors = { primary: "#841f21", accent: "#d22e32" };
 
 /**
  * The legacy column default for `tenants.primary_color`. It was never a
@@ -30,6 +30,16 @@ export const DEFAULT_THEME: ThemeColors = { primary: "#0e2557", accent: "#0ea5e9
  * never customised would suddenly render in flat grey.
  */
 const LEGACY_DEFAULT_PRIMARY = "#1f2937";
+
+/**
+ * The old stock accent, and the column default for `tenants.secondary_color`.
+ * EVERY tenant carries it unless they picked a colour, and it is a valid hex —
+ * so without this list `resolveThemeColors` would hand back cyan for the whole
+ * estate, `buildThemeVars` would decide the tenant is "custom-branded", and the
+ * injected vars would paint the old cyan straight back over the red tokens in
+ * globals.css. Treat it as unbranded, exactly like LEGACY_DEFAULT_PRIMARY.
+ */
+const LEGACY_DEFAULT_ACCENTS = new Set(["#0ea5e9"]);
 
 export type ThemePreset = {
   id: string;
@@ -40,7 +50,13 @@ export type ThemePreset = {
 
 /** Curated one-click palettes shown in the Appearance picker. */
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: "ssit", label: "Equitywala Navy", primary: "#0e2557", accent: "#0ea5e9" },
+  { id: "ssit", label: "Equitywala Red", primary: "#841f21", accent: "#d22e32" },
+  // The old stock palette, kept as a one-click option for firms that liked it.
+  // Its accent is #0284c7 and NOT #0ea5e9 on purpose: that exact hex is the
+  // legacy column default, which resolveThemeColors treats as "unbranded" — a
+  // preset carrying it would resolve straight back to the red accent and the
+  // preset would look broken.
+  { id: "navy", label: "Classic Navy", primary: "#0e2557", accent: "#0284c7" },
   { id: "emerald", label: "Emerald", primary: "#064e3b", accent: "#10b981" },
   { id: "royal", label: "Royal Purple", primary: "#3b0764", accent: "#a855f7" },
   { id: "sunset", label: "Sunset Orange", primary: "#7c2d12", accent: "#f97316" },
@@ -98,7 +114,10 @@ export function resolveThemeColors(
     isHexColor(primaryColor) && primaryColor.toLowerCase() !== LEGACY_DEFAULT_PRIMARY
       ? primaryColor
       : DEFAULT_THEME.primary;
-  const accent = isHexColor(secondaryColor) ? secondaryColor : DEFAULT_THEME.accent;
+  const accent =
+    isHexColor(secondaryColor) && !LEGACY_DEFAULT_ACCENTS.has(secondaryColor.toLowerCase())
+      ? secondaryColor
+      : DEFAULT_THEME.accent;
   return { primary, accent };
 }
 

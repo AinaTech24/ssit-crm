@@ -27,8 +27,8 @@ export default async function CalculatorsPage() {
     tenant: (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null,
     assumptions: await loadCalcAssumptions(tx, session.tenantId),
   }));
-  const primary = (tenant as any)?.primaryColor || "#0e2557";
-  const accent = (tenant as any)?.secondaryColor || (tenant as any)?.accentColor || "#0ea5e9";
+  const primary = (tenant as any)?.primaryColor || "#841f21";
+  const accent = (tenant as any)?.secondaryColor || (tenant as any)?.accentColor || "#d22e32";
   const firmName = tenant?.legalName ?? tenant?.displayName ?? "—";
   const arnClean = (tenant?.arn ?? "").replace(/^ARN-?/i, "");
 

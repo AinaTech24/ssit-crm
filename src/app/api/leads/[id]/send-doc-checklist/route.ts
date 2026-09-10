@@ -97,7 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           <div style="padding:4px 4px 0;">
             <p>Hi ${escapeHtml(name)},</p>
             <p>To complete your account setup, please upload your KYC documents using this secure, single-use link:</p>
-            <p style="margin:18px 0;"><a href="${escapeAttr(url)}" style="background:#0e2557;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;display:inline-block;">Upload documents</a></p>
+            <p style="margin:18px 0;"><a href="${escapeAttr(url)}" style="background:#841f21;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;display:inline-block;">Upload documents</a></p>
             <p style="font-size:13px;color:#475569;">Required: ${DOCS_LINE}.</p>
             <p style="margin-top:18px;">Warm regards,<br/><strong>${escapeHtml(firmName)}</strong></p>
           </div>

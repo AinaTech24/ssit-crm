@@ -39,8 +39,8 @@ export default async function CoverSheetPage({
   const tenant = (await withTenant(session.tenantId, async (tx) =>
     tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1)
   ))[0];
-  const primary = (tenant as any)?.primaryColor || "#0e2557";
-  const accent = "#0ea5e9";
+  const primary = (tenant as any)?.primaryColor || "#841f21";
+  const accent = "#d22e32";
   const address = (tenant as any)?.address;
   const addressStr =
     typeof address === "string"

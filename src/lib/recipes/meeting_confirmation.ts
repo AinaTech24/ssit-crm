@@ -120,8 +120,8 @@ export const meetingConfirmationRecipe: RecipeDef = {
         subject: "Confirmed: your {{type}} on {{date}}",
         preheader: "We're looking forward to meeting you.",
         theme: {
-          brandColor: "#0ea5e9",
-          accentColor: "#0e2557",
+          brandColor: "#d22e32",
+          accentColor: "#841f21",
           pageBackground: "#f5f7fb",
           cardBackground: "#ffffff",
           textColor: "#111827",

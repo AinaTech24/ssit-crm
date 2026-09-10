@@ -30,7 +30,7 @@ export const tenants = pgTable(
     customDomain: text("custom_domain"),
     customDomainVerifiedAt: timestamp("custom_domain_verified_at", { withTimezone: true }),
     primaryColor: text("primary_color").default("#1f2937"),
-    secondaryColor: text("secondary_color").default("#0ea5e9"),
+    secondaryColor: text("secondary_color").default("#d22e32"),
     /** Extra theme controls (migration 0128) — body text + hover/secondary
      *  surface colour. Optional hex; null = stock palette. */
     textColor: text("text_color"),

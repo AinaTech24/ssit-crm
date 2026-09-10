@@ -49,8 +49,17 @@ export const CROSS_SELL_STATUS_KEYS = CROSS_SELL_STATUSES.map(([k]) => k);
 
 export type CrossSellMap = Record<string, string>;
 
-/** Statuses that represent an open wallet-share opportunity. */
-const OPPORTUNITY = new Set(["held_elsewhere", "interested", "not_held"]);
+/**
+ * Statuses that represent an open wallet-share opportunity.
+ *
+ * Exported because the Opportunities module (/dashboard/opportunities) has to
+ * express the same rule in SQL to filter/count in bulk — it reads this list
+ * rather than re-typing the three strings, so the page and the card can never
+ * disagree about what "open" means.
+ */
+export const CROSS_SELL_OPPORTUNITY_STATUSES = ["interested", "held_elsewhere", "not_held"] as const;
+
+const OPPORTUNITY = new Set<string>(CROSS_SELL_OPPORTUNITY_STATUSES);
 
 /** Priority for ranking opportunities (higher = hotter). */
 const STRENGTH: Record<string, number> = {

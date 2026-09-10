@@ -79,7 +79,7 @@ const sanitize = (s: string, keepRupee = false) => {
 const ascii = (s: string) => sanitize(s, false);
 
 function hexToRgb(hex?: string | null) {
-  const h = (hex ?? "#0e2557").replace("#", "");
+  const h = (hex ?? "#841f21").replace("#", "");
   const n = parseInt(h.length === 3 ? h.split("").map((c) => c + c).join("") : h, 16);
   if (!Number.isFinite(n)) return rgb(0.06, 0.09, 0.16);
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);

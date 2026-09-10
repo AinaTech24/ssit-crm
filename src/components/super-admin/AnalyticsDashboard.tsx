@@ -37,13 +37,13 @@ type Gran = "daily" | "weekly" | "monthly" | "quarterly" | "half_yearly" | "annu
 type DistType = "donut" | "pie" | "bar" | "hbar" | "radar" | "radial";
 type TrendType = "area" | "line" | "bar";
 
-const PALETTE = ["#0E2557", "#E0454B", "#F2999C", "#7C3AED", "#0EA5A4", "#F59E0B", "#3B82F6", "#10B981", "#EC4899", "#64748B"];
+const PALETTE = ["#841F21", "#E0454B", "#F2999C", "#7C3AED", "#0EA5A4", "#F59E0B", "#3B82F6", "#10B981", "#EC4899", "#64748B"];
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   active: { label: "Active", color: "#10B981" },
   trial: { label: "Trial", color: "#3B82F6" },
   past_due: { label: "Past due", color: "#F59E0B" },
-  suspended: { label: "Suspended", color: "#0E2557" },
+  suspended: { label: "Suspended", color: "#841F21" },
   expired: { label: "Expired", color: "#EF4444" },
   cancelled: { label: "Cancelled", color: "#94A3B8" },
   pending: { label: "Pending", color: "#A855F7" },
@@ -110,7 +110,7 @@ export function AnalyticsDashboard({ mfds }: { mfds: MfdRow[] }) {
 
     const activeDist = [
       { name: "Active", value: active, color: "#10B981" },
-      { name: "Inactive", value: inactive, color: "#0E2557" },
+      { name: "Inactive", value: inactive, color: "#841F21" },
       ...(softDeleted > 0 ? [{ name: "Soft-deleted", value: softDeleted, color: "#475569" }] : []),
     ];
 
@@ -347,7 +347,7 @@ function DistributionChart({ data, type, total }: { data: { name: string; value:
             <PolarGrid stroke="hsl(var(--border))" />
             <PolarAngleAxis dataKey="name" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
             <PolarRadiusAxis tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }} />
-            <Radar dataKey="value" stroke="#0E2557" fill="#0E2557" fillOpacity={0.45} animationDuration={900} animationEasing="ease-out" />
+            <Radar dataKey="value" stroke="#841F21" fill="#841F21" fillOpacity={0.45} animationDuration={900} animationEasing="ease-out" />
             <Tooltip contentStyle={TOOLTIP_STYLE} />
           </RadarChart>
         </ResponsiveContainer>
@@ -408,7 +408,7 @@ const TREND_TYPES: { key: TrendType; icon: any; title: string }[] = [
 function TrendChart({ data }: { data: Record<string, any>[] }) {
   const [type, setType] = useState<TrendType>("area");
   const SERIES = [
-    { key: "New MFDs", color: "#0E2557" },
+    { key: "New MFDs", color: "#841F21" },
     { key: "Total MFDs", color: "#3B82F6" },
     { key: "New clients", color: "#10B981" },
   ];

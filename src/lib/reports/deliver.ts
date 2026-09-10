@@ -81,7 +81,7 @@ function wrapHtml(name: string, inner: string, tenant: any, appUrl: string): str
   <h2 style="font-size:18px;margin:0 0 4px">${esc(name)}</h2>
   <p style="font-size:12px;color:#6b7280;margin:0 0 16px">Scheduled report · generated ${new Date().toLocaleString("en-IN")}</p>
   ${inner}
-  <p style="margin-top:20px"><a href="${appUrl}" style="font-size:13px;color:#0ea5e9">Open in the CRM →</a></p>
+  <p style="margin-top:20px"><a href="${appUrl}" style="font-size:13px;color:#d22e32">Open in the CRM →</a></p>
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0"/>
   <p style="font-size:11px;color:#94a3b8;margin:0">${esc(sig)}</p>
 </div>`;

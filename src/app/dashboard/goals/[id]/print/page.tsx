@@ -100,7 +100,7 @@ export default async function GoalPrintPage({
             <FirmLogo
               src={data.tenant?.logoUrl}
               name={data.tenant?.displayName ?? data.tenant?.legalName}
-              color={data.tenant?.primaryColor ?? "#0e2557"}
+              color={data.tenant?.primaryColor ?? "#841f21"}
               size={48}
               radius={6}
               maxWidth={200}
@@ -120,7 +120,7 @@ export default async function GoalPrintPage({
         {/* Theme gradient rule (matches the statement PDF) */}
         <div
           className="h-[5px] rounded-full"
-          style={{ background: `linear-gradient(to right, ${data.tenant?.primaryColor ?? "#0e2557"}, ${(data.tenant as any)?.secondaryColor ?? "#0ea5e9"})` }}
+          style={{ background: `linear-gradient(to right, ${data.tenant?.primaryColor ?? "#841f21"}, ${(data.tenant as any)?.secondaryColor ?? "#d22e32"})` }}
         />
 
         {/* Salutation */}

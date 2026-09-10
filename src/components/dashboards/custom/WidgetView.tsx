@@ -16,7 +16,7 @@ import { Loader2, AlertCircle, Download, RefreshCw } from "lucide-react";
 import { formatINR, formatDate } from "@/lib/utils";
 import { WIDGET_META_BY_KEY } from "@/lib/dashboards/widgets";
 
-const PALETTE = ["#0ea5e9", "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#a855f7", "#14b8a6", "#ec4899"];
+const PALETTE = ["#d22e32", "#6366f1", "#10b981", "#f59e0b", "#ef4444", "#a855f7", "#14b8a6", "#ec4899"];
 
 /**
  * Module-level in-memory cache keyed by widgetKey+rm+period. Keeps re-renders

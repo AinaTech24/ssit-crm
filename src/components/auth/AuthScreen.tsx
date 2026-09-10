@@ -189,7 +189,7 @@ export function AuthScreen({
   return (
     <main className="h-screen overflow-hidden grid grid-rows-1 grid-cols-1 lg:grid-cols-2 bg-background">
       {/* ── Left: brand panel (single logo, animated content) ── */}
-      <div className="hidden lg:flex relative flex-col justify-between p-12 overflow-hidden text-white bg-gradient-to-br from-[#1B3A7A] via-[#14306A] to-[#0E2557]">
+      <div className="hidden lg:flex relative flex-col justify-between p-12 overflow-hidden text-white bg-gradient-to-br from-[#A32529] via-[#8A1F23] to-[#841F21]">
         <div className="absolute inset-0 opacity-[0.06] bg-[radial-gradient(circle_at_1px_1px,white_1px,transparent_0)] [background-size:22px_22px]" />
 
         <Link href="/" className="relative z-10 inline-flex w-fit items-center" aria-label={`${brandName ?? "Equitywala"} home`}>

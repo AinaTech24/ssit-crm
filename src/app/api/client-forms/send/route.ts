@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
           <div style="padding:4px 4px 0;">
             <p>Hi ${esc(name)},</p>
             <p>${esc(form.blurb)}</p>
-            <p style="margin:18px 0;"><a href="${esc(url)}" style="background:#0e2557;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;display:inline-block;">${esc(form.cta)}</a></p>
+            <p style="margin:18px 0;"><a href="${esc(url)}" style="background:#841f21;color:#fff;text-decoration:none;padding:11px 20px;border-radius:8px;font-weight:600;display:inline-block;">${esc(form.cta)}</a></p>
             <p style="margin-top:18px;">Warm regards,<br/><strong>${esc(firmName)}</strong></p>
           </div>
           <div style="margin-top:22px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;line-height:1.6;">

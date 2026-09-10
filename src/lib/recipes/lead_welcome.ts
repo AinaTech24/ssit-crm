@@ -123,8 +123,8 @@ export const leadWelcomeRecipe: RecipeDef = {
         subject: "Welcome to {{firm_name}}, {{lead_name}}",
         preheader: "Your dedicated relationship manager is on the way.",
         theme: {
-          brandColor: "#0ea5e9",
-          accentColor: "#0e2557",
+          brandColor: "#d22e32",
+          accentColor: "#841f21",
           pageBackground: "#f5f7fb",
           cardBackground: "#ffffff",
           textColor: "#111827",
@@ -203,8 +203,8 @@ export const leadWelcomeRecipe: RecipeDef = {
         subject: "Thank you for referring {{lead_name}}",
         preheader: "Your trust in us means everything.",
         theme: {
-          brandColor: "#0ea5e9",
-          accentColor: "#0e2557",
+          brandColor: "#d22e32",
+          accentColor: "#841f21",
           pageBackground: "#f5f7fb",
           cardBackground: "#ffffff",
           textColor: "#111827",

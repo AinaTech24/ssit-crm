@@ -18,7 +18,7 @@ const CATEGORY_BUCKETS: Array<{
   color: string;
   bgClass: string;
 }> = [
-  { label: "Equity", match: [/equity/i, /large.?cap/i, /mid.?cap/i, /small.?cap/i, /flexi.?cap/i, /multi.?cap/i, /focused/i, /thematic/i, /sectoral/i], color: "#0ea5e9", bgClass: "bg-sky-500" },
+  { label: "Equity", match: [/equity/i, /large.?cap/i, /mid.?cap/i, /small.?cap/i, /flexi.?cap/i, /multi.?cap/i, /focused/i, /thematic/i, /sectoral/i], color: "#d22e32", bgClass: "bg-sky-500" },
   { label: "ELSS / Tax", match: [/elss/i, /tax.?saver/i, /tax.?save/i], color: "#8b5cf6", bgClass: "bg-violet-500" },
   { label: "Hybrid", match: [/hybrid/i, /balanced/i, /aggressive.?hybrid/i, /conservative.?hybrid/i], color: "#f59e0b", bgClass: "bg-amber-500" },
   { label: "Debt", match: [/debt/i, /bond/i, /gilt/i, /income/i, /credit.?risk/i, /short.?duration/i, /medium.?duration/i, /long.?duration/i, /banking.?psu/i], color: "#10b981", bgClass: "bg-emerald-500" },

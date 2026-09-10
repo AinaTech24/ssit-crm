@@ -46,7 +46,7 @@ export function OrganisationProfileForm({
     phone: tenant.phone ?? "",
     website: tenant.website ?? "",
     primaryColor: tenant.primaryColor ?? "#1f2937",
-    secondaryColor: tenant.secondaryColor ?? "#0ea5e9",
+    secondaryColor: tenant.secondaryColor ?? "#d22e32",
     logoUrl: tenant.logoUrl ?? "",
     logoIconUrl: (tenant as any).logoIconUrl ?? "",
     logoMarkUrl: (tenant as any).logoMarkUrl ?? "",

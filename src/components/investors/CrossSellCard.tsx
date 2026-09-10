@@ -8,8 +8,9 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Save, Check, TrendingUp } from "lucide-react";
+import { Loader2, Save, Check, TrendingUp, ArrowRight } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
 import {
   CROSS_SELL_PRODUCTS,
@@ -105,8 +106,18 @@ export function CrossSellCard({
 
       {opps.length > 0 && (
         <div className="mt-4 pt-3 border-t">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">
-            Wallet-share opportunities
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Wallet-share opportunities
+            </span>
+            {/* Same statuses, read across the whole book — "who else wants
+                this?" is the question this card can't answer on its own. */}
+            <Link
+              href="/dashboard/opportunities"
+              className="text-[11px] text-brand-cyan-deep hover:underline inline-flex items-center gap-0.5"
+            >
+              All opportunities <ArrowRight className="size-3" />
+            </Link>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {opps.map((o) => (

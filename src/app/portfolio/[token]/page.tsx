@@ -60,7 +60,7 @@ export default async function PublicPortfolioPage({ params }: { params: Promise<
   if (!data) return <ErrorScreen message="Portfolio not found." />;
 
   const { tenant, inv, valuation: v, goals } = data;
-  const primary = tenant?.primaryColor || "#0e2557";
+  const primary = tenant?.primaryColor || "#841f21";
   const gainPositive = (v.gain ?? 0) >= 0;
   const priced = v.holdings.filter((h: any) => h.priced && (h.currentValue ?? 0) > 0);
 

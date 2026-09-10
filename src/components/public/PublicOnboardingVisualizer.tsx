@@ -204,7 +204,7 @@ export function PublicOnboardingVisualizer({
             </div>
             <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200">
               <div
-                className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full transition-all duration-500 ease-out"
+                className="h-full bg-gradient-to-r from-brand-cyan to-brand-navy rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${progressPct}%` }}
               />
             </div>
@@ -232,7 +232,7 @@ export function PublicOnboardingVisualizer({
               key={phase.id}
               className={`rounded-xl border transition-all duration-300 ${
                 isCurrent
-                  ? "border-brand-cyan/50 bg-cyan-50/50 shadow-sm"
+                  ? "border-brand-cyan/50 bg-brand-cyan-light/50 shadow-sm"
                   : isDone
                   ? "border-emerald-200 bg-emerald-50/40"
                   : "border-slate-200 bg-white"
@@ -266,8 +266,8 @@ export function PublicOnboardingVisualizer({
                       {phase.name}
                       {isCurrent && (
                         <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-cyan opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-cyan"></span>
                         </span>
                       )}
                     </h3>
@@ -368,7 +368,7 @@ export function PublicOnboardingVisualizer({
       {rm && (
         <div className="p-5 border border-slate-200 bg-white shadow-sm rounded-xl flex flex-col sm:flex-row items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="size-12 rounded-full bg-gradient-to-br from-indigo-500 to-cyan-500 text-white font-bold grid place-items-center text-lg shadow-inner flex-shrink-0">
+            <div className="size-12 rounded-full bg-gradient-to-br from-brand-navy to-brand-cyan text-white font-bold grid place-items-center text-lg shadow-inner flex-shrink-0">
               {rm.name
                 .split(" ")
                 .map((n) => n[0])
@@ -392,7 +392,7 @@ export function PublicOnboardingVisualizer({
             )}
             <a
               href={`mailto:${rm.email}`}
-              className="text-xs px-3 py-2 flex items-center gap-1.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 transition-all text-white rounded-lg font-medium"
+              className="text-xs px-3 py-2 flex items-center gap-1.5 bg-gradient-to-r from-brand-cyan-deep to-brand-navy hover:from-brand-cyan hover:to-brand-navy-deep transition-all text-white rounded-lg font-medium"
             >
               <Mail className="size-3.5" /> Email RM
             </a>

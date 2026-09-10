@@ -56,8 +56,8 @@ function buildHtmlEmail(args: {
   publicUrl: string;
 }) {
   const { tenant, proposal, publicUrl } = args;
-  const primary = tenant?.primaryColor || "#0e2557";
-  const secondary = tenant?.secondaryColor || "#0ea5e9";
+  const primary = tenant?.primaryColor || "#841f21";
+  const secondary = tenant?.secondaryColor || "#d22e32";
   const products = (proposal.products ?? []) as any[];
   const groups: Record<string, any[]> = {};
   for (const p of products) {

@@ -1,6 +1,6 @@
 import { and, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Plus, ListChecks } from "lucide-react";
+import { Plus, ListChecks, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { withTenant } from "@/db/client";
 import { tasks, users, investors, leads } from "@/db/schema";
@@ -206,12 +206,22 @@ export default async function TasksPage({
           {/* View switcher — segmented tabs (list / mine / assigned-by-me / kanban) */}
           <TaskViewSelect current={view} layout={layout} />
         </div>
-        <Link
-          href="/dashboard/tasks/new"
-          className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium flex items-center gap-1.5"
-        >
-          <Plus className="size-4" /> New task
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Due dates read very differently laid out on a month grid than in a
+              list — same feed, same scoping, different shape. */}
+          <Link
+            href="/dashboard/tasks/calendar"
+            className="rounded-md border px-3 py-1.5 text-sm font-medium flex items-center gap-1.5 hover:bg-accent"
+          >
+            <CalendarDays className="size-4" /> Calendar
+          </Link>
+          <Link
+            href="/dashboard/tasks/new"
+            className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium flex items-center gap-1.5"
+          >
+            <Plus className="size-4" /> New task
+          </Link>
+        </div>
       </div>
 
       {/* Search + filter + sort + view — rendered inside the table header (list)

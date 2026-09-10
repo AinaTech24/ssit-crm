@@ -117,6 +117,11 @@ export default async function AttendancePage({
           <Link href="/dashboard/attendance/grid" className="btn-secondary text-xs">
             <Grid3x3 className="size-3.5" /> Monthly grid
           </Link>
+          {/* One person across a month on a real date grid — the team-wide
+              version of the same data is the Monthly grid above. */}
+          <Link href="/dashboard/attendance/calendar" className="btn-secondary text-xs">
+            <CalendarDays className="size-3.5" /> Calendar
+          </Link>
         </div>
       </div>
 
