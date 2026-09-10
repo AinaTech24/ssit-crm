@@ -3,11 +3,18 @@
  * leaves the building, for both the template pipeline (`dispatch`) and free
  * Compose (`composeAndSendEmail`).
  *
- * Preference order (most authentic first):
- *   1. the sending RM's own mailbox  (per-user SMTP / OAuth)  → replies land in their inbox
- *   2. the firm-wide mailbox         (owner-connected SMTP / OAuth)
+ * WHO a message is from follows WHO acted, not what happens to be connected:
  *
- * There is NO third option. Email leaves only through a mailbox the firm owns,
+ *   userId given  → that user's own mailbox, and nothing else. If they have not
+ *                   connected one this THROWS. It does NOT quietly fall back to
+ *                   the firm mailbox: an RM's proposal arriving from the firm
+ *                   admin's address puts the wrong person's name on their work
+ *                   and sends the client's reply to the wrong inbox. Pass
+ *                   allowFirmFallback for the few sends that are genuinely the
+ *                   firm speaking (digests to staff, public OTPs).
+ *   no userId     → the firm-wide mailbox (automations, invites, system mail).
+ *
+ * There is NO platform-sender option. Email leaves only through a mailbox the firm owns,
  * so every message genuinely originates from their own server with an authentic
  * From address. If neither mailbox is connected this THROWS rather than falling
  * back to a platform sender — a silent fallback is how a firm ends up sending
@@ -101,16 +108,40 @@ async function mailboxToSmtp(
   return null;
 }
 
+export interface ResolveSenderOptions {
+  /**
+   * Allow a known actor to fall back to the firm mailbox. Only for sends that
+   * are the FIRM speaking rather than the person — staff digests, public OTPs.
+   * Never for client-facing mail a user initiated.
+   */
+  allowFirmFallback?: boolean;
+  /**
+   * Refuse the "sole connected mailbox" fallback. Set for firm-identity mail
+   * (team invites): borrowing whichever colleague happens to be connected would
+   * send an invite from an RM's address.
+   */
+  firmMailboxOnly?: boolean;
+}
+
 export async function resolveEmailSender(
   tx: Tx,
   tenantId: string,
-  userId?: string | null
+  userId?: string | null,
+  opts: ResolveSenderOptions = {}
 ): Promise<EmailSender> {
-  // 1. The sending RM's own mailbox.
+  // 1. The acting user's own mailbox — their action, their identity.
   if (userId) {
     const um = await getUserMailbox(tx, tenantId, userId);
     const s = await mailboxToSmtp(tx, um);
     if (s) return { ...s, source: "user-mailbox" };
+    if (!opts.allowFirmFallback) {
+      throw Object.assign(
+        new Error(
+          "Your mailbox isn't connected, so this email can't be sent as you. Connect it under Settings → Integrations → Mailbox. (Mail you send is sent from your own address, not the firm's, so replies come back to you.)"
+        ),
+        { status: 422 }
+      );
+    }
   }
   // 2. The firm-wide mailbox.
   const tm = await getTenantIntegration(tx, tenantId, "mailbox");
@@ -127,7 +158,7 @@ export async function resolveEmailSender(
   // Deliberately only when there is EXACTLY ONE. With one there is no question
   // whose identity the firm sends under; with several, picking one would put an
   // arbitrary RM's name on the firm's mail, so we still refuse.
-  const only = await getSoleUserMailbox(tx, tenantId);
+  const only = opts.firmMailboxOnly ? null : await getSoleUserMailbox(tx, tenantId);
   if (only) {
     const s = await mailboxToSmtp(tx, only);
     if (s) return { ...s, source: "tenant-mailbox" };

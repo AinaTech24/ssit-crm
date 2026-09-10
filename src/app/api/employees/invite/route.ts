@@ -151,6 +151,7 @@ export async function POST(req: NextRequest) {
     // Email the invite (best-effort — the link is still returned so the owner
     // can share it manually if email isn't configured).
     const emailRes = await sendSystemEmail({
+      identity: "firm",
       tenantId: session.tenantId,
       to: body.email,
       subject: `You're invited to join ${firmName} on Equitywala`,

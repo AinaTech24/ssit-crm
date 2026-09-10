@@ -7,9 +7,14 @@
  * to "here's your reset link" auth mail. We send straight through the email
  * adapter.
  *
- * Sender preference:
- *   1. the PLATFORM mailbox (Equitywala Admin → Email, or SMTP_* env)
- *   2. the TENANT's own mailbox, as a fallback
+ * Sender preference depends on WHOSE mail it is:
+ *   auth mail (reset, verify)     → PLATFORM mailbox first, tenant as fallback
+ *   firm mail (invites, team)     → the FIRM's own mailbox first, platform as
+ *                                   fallback — an invite to join Acme Wealth
+ *                                   should come from Acme Wealth, not from us.
+ *
+ * Firm mail also refuses the "sole connected mailbox" shortcut, so an invite is
+ * never sent from whichever RM happens to have connected a mailbox.
  *
  * The fallback matters: with no platform mailbox configured, password resets and
  * invites were silently dropped — /api/auth/forgot is deliberately
@@ -39,6 +44,12 @@ export async function sendSystemEmail(args: {
   html?: string;
   /** Stable key so a retried send dedupes provider-side. */
   idempotencyKey?: string;
+  /**
+   * "firm" for mail that is the FIRM speaking to its own people — team invites,
+   * employee onboarding. Sends from the firm's mailbox in preference to the
+   * platform one. Defaults to "platform" (auth mail: resets, verification).
+   */
+  identity?: "platform" | "firm";
   /** In-memory files to attach. The SMTP adapter already supported these; this
    *  just stops system emails being the one path that could not use them. */
   attachments?: Array<{ filename: string; content: Buffer }>;
@@ -50,27 +61,51 @@ export async function sendSystemEmail(args: {
   let smtp: { host: string; port: number; secure: boolean; user: string; pass: string; accessToken?: string } | null = null;
   let from: string | undefined;
 
-  if (cfg.configured && cfg.host) {
-    smtp = { host: cfg.host, port: cfg.port, secure: cfg.secure, user: cfg.user ?? "", pass: cfg.pass ?? "" };
-    from = cfg.from;
-  } else {
-    // No platform mailbox — borrow the tenant's own, so a firm that has connected
-    // one still gets its resets and invites.
+  /** The firm's own mailbox, never a colleague's. Null when none is connected. */
+  const firmMailbox = async () => {
     try {
-      const s = await withSystem(async (tx) => resolveEmailSender(tx, args.tenantId));
-      if (s?.smtp?.host) {
-        smtp = {
+      const s = await withSystem(async (tx) =>
+        resolveEmailSender(tx, args.tenantId, null, { firmMailboxOnly: true })
+      );
+      if (!s?.smtp?.host) return null;
+      return {
+        smtp: {
           host: s.smtp.host,
           port: s.smtp.port,
           secure: s.smtp.secure,
           user: s.smtp.user ?? "",
           pass: s.smtp.pass ?? "",
           accessToken: s.smtp.accessToken,
-        };
-        from = s.fromEmail ? (s.fromName ? `${s.fromName} <${s.fromEmail}>` : s.fromEmail) : undefined;
-      }
+        },
+        from: s.fromEmail ? (s.fromName ? `${s.fromName} <${s.fromEmail}>` : s.fromEmail) : undefined,
+      };
     } catch {
-      /* resolveEmailSender throws when nothing is connected — handled below */
+      // Nothing connected — the caller's own fallback handles it.
+      return null;
+    }
+  };
+
+  // Firm-identity mail tries the firm's mailbox BEFORE the platform one.
+  if (args.identity === "firm") {
+    const f = await firmMailbox();
+    if (f) {
+      smtp = f.smtp;
+      from = f.from;
+    }
+  }
+
+  if (smtp) {
+    /* firm mailbox already resolved above */
+  } else if (cfg.configured && cfg.host) {
+    smtp = { host: cfg.host, port: cfg.port, secure: cfg.secure, user: cfg.user ?? "", pass: cfg.pass ?? "" };
+    from = cfg.from;
+  } else {
+    // No platform mailbox — borrow the tenant's own, so a firm that has connected
+    // one still gets its resets and invites.
+    const f = await firmMailbox();
+    if (f) {
+      smtp = f.smtp;
+      from = f.from;
     }
   }
 

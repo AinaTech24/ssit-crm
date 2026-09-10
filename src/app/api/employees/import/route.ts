@@ -134,6 +134,7 @@ export async function POST(req: NextRequest) {
       const inviteUrl = `${process.env.APP_URL ?? "http://localhost:3000"}/accept-invite?token=${p.token}`;
       try {
         await sendSystemEmail({
+          identity: "firm",
           tenantId: session.tenantId,
           to: p.email,
           subject: `You're invited to join ${firmName} on Equitywala`,

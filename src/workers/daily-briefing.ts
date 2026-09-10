@@ -168,7 +168,7 @@ async function briefTenant(tenantId: string, istDate: string): Promise<{ sent: n
         // Queue the email for after the tx commits (external call outside tx).
         if (user.email) {
           try {
-            const sender = await resolveEmailSender(tx as any, tenantId, String(user.id));
+            const sender = await resolveEmailSender(tx as any, tenantId, String(user.id), { allowFirmFallback: true });
             emails.push({
               tenantId,
               userId: String(user.id),

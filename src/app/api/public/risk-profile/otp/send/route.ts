@@ -163,7 +163,9 @@ export async function POST(req: NextRequest) {
       const tenant =
         (await tx.select().from(tenants).where(eq(tenants.id, tk.tenantId!)).limit(1))[0] ?? null;
       let sender;
-      sender = await resolveEmailSender(tx, tk.tenantId!, tk.createdBy ?? undefined);
+      // A public OTP is the FIRM verifying a stranger, not the RM writing to a
+      // client — so it may use the firm mailbox when the link creator has none.
+      sender = await resolveEmailSender(tx, tk.tenantId!, tk.createdBy ?? undefined, { allowFirmFallback: true });
       return { kind: "send" as const, code, dest, tenant: tenant as any, sender };
     });
 

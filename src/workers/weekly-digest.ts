@@ -219,7 +219,7 @@ async function digestTenant(tenantId: string, istDate: string): Promise<{ sent: 
 
         if (user.email) {
           try {
-            const sender = await resolveEmailSender(tx as any, tenantId, String(user.id));
+            const sender = await resolveEmailSender(tx as any, tenantId, String(user.id), { allowFirmFallback: true });
             emails.push({
               tenantId,
               userId: String(user.id),
