@@ -24,9 +24,10 @@ import { BackOfficeDashboard } from "@/components/dashboards/BackOfficeDashboard
 import { MarketingDashboard } from "@/components/dashboards/MarketingDashboard";
 import { ComplianceCockpit } from "@/components/dashboards/ComplianceCockpit";
 import { AnnouncementsStrip } from "@/components/announcements/AnnouncementsStrip";
-import { DashboardScopeFilter, type ScopeMember, type ScopeRole } from "@/components/dashboards/DashboardScopeFilter";
+import { DashboardScopeFilter, type ScopeMember, type ScopeUnit } from "@/components/dashboards/DashboardScopeFilter";
 import { BranchCockpit } from "@/components/dashboards/BranchCockpit";
-import { flattenRoleTree, findRoleNode, primaryRoleNode } from "@/lib/auth/role-tree";
+import { primaryRoleNode } from "@/lib/auth/role-tree";
+import { ROLE_LABELS } from "@/lib/auth/rbac";
 import { getDefaultBoard } from "@/lib/dashboards/service";
 import { DashboardView } from "@/components/dashboards/custom/DashboardView";
 import { DashboardPageSkeleton } from "@/components/dashboards/DashboardSkeletons";
@@ -54,8 +55,8 @@ export default async function DashboardPage({
   const dateFrom = (sp.date_from ?? "").slice(0, 10);
   const dateTo = (sp.date_to ?? "").slice(0, 10);
   const rmParam = (sp.rm ?? "").trim();
-  const branchParam = (sp.branch ?? "").trim();
-  const roleParam = (sp.role ?? "").trim();
+  // "b:<branchId>" or "d:<deskId>" — one param for both levels of the org.
+  const unitParam = (sp.unit ?? "").trim();
 
   // ── Custom default board ─────────────────────────────────────────────────
   // If the user has set one of their "My Dashboards" as default, render it here
@@ -102,29 +103,51 @@ export default async function DashboardPage({
     // the branch in scope, so the second dropdown is a team, not a directory.
     // Both queries are tenant-scoped by RLS.
     const scope = await withTenant(session.tenantId, async (tx) => {
-      const branchRes = await tx.execute(sql`
-        SELECT id, name FROM branches
-        WHERE tenant_id = ${session.tenantId}::uuid
-        ORDER BY name ASC
-      `);
-      const all = (branchRes.rows as { id: string; name: string }[]).map((bb) => ({
-        id: String(bb.id),
-        name: bb.name ?? "—",
+      // Branches are the registered offices (usually one). Desks are the teams
+      // the firm actually runs — Surat, Wealth, RA — and are what a firm admin
+      // means by "branch" day to day, so both levels go in one picker.
+      const [branchRes, deskRes] = await Promise.all([
+        tx.execute(sql`
+          SELECT id, name FROM branches
+          WHERE tenant_id = ${session.tenantId}::uuid
+          ORDER BY name ASC
+        `),
+        tx.execute(sql`
+          SELECT id, name, branch_id FROM desks
+          WHERE tenant_id = ${session.tenantId}::uuid
+          ORDER BY name ASC
+        `),
+      ]);
+      const allBranches = (branchRes.rows as { id: string; name: string }[]).map((b) => ({
+        id: String(b.id),
+        name: b.name ?? "—",
       }));
       // dashboard.view.owner is also held by branch_head. A branch head runs ONE
       // branch, so they get their own and nothing else — otherwise this picker
       // would hand them every other branch's book and roster.
       const branchScoped = !roles.includes("owner") && roles.includes("branch_head") && !!session.branchId;
-      const branches = branchScoped ? all.filter((bb) => bb.id === session.branchId) : all;
-      const branch = branchParam ? branches.find((b) => b.id === branchParam) : undefined;
+      const branches = branchScoped ? allBranches.filter((b) => b.id === session.branchId) : allBranches;
+      const branchIds = new Set(branches.map((b) => b.id));
+      const desks = (deskRes.rows as { id: string; name: string; branch_id: string }[])
+        .filter((d) => branchIds.has(String(d.branch_id)))
+        .map((d) => ({ id: String(d.id), name: d.name ?? "—", branchId: String(d.branch_id) }));
+
+      const units: ScopeUnit[] = [];
+      for (const b of branches) {
+        units.push({ value: `b:${b.id}`, label: b.name, depth: 0 });
+        for (const d of desks.filter((x) => x.branchId === b.id)) {
+          units.push({ value: `d:${d.id}`, label: d.name, depth: 1 });
+        }
+      }
+
+      const desk = unitParam.startsWith("d:") ? desks.find((d) => d.id === unitParam.slice(2)) : undefined;
+      const branch = desk
+        ? branches.find((b) => b.id === desk.branchId)
+        : unitParam.startsWith("b:")
+          ? branches.find((b) => b.id === unitParam.slice(2))
+          : undefined;
       if (!branch) {
-        return {
-          branches,
-          branch: undefined,
-          members: [] as ScopeMember[],
-          roleCounts: [] as ScopeRole[],
-          roleNode: undefined,
-        };
+        return { units, branch: undefined, desk: undefined, members: [] as ScopeMember[] };
       }
 
       const memberRes = await tx.execute(sql`
@@ -132,51 +155,36 @@ export default async function DashboardPage({
         WHERE tenant_id = ${session.tenantId}::uuid
           AND branch_id = ${branch.id}::uuid
           AND status = 'active'
+          ${desk ? sql`AND desk_id = ${desk.id}::uuid` : sql``}
         ORDER BY name ASC
       `);
-      const rows = memberRes.rows as { id: string; name: string | null; roles: string[] | null }[];
-
-      // Headcount per role node, so the Role dropdown can show "(3)" and grey
-      // out desks this branch does not staff.
-      const nodes = flattenRoleTree();
-      const roleCounts: ScopeRole[] = nodes.map((n) => ({
-        key: n.key,
-        label: n.label,
-        depth: n.depth,
-        count: rows.filter((u) => (u.roles ?? []).some((r) => n.roles.includes(r))).length,
+      // The role rides along in brackets on each name rather than being its own
+      // filter step — one dropdown fewer to walk through to reach a person.
+      const members: ScopeMember[] = (
+        memberRes.rows as { id: string; name: string | null; roles: string[] | null }[]
+      ).map((u) => ({
+        id: String(u.id),
+        name: u.name ?? "—",
+        // ROLE_TREE covers the operating desks, not every rbac role — an
+        // owner-only account is not on it, and must not read as "Team member".
+        roleLabel:
+          primaryRoleNode(u.roles)?.label ?? ROLE_LABELS[(u.roles ?? [])[0] ?? ""] ?? "Team member",
       }));
-
-      // A user is placed at their MOST SPECIFIC node (RA — Research, not RA), so
-      // picking the parent still catches them via its covering role list.
-      const roleNode = findRoleNode(roleParam);
-      const members: ScopeMember[] = rows
-        .filter((u) => !roleNode || (u.roles ?? []).some((r) => roleNode.roles.includes(r)))
-        .map((u) => {
-          const node = primaryRoleNode(u.roles);
-          return {
-            id: String(u.id),
-            name: u.name ?? "—",
-            roleKey: node?.key ?? "team_member",
-            roleLabel: node?.label ?? "Team member",
-          };
-        });
-      return { branches, branch, members, roleCounts, roleNode };
+      return { units, branch, desk, members };
     });
 
     const selected = rmParam ? scope.members.find((m) => m.id === rmParam) : undefined;
     memberBar = (
       <DashboardScopeFilter
-        branches={scope.branches}
-        roles={scope.roleCounts}
+        units={scope.units}
         members={scope.members}
-        selectedBranch={scope.branch ? branchParam : ""}
-        selectedRole={scope.roleNode ? roleParam : ""}
+        selectedUnit={scope.branch ? unitParam : ""}
         selectedMember={selected ? rmParam : ""}
         dateFrom={dateFrom}
         dateTo={dateTo}
       />
     );
-    // Whole firm → firm cockpit. Branch → branch cockpit. Person → their own.
+    // Whole firm → firm cockpit. Branch or desk → that team. Person → their own.
     dash = selected ? (
       <RmDashboard session={session} targetUserId={selected.id} targetName={selected.name} from={dateFrom} to={dateTo} />
     ) : scope.branch ? (
@@ -184,7 +192,8 @@ export default async function DashboardPage({
         session={session}
         branchId={scope.branch.id}
         branchName={scope.branch.name}
-        roleKey={scope.roleNode?.key}
+        deskId={scope.desk?.id}
+        deskName={scope.desk?.name}
       />
     ) : (
       <OwnerCockpit session={session} period={period} customStart={pstart} customFrom={pfrom} customTo={pto} />

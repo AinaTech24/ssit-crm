@@ -24,10 +24,18 @@ export const dynamic = "force-dynamic";
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd");
 
+/** One produced item. qty is capped so a typo cannot store 10^9 flyers. */
+const ItemSchema = z.object({
+  type: z.string().min(1).max(40),
+  label: z.string().max(80).nullish(),
+  qty: z.number().int().min(1).max(9999).default(1),
+});
+
 const Body = z.object({
   kind: z.enum(TRACKER_KINDS).default("marketing"),
   title: z.string().min(1).max(200),
   itemType: z.string().max(40).nullish(),
+  items: z.array(ItemSchema).max(20).nullish(),
   eventName: z.string().max(200).nullish(),
   topic: z.string().max(200).nullish(),
   createdFor: z.string().max(200).nullish(),
@@ -111,7 +119,11 @@ export async function POST(req: NextRequest) {
           tenantId: session.tenantId,
           kind: b.kind,
           title: b.title,
-          itemType: b.itemType ?? null,
+          // item_type mirrors the first item so pre-0212 readers keep working.
+          itemType: b.items?.[0]?.type ?? b.itemType ?? null,
+          items: b.items?.length
+            ? b.items.map((i) => ({ type: i.type, label: i.label ?? undefined, qty: i.qty }))
+            : null,
           eventName: b.eventName ?? null,
           topic: b.topic ?? null,
           createdFor: b.createdFor ?? null,

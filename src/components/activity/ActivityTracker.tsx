@@ -15,19 +15,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Paperclip, Check, RefreshCw, Trash2, ChevronRight } from "lucide-react";
-import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
 import { RmSelector } from "@/components/common/RmSelector";
 import { EntityAttachments } from "@/components/common/EntityAttachments";
 import { useToast } from "@/components/ui/Toast";
 import { readApiError, readThrownError } from "@/lib/api/client-error";
-import { TRACKER_ITEM_TYPES, TRACKER_ITEM_LABEL, type TrackerKind } from "@/db/schema/activity_entries";
+import {
+  TRACKER_ITEM_TYPES,
+  formatTrackerItems,
+  type TrackerItem,
+  type TrackerKind,
+} from "@/db/schema/activity_entries";
 
 type Row = {
   id: string;
   kind: string;
   title: string;
   itemType: string | null;
+  items: TrackerItem[] | null;
   eventName: string | null;
   topic: string | null;
   createdFor: string | null;
@@ -69,7 +74,10 @@ export function ActivityTracker({ kind }: { kind: TrackerKind }) {
   const blank = useMemo(
     () => ({
       title: "",
-      itemType: itemTypes[0]?.value ?? "",
+      // Nothing pre-ticked: the old dropdown defaulted to "Post", which quietly
+      // tagged every entry as a post unless the user noticed and changed it.
+      picked: {} as Record<string, { on: boolean; qty: string }>,
+      otherLabel: "",
       eventName: "",
       topic: "",
       createdFor: "",
@@ -81,6 +89,35 @@ export function ActivityTracker({ kind }: { kind: TrackerKind }) {
     [itemTypes]
   );
   const [form, setForm] = useState(blank);
+
+  /** Ticked rows, in catalogue order, as the API's item shape. */
+  function selectedItems(f: typeof blank): TrackerItem[] {
+    return itemTypes
+      .filter((t) => f.picked[t.value]?.on)
+      .map((t) => ({
+        type: t.value,
+        // "Other" carries the user's own name for the thing; everything else
+        // takes its label from the catalogue at render time.
+        label: t.value === "other" ? f.otherLabel.trim() || undefined : undefined,
+        qty: Math.max(1, Math.min(9999, Number(f.picked[t.value]?.qty || "1") || 1)),
+      }));
+  }
+
+  function toggleItem(value: string, on: boolean) {
+    setForm((s0) => ({
+      ...s0,
+      picked: { ...s0.picked, [value]: { on, qty: s0.picked[value]?.qty ?? "1" } },
+    }));
+  }
+
+  function setQty(value: string, qty: string) {
+    // Digits only — a spinner that accepts "e" or "-" is a bug waiting to be filed.
+    const clean = qty.replace(/[^0-9]/g, "").slice(0, 4);
+    setForm((s0) => ({
+      ...s0,
+      picked: { ...s0.picked, [value]: { on: s0.picked[value]?.on ?? true, qty: clean } },
+    }));
+  }
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -113,6 +150,15 @@ export function ActivityTracker({ kind }: { kind: TrackerKind }) {
       toast.error("Give the entry a title.");
       return;
     }
+    const items = selectedItems(form);
+    if (items.length === 0) {
+      toast.error(isResearch ? "Tick at least one output." : "Tick at least one item.");
+      return;
+    }
+    if (items.some((i) => i.type === "other" && !i.label)) {
+      toast.error("Name the item you ticked under Other.");
+      return;
+    }
     setBusy(true);
     try {
       const res = await fetch("/api/activity-entries", {
@@ -121,7 +167,7 @@ export function ActivityTracker({ kind }: { kind: TrackerKind }) {
         body: JSON.stringify({
           kind,
           title: form.title.trim(),
-          itemType: form.itemType || null,
+          items,
           eventName: form.eventName || null,
           topic: isResearch ? form.topic || null : null,
           createdFor: form.createdFor || null,
@@ -215,14 +261,58 @@ export function ActivityTracker({ kind }: { kind: TrackerKind }) {
                 className="input-base w-full"
               />
             </label>
-            <label className="block">
-              <div className="text-xs font-medium mb-1">{isResearch ? "Output" : "Item"}</div>
-              <SelectField value={form.itemType} onChange={(e) => setForm({ ...form, itemType: e.target.value })} className="w-full">
-                {itemTypes.map((t) => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </SelectField>
-            </label>
+            {/* One entry usually covers several artefacts — three posts AND two
+                flyers — so this is a multi-select with a count per line rather
+                than a dropdown that forces one row per thing. */}
+            <div className="block">
+              <div className="text-xs font-medium mb-1">
+                {isResearch ? "Outputs" : "Items"}
+                <span className="ml-1 text-[10px] text-muted-foreground font-normal">· tick what you produced, and how many</span>
+              </div>
+              <div className="rounded-md border divide-y">
+                {itemTypes.map((t) => {
+                  const st = form.picked[t.value];
+                  const on = !!st?.on;
+                  return (
+                    <div key={t.value} className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          id={`item-${kind}-${t.value}`}
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) => toggleItem(t.value, e.target.checked)}
+                          className="size-4 accent-brand-cyan-deep"
+                        />
+                        <label htmlFor={`item-${kind}-${t.value}`} className="text-sm flex-1 cursor-pointer select-none">
+                          {t.label}
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={st?.qty ?? ""}
+                          onChange={(e) => setQty(t.value, e.target.value)}
+                          onFocus={() => { if (!on) toggleItem(t.value, true); }}
+                          disabled={!on}
+                          placeholder="1"
+                          aria-label={`How many ${t.label}`}
+                          className="input-base w-16 text-center py-1 disabled:opacity-40"
+                        />
+                      </div>
+                      {/* Naming the thing is what makes "Other" countable later. */}
+                      {t.value === "other" && on && (
+                        <input
+                          value={form.otherLabel}
+                          onChange={(e) => setForm({ ...form, otherLabel: e.target.value })}
+                          placeholder="Name the item — e.g. Standee, Hoarding"
+                          aria-label="Name of the other item"
+                          className="input-base w-full mt-2 py-1"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             {isResearch ? (
               <label className="block">
                 <div className="text-xs font-medium mb-1">Topic</div>
@@ -310,7 +400,7 @@ export function ActivityTracker({ kind }: { kind: TrackerKind }) {
                           <div className="md:col-span-1 min-w-0">
                             <div className="font-medium truncate">{r.title}</div>
                             <div className="text-[11px] text-muted-foreground">
-                              {TRACKER_ITEM_LABEL[r.itemType ?? ""] ?? r.itemType ?? "—"}
+                              {formatTrackerItems(r.items, r.itemType)}
                               {r.attachments > 0 && (
                                 <span className="ml-1 inline-flex items-center gap-0.5">
                                   <Paperclip className="size-3" />{r.attachments}

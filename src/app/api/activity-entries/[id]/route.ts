@@ -20,9 +20,16 @@ export const dynamic = "force-dynamic";
 
 const DateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd");
 
+const ItemSchema = z.object({
+  type: z.string().min(1).max(40),
+  label: z.string().max(80).nullish(),
+  qty: z.number().int().min(1).max(9999).default(1),
+});
+
 const Patch = z.object({
   title: z.string().min(1).max(200).optional(),
   itemType: z.string().max(40).nullish(),
+  items: z.array(ItemSchema).max(20).nullish(),
   eventName: z.string().max(200).nullish(),
   topic: z.string().max(200).nullish(),
   createdFor: z.string().max(200).nullish(),
@@ -73,6 +80,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const patch: Partial<typeof activityEntries.$inferInsert> = { updatedAt: new Date() };
       if (b.title !== undefined) patch.title = b.title;
       if (b.itemType !== undefined) patch.itemType = b.itemType ?? null;
+      if (b.items !== undefined) {
+        patch.items = b.items?.length
+          ? b.items.map((i) => ({ type: i.type, label: i.label ?? undefined, qty: i.qty }))
+          : null;
+        // Keep the legacy mirror in step with the real list.
+        if (b.items?.length) patch.itemType = b.items[0].type;
+      }
       if (b.eventName !== undefined) patch.eventName = b.eventName ?? null;
       if (b.topic !== undefined) patch.topic = b.topic ?? null;
       if (b.createdFor !== undefined) patch.createdFor = b.createdFor ?? null;

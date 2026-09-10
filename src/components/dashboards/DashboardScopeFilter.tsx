@@ -1,87 +1,76 @@
 "use client";
 
 /**
- * Firm-admin dashboard scope picker: branch, then role, then a person.
+ * Firm-admin dashboard scope picker: a team, then a person in it.
  *
- * The old control was a single flat list of every active user in the firm. At
- * one branch that is fine; at five it is a scroll through strangers, and it
- * answers no structural question — you could see one RM's book but never "what
- * does the Andheri branch look like, who staffs its RA desk, and how is that
- * desk doing".
+ * "Branch" in the schema is the legal/registered office — most firms have
+ * exactly one, called Head Office. The units people actually run and report on
+ * are DESKS (settings → Desks): Surat, Vadodara, Wealth, RA, RIA. A picker that
+ * listed only the branches table therefore showed one entry and looked broken.
  *
- * So the scope walks the org chart:
- *   Whole firm                     → firm-wide cockpit
- *   Branch                         → that branch's team composition + its numbers
- *   Branch → Role                  → the same branch view, narrowed to that desk
- *   Branch → Role → Person         → that person's own dashboard, read-only
+ * So the first dropdown lists both levels: each branch, then its desks indented
+ * beneath it. A firm with one branch simply sees its desks; a firm with several
+ * gets the branch headings for free. Values are prefixed (`b:` / `d:`) so the
+ * two id spaces can share one control without ever being confused.
  *
- * Each dropdown only appears once the one before it is answered, so the bar is
- * one control until you actually start drilling. Roles come from ROLE_TREE, so
- * a parent like RA offers its Research and Sales desks indented beneath it and
- * selecting the parent covers both.
+ * The second dropdown is the people in that scope, each shown as
+ * "NAME (Role)" — the role travels with the person instead of being a separate
+ * filter step to walk through.
  */
 
 import { useRouter } from "next/navigation";
-import { Building2, Users, IdCard } from "lucide-react";
+import { Building2, Users } from "lucide-react";
 import { Select, type SelectOption } from "@/components/ui/Select";
 
-export type ScopeMember = { id: string; name: string; roleKey: string; roleLabel: string };
-export type ScopeRole = { key: string; label: string; depth: number; count: number };
+export type ScopeMember = { id: string; name: string; roleLabel: string };
+export type ScopeUnit = {
+  /** "b:<branchId>" or "d:<deskId>". */
+  value: string;
+  label: string;
+  /** 0 = branch, 1 = a desk inside it. */
+  depth: number;
+};
 
 export function DashboardScopeFilter({
-  branches,
-  roles,
+  units,
   members,
-  selectedBranch,
-  selectedRole,
+  selectedUnit,
   selectedMember,
   dateFrom,
   dateTo,
 }: {
-  branches: { id: string; name: string }[];
-  /** Role nodes with headcount for the selected branch. Empty until a branch is picked. */
-  roles: ScopeRole[];
-  /** Members matching branch + role, pre-sorted. Empty until a branch is picked. */
+  units: ScopeUnit[];
+  /** People in the selected scope. Empty until a scope is picked. */
   members: ScopeMember[];
-  selectedBranch?: string;
-  selectedRole?: string;
+  selectedUnit?: string;
   selectedMember?: string;
   dateFrom?: string;
   dateTo?: string;
 }) {
   const router = useRouter();
 
-  function go(branch: string, role: string, member: string) {
+  function go(unit: string, member: string) {
     const params = new URLSearchParams();
     if (dateFrom) params.set("date_from", dateFrom);
     if (dateTo) params.set("date_to", dateTo);
-    if (branch) params.set("branch", branch);
-    if (role) params.set("role", role);
+    if (unit) params.set("unit", unit);
     if (member) params.set("rm", member);
     const qs = params.toString();
     router.push(`/dashboard${qs ? `?${qs}` : ""}`);
   }
 
-  const branchOptions: SelectOption[] = [
+  const unitOptions: SelectOption[] = [
     { value: "", label: "Whole firm" },
-    ...branches.map((b) => ({ value: b.id, label: b.name })),
-  ];
-
-  // Sub-roles are indented under their parent. A role with nobody in it at this
-  // branch is still listed, disabled — "this branch has no RIA" is an answer,
-  // and silently dropping the row makes it look like the role does not exist.
-  const roleOptions: SelectOption[] = [
-    { value: "", label: "All roles" },
-    ...roles.map((r) => ({
-      value: r.key,
-      label: `${r.depth > 0 ? "    " : ""}${r.label} (${r.count})`,
-      disabled: r.count === 0,
+    ...units.map((u) => ({
+      // Indent marks a desk as belonging to the branch above it.
+      value: u.value,
+      label: `${u.depth > 0 ? "    " : ""}${u.label}`,
     })),
   ];
 
   const memberOptions: SelectOption[] = [
-    { value: "", label: "Everyone in this scope" },
-    ...members.map((m) => ({ value: m.id, label: m.name })),
+    { value: "", label: "Everyone in this team" },
+    ...members.map((m) => ({ value: m.id, label: `${m.name} (${m.roleLabel})` })),
   ];
 
   return (
@@ -90,44 +79,28 @@ export function DashboardScopeFilter({
         <Building2 className="size-3.5" /> Branch
       </span>
       <Select
-        value={selectedBranch ?? ""}
-        onChange={(v) => go(v, "", "")}
-        options={branchOptions}
+        value={selectedUnit ?? ""}
+        onChange={(v) => go(v, "")}
+        options={unitOptions}
         size="sm"
-        className="w-52"
-        searchable={branches.length > 8}
-        ariaLabel="View dashboard for a branch"
+        className="w-60"
+        searchable={units.length > 8}
+        ariaLabel="View dashboard for a branch or desk"
       />
 
-      {selectedBranch && (
-        <>
-          <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-1.5 ml-1">
-            <IdCard className="size-3.5" /> Role
-          </span>
-          <Select
-            value={selectedRole ?? ""}
-            onChange={(v) => go(selectedBranch, v, "")}
-            options={roleOptions}
-            size="sm"
-            className="w-56"
-            ariaLabel="View dashboard for a role"
-          />
-        </>
-      )}
-
-      {selectedBranch && selectedRole && (
+      {selectedUnit && (
         <>
           <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-1.5 ml-1">
             <Users className="size-3.5" /> Member
           </span>
           <Select
             value={selectedMember ?? ""}
-            onChange={(v) => go(selectedBranch, selectedRole, v)}
+            onChange={(v) => go(selectedUnit, v)}
             options={memberOptions}
             size="sm"
-            className="w-60"
+            className="w-72"
             searchable={members.length > 8}
-            placeholder={members.length ? "Everyone in this scope" : "Nobody in this role"}
+            placeholder={members.length ? "Everyone in this team" : "Nobody in this team"}
             disabled={members.length === 0}
             ariaLabel="View dashboard for a team member"
           />

@@ -17,7 +17,7 @@ import { sql } from "drizzle-orm";
 import { Building2, Users, Wallet, Repeat, TrendingUp, Target, ListChecks, LifeBuoy } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { formatINR } from "@/lib/utils";
-import { ROLE_TREE, findRoleNode, primaryRoleNode } from "@/lib/auth/role-tree";
+import { ROLE_TREE, primaryRoleNode } from "@/lib/auth/role-tree";
 import type { SessionUser } from "@/lib/auth/session";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
 
@@ -46,16 +46,18 @@ export async function BranchCockpit({
   session,
   branchId,
   branchName,
-  roleKey,
+  deskId,
+  deskName,
 }: {
   session: SessionUser;
   branchId: string;
   branchName: string;
-  /** Optional ROLE_TREE key. Narrows the roster (never the branch's book — the
-   *  branch carries its clients regardless of which desk you are looking at). */
-  roleKey?: string;
+  /** When set, the roster narrows to this desk. The BOOK stays branch-level:
+   *  clients belong to a branch, not to a desk, so scoping it by desk would
+   *  report zero rather than the truth. */
+  deskId?: string;
+  deskName?: string;
 }) {
-  const roleNode = findRoleNode(roleKey);
   const data = await withTenant(session.tenantId, async (tx) => {
     const [headRes, totalsRes, membersRes] = await Promise.all([
       // unnest() so a user holding several roles is counted under each — an
@@ -66,6 +68,7 @@ export async function BranchCockpit({
          WHERE u.tenant_id = ${session.tenantId}::uuid
            AND u.branch_id = ${branchId}::uuid
            AND u.status = 'active'
+           ${deskId ? sql`AND u.desk_id = ${deskId}::uuid` : sql``}
          GROUP BY r
       `),
       tx.execute(sql`
@@ -119,7 +122,7 @@ export async function BranchCockpit({
          WHERE u.tenant_id = ${session.tenantId}::uuid
            AND u.branch_id = ${branchId}::uuid
            AND u.status = 'active'
-           ${roleNode ? sql`AND u.roles && ${roleNode.roles}::text[]` : sql``}
+           ${deskId ? sql`AND u.desk_id = ${deskId}::uuid` : sql``}
          ORDER BY u.name ASC
       `),
     ]);
@@ -150,13 +153,13 @@ export async function BranchCockpit({
     <div className="space-y-6 max-w-7xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Building2 className="size-5" /> {branchName}
-          {roleNode && <span className="text-muted-foreground font-normal">· {roleNode.label}</span>}
+          <Building2 className="size-5" /> {deskName ?? branchName}
+          {deskName && <span className="text-muted-foreground font-normal text-base">· {branchName}</span>}
         </h1>
         <p className="text-muted-foreground text-sm">
-          {roleNode
-            ? `The ${roleNode.label} desk at this branch. Pick a name from the Member dropdown to open their own dashboard.`
-            : "Team and book for this branch. Narrow by role, or pick someone to open their own dashboard."}
+          {deskName
+            ? "Team for this desk, and the book of the branch it sits in. Pick a name to open their own dashboard."
+            : "Team and book for this branch. Pick a name from the Member dropdown to open their own dashboard."}
         </p>
       </div>
 
@@ -218,8 +221,8 @@ export async function BranchCockpit({
         {data.members.length === 0 ? (
           <DashboardEmptyState
             compact
-            title={roleNode ? `No ${roleNode.label} at this branch` : "No active members in this branch"}
-            hint="Assign team members to this branch from Settings → Team."
+            title={deskName ? `Nobody assigned to ${deskName}` : "No active members in this branch"}
+            hint={deskName ? "Assign users to this desk from Settings → Desks." : "Assign team members to this branch from Settings → Team."}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -237,7 +240,7 @@ export async function BranchCockpit({
                   <tr key={m.id} className="hover:bg-accent/30">
                     <td className="px-4 py-2">
                       <Link
-                        href={`/dashboard?branch=${branchId}${roleKey ? `&role=${roleKey}` : ""}&rm=${m.id}`}
+                        href={`/dashboard?unit=${deskId ? `d:${deskId}` : `b:${branchId}`}&rm=${m.id}`}
                         className="font-medium hover:underline"
                       >
                         {m.name ?? "—"}

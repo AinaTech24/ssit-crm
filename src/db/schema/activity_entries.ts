@@ -11,7 +11,7 @@
  * reviewed on, and what a task list alone cannot tell you.
  */
 
-import { bigint, date, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bigint, date, index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { id, tenantId, timestamps } from "./_shared";
 import { tenants } from "./tenants";
 import { users } from "./users";
@@ -40,6 +40,33 @@ export const TRACKER_ITEM_TYPES: Record<TrackerKind, { value: string; label: str
 
 export const TRACKER_STATUSES = ["in_progress", "completed", "cancelled"] as const;
 
+/**
+ * One line of "what was produced": a catalogue type, how many, and — for
+ * "other" — what the user called it. See migration 0212.
+ */
+export type TrackerItem = {
+  type: string;
+  /** Only set when type is "other"; the user's own name for the thing. */
+  label?: string;
+  qty: number;
+};
+
+/** "Post ×3 · Flyer ×2 · Standee ×1" — one label for tables and rows. */
+export function formatTrackerItems(
+  items: TrackerItem[] | null | undefined,
+  fallbackType?: string | null
+): string {
+  if (!items || items.length === 0) {
+    return fallbackType ? (TRACKER_ITEM_LABEL[fallbackType] ?? fallbackType) : "—";
+  }
+  return items
+    .map((i) => {
+      const name = i.type === "other" ? (i.label?.trim() || "Other") : (TRACKER_ITEM_LABEL[i.type] ?? i.type);
+      return i.qty > 1 ? `${name} ×${i.qty}` : name;
+    })
+    .join(" · ");
+}
+
 export const TRACKER_ITEM_LABEL: Record<string, string> = Object.fromEntries(
   Object.values(TRACKER_ITEM_TYPES).flat().map((t) => [t.value, t.label])
 );
@@ -57,7 +84,10 @@ export const activityEntries = pgTable(
     /** Free text: a client, a branch, a campaign, or none of those. */
     createdFor: text("created_for"),
     title: text("title").notNull(),
+    /** Kept for rows written before 0212, and mirrored from items[0] on new ones. */
     itemType: text("item_type"),
+    /** What was produced, with counts. See migration 0212. */
+    items: jsonb("items").$type<TrackerItem[]>(),
     eventName: text("event_name"),
     /** Research only — the subject studied. */
     topic: text("topic"),
