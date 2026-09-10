@@ -65,7 +65,19 @@ export async function getCalendarItems(
     : sql` AND (assignee_id = ${scope.userId}::uuid OR created_by_id = ${scope.userId}::uuid)`;
   const leadScope = scope.leadsAll ? sql`` : sql` AND owner_id = ${scope.userId}::uuid`;
   const invScope = scope.investorsAll ? sql`` : sql` AND rm_id = ${scope.userId}::uuid`;
-  const meetingScope = scope.investorsAll ? sql`` : sql` AND rm.rm_id = ${scope.userId}::uuid`;
+  // rm_id is DEPRECATED on review_meetings — created_by_id superseded it, and
+  // 0203 added collaborator_ids. Matching rm_id alone meant every meeting booked
+  // since that change (rm_id NULL) was filtered out of the calendar for anyone
+  // without firm-wide client access: the meeting existed, the calendar was empty.
+  const meetingScope = scope.investorsAll
+    ? sql``
+    : sql` AND (
+        rm.created_by_id = ${scope.userId}::uuid
+        OR rm.rm_id = ${scope.userId}::uuid
+        OR jsonb_exists(COALESCE(rm.collaborator_ids, '[]'::jsonb), ${scope.userId})
+        OR i.rm_id = ${scope.userId}::uuid
+        OR l.owner_id = ${scope.userId}::uuid
+      )`;
   const sipScope = scope.investorsAll ? sql`` : sql` AND i.rm_id = ${scope.userId}::uuid`;
   const nismScope = scope.investorsAll ? sql`` : sql` AND id = ${scope.userId}::uuid`;
   const kycScope = scope.investorsAll ? sql`` : sql` AND rm_id = ${scope.userId}::uuid`;

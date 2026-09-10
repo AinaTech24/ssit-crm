@@ -12,7 +12,8 @@
  *     4. back_office (ops)— operations: onboarding, transactions, KYC
  *     5. marketing        — campaigns + content; no investment data
  *     6. compliance       — DDQ + approvals + consents + SOPs
- *     7. team_member      — limited: assigned tasks only
+ *     7. assistant        — limited: assigned tasks only (replaced team_member)
+ *     8. gifting_hr       — the client gifting programme, plus HR self-service
  *
  * `branch_head` is a legacy/extra MFD role used to gate aggregated team views.
  * `investor` is reserved for the future client app and has no dashboard caps.
@@ -34,7 +35,10 @@ export type Role =
   | "marketing"
   | "compliance"
   | "branch_head"
-  | "team_member"
+  // Support desks. An assistant works an RM's queue; gifting/HR runs the client
+  // engagement programme. Neither owns a book.
+  | "assistant"
+  | "gifting_hr"
   // Distribution + advisory verticals. Each works its OWN book — none of them
   // gets a .all scope by default, because "sees every client in the firm" is a
   // decision an owner makes per person, not something a job title confers.
@@ -55,7 +59,8 @@ export const ROLE_LABELS: Record<string, string> = {
   marketing: "Marketing Executive",
   compliance: "Compliance / DDQ Executive",
   branch_head: "Branch Head",
-  team_member: "Limited Team Member",
+  assistant: "Assistant",
+  gifting_hr: "Gifting / HR",
   sub_broker: "Sub Broker",
   ra_research: "RA — Research",
   ra_sales: "RA — Sales",
@@ -184,10 +189,10 @@ export type Capability =
  */
 const MATRIX: Record<Capability, Role[]> = {
   // Investor data — back_office sees all, RM sees assigned, marketing blocked.
-  "investor.view.all": ["compliance", "back_office", "ops"],
+  "investor.view.all": ["compliance", "back_office", "ops", "gifting_hr"],
   "investor.view.assigned": ["rm", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
   "investor.edit.all": ["back_office", "ops"],
-  "investor.edit.assigned": ["rm", "ria"],
+  "investor.edit.assigned": ["rm", "ria", "gifting_hr"],
   "investor.bulk_export": ["compliance"],
   // Permanent hard-delete of a client + its owned data subgraph (cascades).
   // Deliberately NARROWER than investor.edit.all: editing a phone number must
@@ -228,19 +233,20 @@ const MATRIX: Record<Capability, Role[]> = {
   "review_meeting.manage.all": ["back_office", "ops", "branch_head"],
   "review_meeting.manage.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
 
-  // Tasks — every working role plus limited team_member
+  // Tasks — every working role, including the support desks that only ever
+  // work what is handed to them.
   "task.view.all": ["compliance", "back_office", "ops", "marketing", "branch_head"],
-  "task.view.assigned": ["rm", "team_member", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
+  "task.view.assigned": ["rm", "assistant", "gifting_hr", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
   "task.edit.all": ["back_office", "ops", "marketing"],
-  "task.edit.assigned": ["rm", "team_member", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
+  "task.edit.assigned": ["rm", "assistant", "gifting_hr", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
 
   // Documents
   "document.view": ["compliance", "back_office", "ops", "rm", "branch_head", "marketing", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
   // Induction (team training). Everyone can see their OWN track; managing
   // tracks/questions sits with compliance + branch heads (owner bypasses).
-  "induction.view": ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "team_member", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
+  "induction.view": ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "assistant", "gifting_hr", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
   "induction.manage": ["compliance", "branch_head"],
-  "document.upload": ["back_office", "ops", "rm", "compliance", "team_member", "branch_head"],
+  "document.upload": ["back_office", "ops", "rm", "compliance", "assistant", "branch_head"],
   "document.delete": ["compliance"],
 
   // Workflows — ops/compliance draft, owner + compliance publish (publishing
@@ -361,7 +367,8 @@ export const ASSIGNABLE_ROLES: Role[] = [
   "marketing",
   "compliance",
   "branch_head",
-  "team_member",
+  "assistant",
+  "gifting_hr",
   "sub_broker",
   "ra_research",
   "ra_sales",
@@ -494,7 +501,7 @@ export function requirePlatform(userRoles: string[] | undefined, cap: PlatformCa
 export function primaryRoleLabel(roles: string[]): string {
   if (roles.includes("platform_admin")) return ROLE_LABELS.platform_admin;
   if (roles.includes("platform_support")) return ROLE_LABELS.platform_support;
-  for (const r of ["owner", "compliance", "marketing", "back_office", "ops", "rm", "branch_head", "team_member"]) {
+  for (const r of ["owner", "compliance", "marketing", "back_office", "ops", "rm", "branch_head", "assistant", "gifting_hr"]) {
     if (roles.includes(r)) return ROLE_LABELS[r] ?? r;
   }
   return roles[0] ?? "User";
@@ -512,6 +519,6 @@ export function defaultHomeFor(roles: string[]): string {
   // — that's the work-queue view they actually use day to day.
   if (roles.includes("back_office") || roles.includes("ops")) return "/dashboard/tasks";
   if (roles.includes("rm") || roles.includes("branch_head")) return "/dashboard";
-  if (roles.includes("team_member")) return "/dashboard/tasks";
+  if (roles.includes("assistant")) return "/dashboard/tasks";
   return "/dashboard/tasks";
 }

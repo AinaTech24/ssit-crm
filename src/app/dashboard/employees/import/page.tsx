@@ -7,7 +7,7 @@ import { ChevronLeft, Upload, Loader2, CheckCircle2, AlertTriangle } from "lucid
 type ParsedRow = { name: string; email: string; roles: string[] };
 type RowResult = { email: string; status: "invited" | "skipped" | "error"; reason?: string };
 
-const VALID_ROLES = new Set(["owner", "compliance", "branch_head", "rm", "back_office", "ops", "marketing", "team_member"]);
+const VALID_ROLES = new Set(["owner", "compliance", "branch_head", "rm", "back_office", "ops", "marketing", "assistant", "gifting_hr", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"]);
 
 /** Parse "name,email,role" lines (header row auto-skipped). */
 function parseCsv(text: string): { rows: ParsedRow[]; errors: string[] } {
@@ -77,7 +77,7 @@ export default function ImportEmployeesPage() {
       <p className="text-sm text-muted-foreground">
         Paste one employee per line as <code className="text-xs bg-secondary px-1 rounded">name, email, role</code>. Role defaults to RM; use
         multiple roles with <code className="text-xs bg-secondary px-1 rounded">|</code> (e.g. <code className="text-xs bg-secondary px-1 rounded">rm|compliance</code>).
-        Each gets a 7-day invite email. Valid roles: owner, branch_head, rm, ops, back_office, compliance, marketing, team_member.
+        Each gets a 7-day invite email. Valid roles: owner, branch_head, rm, ops, back_office, compliance, marketing, assistant, gifting_hr, sub_broker, ra_research, ra_sales, ria, insurance.
       </p>
 
       {!results && (

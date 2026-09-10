@@ -21,7 +21,8 @@ const ROLES: { key: string; label: string; hint?: string }[] = [
   { key: "ra_sales", label: "RA — Sales" },
   { key: "ria", label: "RIA" },
   { key: "insurance", label: "Insurance" },
-  { key: "team_member", label: "Limited Team Member" },
+  { key: "assistant", label: "Assistant" },
+  { key: "gifting_hr", label: "Gifting / HR" },
 ];
 
 export default function InviteEmployeePage() {

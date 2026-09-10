@@ -243,7 +243,7 @@ async function seedDemoTenant() {
       { id: opsId, email: "ops@demo.in", name: "Sneha Mehta (Ops)", roles: ["back_office", "ops"] },
       { id: mktId, email: "marketing@demo.in", name: "Aarav Patel (Marketing)", roles: ["marketing"] },
       { id: compId, email: "compliance@demo.in", name: "Meera Joshi (Compliance)", roles: ["compliance"] },
-      { id: teamId, email: "team@demo.in", name: "Ravi Khanna (Team Member)", roles: ["team_member"] },
+      { id: teamId, email: "team@demo.in", name: "Ravi Khanna (Assistant)", roles: ["assistant"] },
     ];
     const pwHash = await bcrypt.hash("demo12345", 12);
     for (const u of users) {

@@ -40,13 +40,41 @@ export function NotificationBell() {
     }
   }, []);
 
-  // Background poll. 90s is fine for the badge, but it means the panel could
-  // show data up to 90s stale, so opening it refetches (below) rather than
-  // rendering whatever the last tick happened to fetch.
+  // Live feed. The server holds the connection open and writes only when this
+  // user's unread count or newest notification actually changes, so a task
+  // assigned to you lands in seconds instead of waiting out a poll.
+  //
+  // The 90s poll stays as a fallback, at a longer interval: EventSource is
+  // unavailable in a few embedded webviews, and a corporate proxy can break
+  // long-lived responses. Losing the stream should make the bell slow, not dead.
   useEffect(() => {
     void load();
-    const i = setInterval(() => void load(), 90_000);
-    return () => clearInterval(i);
+
+    let es: EventSource | null = null;
+    let live = false;
+    try {
+      es = new EventSource("/api/notifications/stream");
+      es.addEventListener("notifications", () => {
+        live = true;
+        void load();
+      });
+      es.onerror = () => {
+        // EventSource retries on its own; the poll below covers the gap.
+        live = false;
+      };
+    } catch {
+      es = null;
+    }
+
+    const i = setInterval(() => {
+      // Skip the poll while the stream is healthy — it would only duplicate work.
+      if (!live) void load();
+    }, 90_000);
+
+    return () => {
+      es?.close();
+      clearInterval(i);
+    };
   }, [load]);
 
   // Refetch on open — without this, doing something in the app and immediately

@@ -171,6 +171,28 @@ export const ROLE_DEFAULT_NAV: Record<string, string[]> = {
   // The trailing four are employee self-service — every staff member needs to
   // see their own calendar, mark attendance, apply for leave and read notices,
   // whatever desk they sit at.
+  // An assistant works what is handed to them and nothing else — no clients,
+  // no leads, no pipeline. Attendance/leave/announcements stay because every
+  // employee needs their own HR self-service whatever desk they sit at.
+  assistant: [
+    "/dashboard/tasks",
+    "/dashboard/calendar",
+    "/dashboard/attendance",
+    "/dashboard/leave-applications",
+    "/dashboard/announcements",
+  ],
+  // Gifting/HR runs the client engagement programme, so it gets Engagement and
+  // the client list it picks recipients from — but none of the money: no
+  // portfolio, business, transactions or reports.
+  gifting_hr: [
+    "/dashboard/engagement",
+    "/dashboard/investors",
+    "/dashboard/tasks",
+    "/dashboard/calendar",
+    "/dashboard/attendance",
+    "/dashboard/leave-applications",
+    "/dashboard/announcements",
+  ],
   back_office: [
     "/dashboard/investors",
     "/dashboard/tasks",

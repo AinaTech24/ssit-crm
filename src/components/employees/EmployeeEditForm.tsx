@@ -52,7 +52,8 @@ const ROLES = [
   { key: "back_office", label: "Back Office" },
   { key: "marketing", label: "Marketing" },
   { key: "compliance", label: "Compliance / DDQ" },
-  { key: "team_member", label: "Limited Team Member" },
+  { key: "assistant", label: "Assistant" },
+  { key: "gifting_hr", label: "Gifting / HR" },
 ];
 
 const STATUSES = [

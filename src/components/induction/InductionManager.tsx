@@ -13,7 +13,7 @@ type Track = any;
 type Lesson = any;
 type Question = any;
 
-const ROLES = ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "team_member"];
+const ROLES = ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "assistant", "gifting_hr"];
 
 export function InductionManager({ moduleOptions }: { moduleOptions: { href: string; label: string; group: string }[] }) {
   const toast = useToast();

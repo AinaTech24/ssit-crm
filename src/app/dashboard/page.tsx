@@ -5,7 +5,7 @@
  * sees a compliance-flavored summary.
  *
  * Role priority order (a user can hold many roles):
- *   owner > compliance > marketing > back_office/ops > rm/branch_head > team_member
+ *   owner > compliance > marketing > back_office/ops > rm/branch_head > assistant
  */
 
 import Link from "next/link";
@@ -73,6 +73,10 @@ export default async function DashboardPage({
         : [];
       return (
         <>
+          {/* The standard cockpit gets this further down, but a custom default
+              board returns early — so a user who set one had a dashboard that
+              never self-updated until they reloaded the page. */}
+          <AutoRefresh intervalMs={30000} />
           <AnnouncementsStrip session={session} />
           <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
