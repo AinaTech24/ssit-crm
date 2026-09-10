@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { recordOwnerUserId } from "@/lib/comms/record-owner";
 import { dispatch } from "@/lib/comms/pipeline";
 import { resolveExpression, resolveRecord } from "../context";
 import type { ActionHandler } from "./index";
@@ -18,18 +19,15 @@ export const sendEmailHandler: ActionHandler<any> = {
     }
     if (!recipient) throw new Error("send_email: recipient unresolved");
 
-    // Who the mail comes from, most specific first:
-    //   "record_owner" → the client's own RM
-    //   otherwise      → whoever BUILT this rule. A workflow is that person's
-    //                    standing instruction, so it goes out over their name
-    //                    rather than an anonymous firm address.
-    // Either way the send may fall back to the firm mailbox (below) — an
-    // unattended rule must not die because someone never connected a mailbox.
+    // Who the mail comes from, most specific first: the record's own RM,
+    // then whoever built the workflow, then the firm. The owner is the default
+    // — the message is about their client or their lead — and only an explicit
+    // "organization" choice sends as the firm.
     let actorUserId: string | undefined =
-      cfg.fromAddress === "record_owner" && ctx.subjectType === "investor"
-        ? (ctx.subject?.rm_id ?? ctx.subject?.rmId ?? undefined)
-        : undefined;
-    if (!actorUserId) {
+      cfg.fromAddress === "organization"
+        ? undefined
+        : recordOwnerUserId(ctx.subjectType, ctx.subject as Record<string, unknown>);
+    if (!actorUserId && cfg.fromAddress !== "organization") {
       const owner = await tx.execute(
         sql`SELECT created_by FROM workflows
              WHERE id = ${ctx.workflowId}::uuid AND tenant_id = ${ctx.tenantId}::uuid

@@ -35,6 +35,8 @@ import { v4 as uuid } from "uuid";
 import { autoAdvance } from "@/lib/blueprints/auto-advance";
 import { renderTemplateText } from "@/lib/comms/tokens";
 
+import { recordOwnerUserId } from "@/lib/comms/record-owner";
+
 export interface ActionContext {
   tenantId: string;
   subjectType: string;
@@ -351,14 +353,18 @@ async function runSendEmail(config: Record<string, unknown>, ctx: ActionContext)
     if (ai.kind === "skip") return { type: "send_email", status: "skipped", detail: ai.reason };
     const aiVars = ai.kind === "ok" ? { minutes: ai.minutes } : {};
     // Who it comes from, most specific first:
-    //   "record_owner" → the client's own RM
-    //   otherwise      → whoever built this rule
-    // allowFirmFallback below keeps an unattended rule delivering as the firm
-    // when that person has no mailbox connected, rather than failing the run.
+    //   the record's owner — the RM whose lead or client this is
+    //   then the rule's author
+    //   then the firm (allowFirmFallback below)
+    //
+    // The owner is the DEFAULT, not an opt-in: a lead Nimisha created should
+    // write to that lead as Nimisha. Only an explicit "organization" choice
+    // sends as the firm. allowFirmFallback keeps an unattended rule delivering
+    // when the owner has no mailbox connected, rather than failing the run.
     const actorUserId =
-      (config.fromAddress === "record_owner" && ctx.subjectType === "investor"
-        ? ((ctx.record as { rm_id?: string | null })?.rm_id ?? undefined)
-        : undefined) ?? ctx.ruleCreatedBy ?? undefined;
+      config.fromAddress === "organization"
+        ? undefined
+        : (recordOwnerUserId(ctx.subjectType, ctx.record) ?? ctx.ruleCreatedBy ?? undefined);
     const res = await dispatch(ctx.tx, {
       tenantId: ctx.tenantId,
       channel: "email",
