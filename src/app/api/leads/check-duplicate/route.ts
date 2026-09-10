@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
                phone_normalized, email_normalized, created_at
         FROM leads
         WHERE (${where})
+          AND coalesce(lost_reason, '') <> '__deleted__'
         ORDER BY created_at DESC
         LIMIT 5
       `);

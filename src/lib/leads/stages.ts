@@ -39,6 +39,8 @@ const LABEL_OVERRIDES: Record<string, string> = {
   mandate_rejected: "Mandate Rejected",
   add_in_review_sheet: "Active Client",
   won_lead: "Won",
+  // Stored by the convert route. Distinct from "Won": the client record exists.
+  converted: "Converted",
   not_qualified: "Not Qualified",
 };
 

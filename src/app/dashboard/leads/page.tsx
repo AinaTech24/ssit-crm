@@ -313,7 +313,10 @@ export default async function LeadsPage({
       phone: l.phone ?? null,
       email: l.email ?? null,
       stage: l.stage,
-      stageLabel: stageObj?.label ?? l.stage,
+      // A lead with a client behind it reads as "Converted", not "Won" — the
+      // alias that folds converted into won_lead is a pipeline rule, not a
+      // labelling one.
+      stageLabel: l.convertedInvestorId || l.stage === "converted" ? "Converted" : (stageObj?.label ?? l.stage),
       stageTone: stageObj?.tone ?? "slate",
       source: l.source,
       intendedAmount: l.intendedAmount ?? null,

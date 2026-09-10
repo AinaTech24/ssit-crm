@@ -125,7 +125,7 @@ const NAV: NavSection[] = [
       { href: "/dashboard/review-meetings", label: "Meetings", icon: Presentation, module: "review_meetings",
         roles: ["owner", "rm", "branch_head", "back_office", "ops", "insurance"] },
       { href: "/dashboard/attendance", label: "Attendance", icon: CalendarCheck },
-      { href: "/dashboard/trash", label: "Trash", icon: Trash2, roles: ["owner", "compliance"] },
+      { href: "/dashboard/trash", label: "Trash", icon: Trash2, roles: ["owner", "compliance", "branch_head"] },
       // Team Dashboard now lives inside the top "Dashboards" dropdown
       // (see dashboardSubItems below + DashboardNavDropdown).
     ],

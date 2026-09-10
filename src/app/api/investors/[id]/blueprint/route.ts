@@ -121,8 +121,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       // Assigned-only roles may read just their own clients' journey. 404 (not
       // 403) so we don't leak which investor ids exist outside their book.
       if (!viewAll) {
+        // Owning RM, servicing RM, or a branch head looking inside their own
+        // branch. Matching only rm_id made the journey disappear for the other
+        // two, who can open the very same client record.
+        const branchScoped =
+          !session.roles.includes("owner") && session.roles.includes("branch_head") && !!session.branchId;
         const own = await tx.execute(
-          sql`SELECT 1 FROM investors WHERE id = ${investorId}::uuid AND tenant_id = ${session.tenantId}::uuid AND rm_id = ${session.userId}::uuid LIMIT 1` as any
+          sql`SELECT 1 FROM investors
+               WHERE id = ${investorId}::uuid
+                 AND tenant_id = ${session.tenantId}::uuid
+                 AND (
+                   rm_id = ${session.userId}::uuid
+                   OR service_rm_id = ${session.userId}::uuid
+                   ${branchScoped ? sql`OR branch_id = ${session.branchId}::uuid` : sql``}
+                 )
+               LIMIT 1` as any
         );
         if ((own.rows?.length ?? 0) === 0) {
           throw Object.assign(new Error("Not found"), { status: 404 });
