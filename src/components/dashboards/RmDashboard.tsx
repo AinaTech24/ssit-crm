@@ -332,17 +332,40 @@ export async function RmDashboard({
         <NbaDateFilter from={from ?? ""} to={to ?? ""} />
       </div>
 
-      {/* One container, five distinct cards. The KPI row used to be five
-          free-floating glass panels sitting straight on the page background, so it
-          read as five unrelated widgets. Grouping them inside a single surface —
-          the same one the "Reviews — overdue & due this week" panel uses — makes
-          the row read as one "today at a glance" unit while each metric keeps its
-          own card. */}
-      <div className="card-surface glass-card p-4">
-        <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-3">
-          {viewingOther ? `${targetName ?? "Team member"} at a glance` : "At a glance"}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Section title="Follow-ups today" count={data.followUps.length}>
+          {data.followUps.length === 0 ? (
+            <DashboardEmptyState
+              compact
+              title="No follow-ups due today 🎉"
+              hint="You're all caught up — nothing on your plate for today."
+            />
+          ) : (
+            <ul className="divide-y">
+              {data.followUps.map((f: any) => (
+                <li key={`${f.kind}-${f.id}`} className="py-2 flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className={f.kind === "lead" ? "pulse-warning-dot" : "pulse-danger-dot"} />
+                    {f.kind === "lead" ? (
+                      <Phone className="size-3.5 text-blue-600" />
+                    ) : (
+                      <AlertCircle className="size-3.5 text-amber-600" />
+                    )}
+                    <span>{f.title}</span>
+                    <span className="text-xs uppercase text-muted-foreground">{f.kind}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{formatRelative(f.due_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        {/* The five KPI cards used to sit in their own full-width container
+            above this row. They live here now, two-across so they still read
+            at half width, with the reviews list beneath them. */}
+        <Section title={viewingOther ? `${targetName ?? "Team member"} at glance` : "At glance"}>
+          <div className="grid grid-cols-2 gap-3">
         <Kpi label={`${who} clients`} value={String(data.myClients)} sub={formatINR(data.myAum) + " AUM"} />
         <Kpi label={`${who} SIP book`} value={formatINR(data.mySipBook)} sub="per month" />
         <Kpi
@@ -420,39 +443,16 @@ export async function RmDashboard({
             </div>
           </Link>
         )}
-        </div>
-      </div>
+          </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Section title="Follow-ups today" count={data.followUps.length}>
-          {data.followUps.length === 0 ? (
-            <DashboardEmptyState
-              compact
-              title="No follow-ups due today 🎉"
-              hint="You're all caught up — nothing on your plate for today."
-            />
-          ) : (
-            <ul className="divide-y">
-              {data.followUps.map((f: any) => (
-                <li key={`${f.kind}-${f.id}`} className="py-2 flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className={f.kind === "lead" ? "pulse-warning-dot" : "pulse-danger-dot"} />
-                    {f.kind === "lead" ? (
-                      <Phone className="size-3.5 text-blue-600" />
-                    ) : (
-                      <AlertCircle className="size-3.5 text-amber-600" />
-                    )}
-                    <span>{f.title}</span>
-                    <span className="text-xs uppercase text-muted-foreground">{f.kind}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{formatRelative(f.due_at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        <Section title="Reviews — overdue &amp; due this week" count={data.reviewsDue.length}>
+          <div className="font-semibold flex items-center justify-between mt-5 mb-3 pt-4 border-t">
+            <span className="text-sm font-semibold tracking-tight text-foreground/90">
+              Reviews — overdue &amp; due this week
+            </span>
+            <span className="chip bg-brand-cyan-light text-brand-cyan-deep text-xs font-semibold px-2 py-0.5">
+              {data.reviewsDue.length}
+            </span>
+          </div>
           {data.reviewsDue.length === 0 ? (
             <DashboardEmptyState
               compact

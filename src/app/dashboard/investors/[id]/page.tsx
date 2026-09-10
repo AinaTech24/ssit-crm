@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { ChevronLeft, Phone, Mail, MessageCircle, MapPin, AlertTriangle, User2, ShieldCheck, Sparkles, ArrowRight, Wallet, ClipboardList, LifeBuoy } from "lucide-react";
+import { ChevronLeft, Phone, Mail, MessageCircle, MapPin, AlertTriangle, User2, ShieldCheck, Sparkles, ArrowRight, Wallet, ClipboardList, LifeBuoy, CalendarClock } from "lucide-react";
 import { withTenant } from "@/db/client";
 import {
   investors,
@@ -110,6 +110,7 @@ const INVESTOR_DETAIL_SECTIONS: RelatedListDef[] = [
   { key: "risk_history", label: "Risk profile history" },
   { key: "task_log", label: "Task history (all)" },
   { key: "sr_log", label: "Service request history (all)" },
+  { key: "meeting_log", label: "Meeting history (all)" },
   { key: "related", label: "Folios · SIPs · Goals · Tasks · SRs · Consent" },
 ];
 
@@ -120,7 +121,7 @@ const INVESTOR_DETAIL_TABS = [
   { key: "profile", label: "KYC & Profile", sections: ["nominees", "referrals", "custom_fields", "master"] },
   { key: "engagement", label: "Engagement", sections: ["family", "documents", "emails", "whatsapp", "gifts", "blueprint", "related"] },
   // Rarely-opened detail — tucked behind "More" so the core tabs stay uncluttered.
-  { key: "more", label: "More", sections: ["completeness", "kyc_data", "risk_history", "task_log", "sr_log"] },
+  { key: "more", label: "More", sections: ["completeness", "kyc_data", "risk_history", "task_log", "sr_log", "meeting_log"] },
 ];
 
 export const dynamic = "force-dynamic";
@@ -171,7 +172,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
     // Soft-deleted clients live in the Trash bin, not on the detail page.
     if ((inv as any).deletedAt) return null;
 
-    const [foliosRows, sipsRows, goalsRows, commsRows, tasksRows, srRows, consentsRows, taskLogRows, srLogRows, serviceRmRow, rmRow, familyRow, lumpsumSum, valuation, reviewMeetingsRows, riskHistoryRows, recentTxRows, txCountRow, sipBouncesRow] = await Promise.all([
+    const [foliosRows, sipsRows, goalsRows, commsRows, tasksRows, srRows, consentsRows, taskLogRows, srLogRows, serviceRmRow, rmRow, familyRow, lumpsumSum, valuation, reviewMeetingsRows, meetingLogRows, riskHistoryRows, recentTxRows, txCountRow, sipBouncesRow] = await Promise.all([
       tx.select().from(folios).where(eq(folios.investorId, id)),
       tx.select().from(sips).where(eq(sips.investorId, id)),
       tx.select().from(goals).where(eq(goals.investorId, id)),
@@ -237,6 +238,26 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       // Live portfolio valuation (units × latest AMFI NAV + XIRR).
       valueInvestor(tx, id),
       tx.select().from(reviewMeetings).where(eq(reviewMeetings.investorId, id)),
+      tx
+        .select({
+          id: reviewMeetings.id,
+          subject: reviewMeetings.subject,
+          meetingType: reviewMeetings.meetingType,
+          meetingMode: reviewMeetings.meetingMode,
+          locationOrLink: reviewMeetings.locationOrLink,
+          meetingDate: reviewMeetings.meetingDate,
+          status: reviewMeetings.status,
+          outcome: reviewMeetings.outcome,
+          nextReviewDate: reviewMeetings.nextReviewDate,
+          // createdById superseded rmId; fall back so historical rows still
+          // show who ran the meeting rather than an em dash.
+          heldBy: sql<string | null>`(SELECT u.name FROM users u
+             WHERE u.id = COALESCE(${reviewMeetings.createdById}, ${reviewMeetings.rmId}))`,
+        })
+        .from(reviewMeetings)
+        .where(eq(reviewMeetings.investorId, id))
+        .orderBy(desc(reviewMeetings.meetingDate))
+        .limit(100),
       tx
         .select()
         .from(riskProfileResponses)
@@ -321,6 +342,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       // Churn risk reuses the valuation's XIRR for the performance signal.
       churn: await churnForInvestor(tx, id, valuation.xirr),
       reviewMeetings: reviewMeetingsRows,
+      meetingLog: meetingLogRows,
       riskHistory: riskHistoryRows,
       insuranceCount,
       referralCount,
@@ -827,6 +849,74 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
                       <td className="px-3 py-2 whitespace-nowrap">{t.dueAt ? formatDate(t.dueAt) : "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{t.completedAt ? formatDate(t.completedAt) : "—"}</td>
                       <td className="px-3 py-2 capitalize whitespace-nowrap">{String(t.status ?? "").replace(/_/g, " ")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </RelatedListSection>
+
+      {/* Every meeting held with this client. The activity timeline shows
+          meetings mixed in with calls, emails and tickets; this is the meeting
+          record on its own, with the outcome and what it set up next. */}
+      <RelatedListSection moduleKey="investors-detail" sectionKey="meeting_log">
+        <div className="border rounded-lg bg-card">
+          <div className="border-b px-4 py-2.5 font-medium flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <CalendarClock className="size-4" /> Meetings
+              <span className="text-xs text-muted-foreground font-normal">({data.meetingLog.length})</span>
+            </span>
+            <Link
+              href={`/dashboard/review-meetings/new?investorId=${inv.id}`}
+              className="text-xs text-brand-cyan-deep hover:underline font-medium"
+            >
+              Schedule →
+            </Link>
+          </div>
+          {data.meetingLog.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground text-center">
+              No meetings recorded with this client yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-muted-foreground bg-muted/40">
+                  <tr>
+                    <th className="text-left font-medium px-4 py-2">Meeting</th>
+                    <th className="text-left font-medium px-3 py-2">Held by</th>
+                    <th className="text-left font-medium px-3 py-2">Date</th>
+                    <th className="text-left font-medium px-3 py-2">Outcome</th>
+                    <th className="text-left font-medium px-3 py-2">Next review</th>
+                    <th className="text-left font-medium px-3 py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {data.meetingLog.map((m: any) => (
+                    <tr key={m.id} className="hover:bg-accent/30">
+                      <td className="px-4 py-2">
+                        <Link href={`/dashboard/review-meetings/${m.id}`} className="font-medium hover:underline">
+                          {m.subject || "Meeting"}
+                        </Link>
+                        <div className="text-[11px] text-muted-foreground">
+                          {[m.meetingType, m.meetingMode, m.locationOrLink]
+                            .filter(Boolean)
+                            .map((v: string) => String(v).replace(/_/g, " "))
+                            .join(" · ") || "—"}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">{m.heldBy ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{m.meetingDate ? formatDate(m.meetingDate) : "—"}</td>
+                      <td className="px-3 py-2 capitalize">
+                        {m.outcome ? String(m.outcome).replace(/_/g, " ") : "—"}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {m.nextReviewDate ? formatDate(m.nextReviewDate) : "—"}
+                      </td>
+                      <td className="px-3 py-2 capitalize whitespace-nowrap">
+                        {String(m.status ?? "").replace(/_/g, " ")}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
