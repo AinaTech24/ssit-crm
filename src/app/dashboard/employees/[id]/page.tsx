@@ -34,6 +34,13 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       .from(users)
       .orderBy(users.name);
 
+    // The firm's branches — the pool an admin can grant data access to.
+    const branchRows = await tx.execute(sql`
+      SELECT id, name FROM branches
+      WHERE tenant_id = ${session.tenantId}::uuid
+      ORDER BY name ASC
+    `);
+
     const stats = await tx.execute(sql`
       SELECT
         (SELECT COUNT(*)::int FROM investors WHERE rm_id = ${id}::uuid AND status = 'active') AS active_clients,
@@ -143,6 +150,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       emp,
       policy,
       teammates,
+      branches: branchRows.rows as unknown as { id: string; name: string }[],
       stats: stats.rows[0] as any,
       manager,
       docs,
@@ -156,6 +164,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
   });
   if (!data) notFound();
   const { emp, teammates, stats, manager } = data;
+  const branches = data.branches ?? [];
 
   // ── HR summary derivations ──
   const att = data.attMtd ?? {};
@@ -298,8 +307,10 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           status: emp.status,
           permissions: (emp as any).permissions as string[] | null,
           enabledModules: ((emp as any).enabledModules as string[] | null) ?? null,
+          allowedBranches: emp.allowedBranches ?? null,
           customLeaveEntitlements: (emp as any).customLeaveEntitlements as Record<string, number> | null,
         }}
+        branches={branches}
         tenantNavKeys={tenantAccessibleNavKeys({
           allowedNav: license.allowedNav,
           enabledModules: license.enabledModules,

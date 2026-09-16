@@ -14,6 +14,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, can } from "@/lib/auth/rbac";
 import { formatDate, formatINR } from "@/lib/utils";
@@ -81,7 +82,6 @@ export default async function InsurancePage({
   // view capability (the page had NO gate) and scope non-managers to their own
   // book (a client they manage OR a policy they sold).
   requireCap(session.roles, "insurance.view", session.permissions);
-  const seesAll = can(session.roles, "investor.view.all", session.permissions) || can(session.roles, "compliance.view", session.permissions);
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const typeFilter = (sp.type ?? "").split(",").filter(Boolean);
@@ -96,10 +96,19 @@ export default async function InsurancePage({
     // the investor alias `i`; the bare aggregates (stats/statusCounts) use a
     // sub-select on investor_id.
     const filters: any[] = [];
-    if (!seesAll) filters.push(sql`(p.sold_by_user_id = ${session.userId}::uuid OR i.rm_id = ${session.userId}::uuid)`);
-    const bareScope = seesAll
-      ? sql``
-      : sql` WHERE (sold_by_user_id = ${session.userId}::uuid OR investor_id IN (SELECT id FROM investors WHERE rm_id = ${session.userId}::uuid))`;
+    // The data wall. A policy belongs to the person who sold it; the branch
+    // column is on the policy row itself.
+    const scope = await dataScopeSqlFor(tx, session, {
+      branch: "p.branch_id",
+      owner: "p.sold_by_user_id",
+    });
+    filters.push(scope);
+    // Same wall for the un-aliased aggregate queries below.
+    const bareScopeSql = await dataScopeSqlFor(tx, session, {
+      branch: "branch_id",
+      owner: "sold_by_user_id",
+    });
+    const bareScope = sql` WHERE ${bareScopeSql}`;
     if (q) {
       filters.push(
         sql`(p.policy_number ILIKE ${`%${q}%`} OR p.plan_name ILIKE ${`%${q}%`} OR p.insurer ILIKE ${`%${q}%`} OR i.name ILIKE ${`%${q}%`})`

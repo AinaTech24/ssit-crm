@@ -114,7 +114,7 @@ const NAV: NavSection[] = [
       // Dashboard + My Dashboards are merged into the DashboardNavDropdown
       // rendered at the top of CustomizableNav.
       { href: "/dashboard/command-center", label: "My Day", icon: Inbox,
-        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance", "insurance"] },
+        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance", "insurance", "sub_broker"] },
       { href: "/dashboard/tasks", label: "Tasks", icon: ListChecks, module: "tasks" },
       // Marketing logs what it produced; RA/RIA log what they researched.
       { href: "/dashboard/activity-tracker", label: "Activity Tracker", icon: Megaphone,
@@ -123,7 +123,7 @@ const NAV: NavSection[] = [
         roles: ["owner", "branch_head", "ria", "ra_research", "ra_sales"] },
       { href: "/dashboard/service-requests", label: "Service Requests", icon: LifeBuoy, module: "service_requests" },
       { href: "/dashboard/review-meetings", label: "Meetings", icon: Presentation, module: "review_meetings",
-        roles: ["owner", "rm", "branch_head", "back_office", "ops", "insurance"] },
+        roles: ["owner", "rm", "branch_head", "back_office", "ops", "insurance", "sub_broker"] },
       { href: "/dashboard/attendance", label: "Attendance", icon: CalendarCheck },
       { href: "/dashboard/trash", label: "Trash", icon: Trash2, roles: ["owner", "compliance", "branch_head"] },
       // Team Dashboard now lives inside the top "Dashboards" dropdown
@@ -137,10 +137,10 @@ const NAV: NavSection[] = [
       // Pipeline Board is now reached via the in-page Module switcher on the
       // Leads page (Leads ⇄ Pipeline Board), not a separate sidebar item.
       { href: "/dashboard/leads", label: "Leads", icon: UserPlus, module: "lead_management",
-        roles: ["owner", "marketing", "rm", "branch_head", "back_office", "ops", "compliance"] },
+        roles: ["owner", "marketing", "rm", "branch_head", "back_office", "ops", "compliance", "sub_broker"] },
       // Investor data hidden from marketing per spec section 3
       { href: "/dashboard/investors", label: "Clients", icon: Users, module: "client_master",
-        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
+        roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance", "sub_broker"] },
       { href: "/dashboard/families", label: "Family Mapping", icon: HeartHandshake, module: "family_mapping",
         roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
       // No "rm": the page is firm-wide with no per-RM scoping (see its

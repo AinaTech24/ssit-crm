@@ -10,6 +10,7 @@ import {
   Clock,
 } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { formatINR } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
@@ -61,7 +62,13 @@ export default async function ProposalsPage({
           : sql`p.created_at DESC`;
 
   const data = await withTenant(session.tenantId, async (tx) => {
-    const filters: any[] = [];
+    // The data wall: a proposal belongs to whoever prepared it.
+    const filters: any[] = [
+      await dataScopeSqlFor(tx, session, {
+        branch: "p.branch_id",
+        owner: "p.prepared_by_user_id",
+      }),
+    ];
     if (q) {
       filters.push(
         sql`(p.proposal_number ILIKE ${`%${q}%`} OR p.title ILIKE ${`%${q}%`} OR p.recipient_name ILIKE ${`%${q}%`})`

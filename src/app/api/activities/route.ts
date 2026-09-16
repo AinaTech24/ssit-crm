@@ -17,6 +17,7 @@ import { v4 as uuid } from "uuid";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
@@ -62,7 +63,10 @@ export async function GET(req: NextRequest) {
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
-        const conds: any[] = [sql`a.tenant_id = ${session.tenantId}::uuid`];
+        const conds: any[] = [
+          sql`a.tenant_id = ${session.tenantId}::uuid`,
+          await dataScopeSqlFor(tx, session, { branch: "a.branch_id", owner: "a.owner_user_id" }),
+        ];
         if (kind.length) conds.push(sql`a.kind IN (${sql.join(kind.map((k) => sql`${k}`), sql`, `)})`);
         if (subjectType) conds.push(sql`a.subject_type = ${subjectType}`);
         if (subjectId) conds.push(sql`a.subject_id = ${subjectId}::uuid`);

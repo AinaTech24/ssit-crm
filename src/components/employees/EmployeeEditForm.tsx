@@ -100,6 +100,8 @@ export type EmployeeFormValues = {
   permissions: string[] | null;
   /** Per-user sidebar module grant. null = inherit all the firm's modules. */
   enabledModules: string[] | null;
+  /** Per-user BRANCH data grant. null / [] = own records only. */
+  allowedBranches: string[] | null;
   customLeaveEntitlements: Partial<Record<string, number>> | null;
 };
 
@@ -112,9 +114,12 @@ export function EmployeeEditForm({
   meetings = [],
   stats = {},
   tenantNavKeys = [],
+  branches = [],
 }: {
   employee: EmployeeFormValues;
   teammates: { id: string; name: string; email: string | null }[];
+  /** The firm's branches — the pool this grant can draw from. */
+  branches?: { id: string; name: string }[];
   /** Sidebar item hrefs the firm can open (the pool an owner can grant). */
   tenantNavKeys?: string[];
   docs?: any[];
@@ -132,6 +137,8 @@ export function EmployeeEditForm({
   const [customActive, setCustomActive] = useState(!!employee.permissions);
   // Per-user module (sidebar) access. null = inherit all the firm's modules.
   const [moduleAccessActive, setModuleAccessActive] = useState(!!employee.enabledModules);
+  // Per-user branch DATA access. Empty = the default wall (own records only).
+  const [branchAccess, setBranchAccess] = useState<string[]>(employee.allowedBranches ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -160,6 +167,9 @@ export function EmployeeEditForm({
   };
 
   const isOwnerRole = v.roles.includes("owner");
+  // Roles that already see every branch — the grant below is meaningless for
+  // them. Mirrors ALL_BRANCH_ROLES in lib/auth/data-scope.ts.
+  const seesAllBranchesByRole = v.roles.some((r) => ["owner", "back_office", "ops"].includes(r));
   // The firm's accessible sidebar items, grouped — the pool the owner grants from.
   const tenantNavSet = new Set(tenantNavKeys);
   const accessibleNavGroups = NAV_ACCESS_GROUPS.map((g) => ({
@@ -322,6 +332,9 @@ export function EmployeeEditForm({
           roles: v.roles,
           permissions: customActive ? (v.permissions || []) : null,
           enabledModules: moduleAccessActive && !isOwnerRole ? (v.enabledModules || []) : null,
+          // Owners and back office already see every branch, so a grant on them
+          // would be a stored no-op that looks meaningful on screen.
+          allowedBranches: seesAllBranchesByRole ? null : branchAccess,
           department: v.department || null,
           joiningDate: v.joiningDate || null,
           reportingManagerId: v.reportingManagerId || null,
@@ -591,6 +604,65 @@ export function EmployeeEditForm({
           </div>
 
           {/* Sidebar Access (MFD owner → team member) */}
+          {/* ---- Branch data access (the permission manager) ----
+              Sidebar Access below decides which PAGES this person can open.
+              This decides which RECORDS they see once inside one. They are
+              different questions: an RM needs the Clients page, but only their
+              own clients. */}
+          <div className="border rounded-lg p-4 bg-secondary/10 space-y-3">
+            <div>
+              <div className="text-xs font-semibold">Branch Data Access</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                By default everyone sees only the records assigned to them. Tick a branch to let this
+                person see <em>every</em> record in it, whoever owns it.
+              </div>
+            </div>
+
+            {seesAllBranchesByRole ? (
+              <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 p-2.5 rounded">
+                {isOwnerRole ? "Owners" : "Back office"} already see every branch and every team member&apos;s
+                records, so a branch grant would have no effect on this account.
+              </div>
+            ) : branches.length === 0 ? (
+              <div className="text-[11px] text-muted-foreground bg-secondary/30 p-2.5 rounded border">
+                Your firm has no branches yet.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {branches.map((b) => {
+                    const on = branchAccess.includes(b.id);
+                    return (
+                      <label
+                        key={b.id}
+                        className={`flex items-center gap-1.5 text-xs border rounded-md px-2.5 py-1.5 cursor-pointer transition-colors ${
+                          on ? "bg-primary/10 border-primary/40 font-medium" : "bg-card hover:bg-accent/40"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) => {
+                            setBranchAccess((prev) =>
+                              e.target.checked ? [...prev, b.id] : prev.filter((x) => x !== b.id)
+                            );
+                            setSaved(false);
+                          }}
+                        />
+                        <span>{b.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {branchAccess.length === 0
+                    ? "No branches granted — this person sees only their own records."
+                    : `Sees every record in ${branchAccess.length} branch${branchAccess.length === 1 ? "" : "es"}.`}
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="border rounded-lg p-4 bg-secondary/10 space-y-3">
             <div className="flex items-center justify-between">
               <div>

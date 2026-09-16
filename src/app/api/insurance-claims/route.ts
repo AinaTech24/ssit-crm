@@ -9,6 +9,7 @@ import { v4 as uuid } from "uuid";
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
@@ -56,16 +57,15 @@ export async function GET() {
   try {
     const session = await requireSession();
     requireCap(session.roles, "insurance.view", session.permissions);
-    // Claims carry proposer PII + settled amounts. Managers see all; everyone
-    // else only claims for a client they manage OR that they own (rmId).
-    const seesAll =
-      can(session.roles, "investor.view.all", session.permissions) ||
-      can(session.roles, "compliance.view", session.permissions);
-    const scope = seesAll
-      ? undefined
-      : sql`(${insuranceClaims.rmId} = ${session.userId}::uuid OR ${insuranceClaims.investorId} IN (SELECT id FROM investors WHERE rm_id = ${session.userId}::uuid))`;
-    const rows = await withTenant(session.tenantId, async (tx) =>
-      tx
+    // Claims carry proposer PII + settled amounts, so they go through the same
+    // data wall as everything else: back office and the owner see the firm, a
+    // branch-granted user sees those branches, everyone else sees their own.
+    const rows = await withTenant(session.tenantId, async (tx) => {
+      const scope = await dataScopeSqlFor(tx, session, {
+        branch: "insurance_claims.branch_id",
+        owner: "insurance_claims.rm_id",
+      });
+      return tx
         .select({
           id: insuranceClaims.id,
           investorId: insuranceClaims.investorId,
@@ -87,8 +87,8 @@ export async function GET() {
         .leftJoin(investors, eq(insuranceClaims.investorId, investors.id))
         .where(scope)
         .orderBy(desc(insuranceClaims.createdAt))
-        .limit(500)
-    );
+        .limit(500);
+    });
     return NextResponse.json({ claims: rows });
   } catch (err: any) {
     return handleApiError(err);

@@ -148,6 +148,15 @@ export const users = pgTable(
      * dashboard layout sidebar. See src/lib/platform.ts ALL_MODULES.
      */
     enabledModules: jsonb("enabled_modules").$type<string[]>(),
+    /**
+     * Per-user BRANCH data access (migration 0216). NULL / empty = the default
+     * wall: this user sees only the records assigned to them. A list of branch
+     * ids = they additionally see EVERY record in those branches, whoever owns
+     * it. Roles owner / back_office / ops ignore this and see all branches.
+     * Set by the firm admin in the employee form; enforced in
+     * src/lib/auth/data-scope.ts.
+     */
+    allowedBranches: jsonb("allowed_branches").$type<string[]>(),
     customLeaveEntitlements: jsonb("custom_leave_entitlements").$type<Record<string, number>>(),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     /**

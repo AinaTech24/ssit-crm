@@ -2,6 +2,7 @@ import Link from "next/link";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { FileText, Plus, IndianRupee, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { insuranceClaims, investors, insurancePolicies, users, CLAIM_STATUSES, CLAIM_MODES } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
@@ -43,7 +44,12 @@ export default async function ClaimsPage({ searchParams }: { searchParams: Promi
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
 
   const data = await withTenant(session.tenantId, async (tx) => {
-    const conds: any[] = [];
+    const conds: any[] = [
+      await dataScopeSqlFor(tx, session, {
+        branch: "insurance_claims.branch_id",
+        owner: "insurance_claims.rm_id",
+      }),
+    ];
     if (mode) conds.push(eq(insuranceClaims.claimMode, mode as any));
     else if (status) conds.push(eq(insuranceClaims.claimStatus, status as any));
     if (q) conds.push(or(ilike(insuranceClaims.proposerName, `%${q}%`), ilike(insuranceClaims.policyNumber, `%${q}%`), ilike(insuranceClaims.insurer, `%${q}%`))!);
@@ -66,7 +72,11 @@ export default async function ClaimsPage({ searchParams }: { searchParams: Promi
     const statusCounts: Record<string, number> = {};
     for (const r of byStatus.rows as any[]) statusCounts[r.claim_status] = Number(r.c);
 
-    const byMode = await tx.execute(sql`SELECT claim_mode, count(*)::int AS c FROM insurance_claims WHERE claim_mode IS NOT NULL GROUP BY claim_mode`);
+    const claimScope = await dataScopeSqlFor(tx, session, {
+      branch: "branch_id",
+      owner: "rm_id",
+    });
+    const byMode = await tx.execute(sql`SELECT claim_mode, count(*)::int AS c FROM insurance_claims WHERE claim_mode IS NOT NULL AND ${claimScope} GROUP BY claim_mode`);
     const modeCounts: Record<string, number> = {};
     for (const r of byMode.rows as any[]) modeCounts[r.claim_mode] = Number(r.c);
 

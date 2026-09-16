@@ -1,0 +1,159 @@
+/**
+ * THE DATA WALL — one place that decides which records a session may see.
+ *
+ * The firm's rule, in full:
+ *
+ *   1. A branch's data is not visible to another branch.
+ *   2. Inside a branch, one person's data is not visible to another person —
+ *      for EVERY role, not just RM. A branch head, a sub broker, an RIA and a
+ *      compliance officer are all walled to their own records by default.
+ *   3. Back office (back_office / ops) and the firm admin (owner) see
+ *      everything, every branch, every owner.
+ *   4. Anyone else can be granted specific branches on their employee record
+ *      (users.allowed_branches, migration 0216). A grant lifts BOTH walls for
+ *      those branches: every record in them, whoever owns it.
+ *
+ * Why (2) is stated as "every role": the previous model special-cased
+ * branch_head and sub_broker to see their whole branch, which meant a role name
+ * silently widened someone's view. Now the only thing that widens a view is an
+ * explicit grant a human made on that person's record, which is auditable and
+ * changes without inventing a new role.
+ *
+ * NOTE this supersedes `tenants.restrict_user_data_scope`. That switch made the
+ * client wall optional per firm, defaulting to OFF — so for most firms it did
+ * nothing at all. The wall here is unconditional; the switch is no longer
+ * consulted for record visibility.
+ *
+ * SERVER-ONLY: every function takes the tenant transaction and runs inside it.
+ */
+
+import { sql, type SQL } from "drizzle-orm";
+import type { SessionUser } from "@/lib/auth/session";
+
+/**
+ * Roles that see every branch and every owner's records before any grant.
+ *
+ * back_office and ops are BOTH here because they are the same desk — the role
+ * matrix labels both "Back Office Executive". Adding a role here hands it the
+ * whole firm, so it is deliberately short.
+ */
+export const ALL_BRANCH_ROLES = ["owner", "back_office", "ops"];
+
+export function seesAllBranches(session: SessionUser): boolean {
+  return session.roles.some((r) => ALL_BRANCH_ROLES.includes(r));
+}
+
+/** What a session is allowed to see, resolved once and reused per query. */
+export type DataScope =
+  /** Everything — owner / back office. */
+  | { kind: "all" }
+  /** Every record in these branches, whoever owns it. */
+  | { kind: "branches"; branchIds: string[] }
+  /** Only records this user owns. The default for everyone else. */
+  | { kind: "own"; userId: string };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The branch grant on this user's employee record.
+ *
+ * Read from the DB rather than the session JWT on purpose: a grant taken away
+ * must bite on the NEXT REQUEST, not whenever the user happens to re-login. A
+ * stale token is exactly how a revoked permission keeps working for a week.
+ *
+ * Values are re-validated as uuids here — the column is free-form jsonb, and a
+ * bad value would otherwise reach a `::uuid` cast and 500 the page.
+ */
+export async function loadAllowedBranches(
+  tx: any,
+  tenantId: string,
+  userId: string
+): Promise<string[]> {
+  try {
+    const r = await tx.execute(sql`
+      SELECT allowed_branches FROM users
+      WHERE id = ${userId}::uuid AND tenant_id = ${tenantId}::uuid
+      LIMIT 1
+    `);
+    const raw = (r.rows[0] as { allowed_branches?: unknown } | undefined)?.allowed_branches;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((v): v is string => typeof v === "string" && UUID_RE.test(v));
+  } catch {
+    // A missing column (pre-0216 database) must not take the page down, and it
+    // must FAIL CLOSED — no grant, so the caller falls back to own-records.
+    return [];
+  }
+}
+
+/** Resolve the wall for this session. Call inside the tenant transaction. */
+export async function resolveDataScope(tx: any, session: SessionUser): Promise<DataScope> {
+  if (seesAllBranches(session)) return { kind: "all" };
+  const granted = await loadAllowedBranches(tx, session.tenantId, session.userId);
+  if (granted.length > 0) return { kind: "branches", branchIds: granted };
+  return { kind: "own", userId: session.userId };
+}
+
+/** The columns a table exposes to the wall. Raw identifiers, never user input. */
+export type ScopeColumns = {
+  /** e.g. "investors.branch_id" */
+  branch: string;
+  /** e.g. "investors.rm_id" — the person the record belongs to. */
+  owner: string;
+};
+
+/**
+ * The wall as a SQL predicate. Returns `TRUE` for an unrestricted session so it
+ * can be ANDed unconditionally.
+ */
+export function dataScopeSql(scope: DataScope, cols: ScopeColumns): SQL {
+  if (scope.kind === "all") return sql`TRUE`;
+  if (scope.kind === "branches") {
+    return sql`${sql.raw(cols.branch)} IN (${sql.join(
+      scope.branchIds.map((b) => sql`${b}::uuid`),
+      sql`, `
+    )})`;
+  }
+  return sql`${sql.raw(cols.owner)} = ${scope.userId}::uuid`;
+}
+
+/** Resolve + build in one step, for callers that need nothing else. */
+export async function dataScopeSqlFor(
+  tx: any,
+  session: SessionUser,
+  cols: ScopeColumns
+): Promise<SQL> {
+  return dataScopeSql(await resolveDataScope(tx, session), cols);
+}
+
+/**
+ * The single-row counterpart, for routes that load one record by id.
+ *
+ * Exists because a list query being walled proves nothing about the detail
+ * page: changing the id in the URL is the obvious way round a filtered list,
+ * and every export/PDF route that loads one record by id is the same hole.
+ */
+export function isInScope(
+  scope: DataScope,
+  row: { branchId?: string | null; ownerId?: string | null }
+): boolean {
+  if (scope.kind === "all") return true;
+  if (scope.kind === "branches") {
+    return !!row.branchId && scope.branchIds.includes(row.branchId);
+  }
+  return row.ownerId === scope.userId;
+}
+
+/** Throw 403 unless the row is visible to this session. */
+export async function assertInScope(
+  tx: any,
+  session: SessionUser,
+  row: { branchId?: string | null; ownerId?: string | null },
+  what = "record"
+): Promise<void> {
+  const scope = await resolveDataScope(tx, session);
+  if (isInScope(scope, row)) return;
+  throw Object.assign(
+    new Error(`forbidden: this ${what} belongs to another branch or team member`),
+    { status: 403 }
+  );
+}

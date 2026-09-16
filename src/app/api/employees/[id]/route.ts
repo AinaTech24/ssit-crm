@@ -86,6 +86,12 @@ const PatchBody = z.object({
   permissions: z.array(z.string()).nullable().optional(),
   /** Per-user sidebar module access. null = inherit all tenant modules. */
   enabledModules: z.array(z.string()).nullable().optional(),
+  /**
+   * Per-user BRANCH data access (migration 0216). null / [] = the default wall
+   * (own records only); a list = every record in those branches. Validated as
+   * uuids here so a malformed value can never reach a ::uuid cast at query time.
+   */
+  allowedBranches: z.array(z.string().uuid()).nullable().optional(),
   customLeaveEntitlements: z.record(z.number()).nullable().optional(),
 });
 
@@ -219,6 +225,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.branchId !== undefined) patch.branchId = body.branchId;
       if (body.permissions !== undefined) patch.permissions = body.permissions;
       if (body.enabledModules !== undefined) patch.enabledModules = body.enabledModules;
+      if (body.allowedBranches !== undefined) patch.allowedBranches = body.allowedBranches;
       if (body.customLeaveEntitlements !== undefined) patch.customLeaveEntitlements = body.customLeaveEntitlements;
       // Access lives in the signed session token, so a permission / role /
       // sidebar change is invisible to whoever is already logged in until they
@@ -232,7 +239,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const accessChanged =
         (body.permissions !== undefined && !sameList(body.permissions, (existing as any).permissions)) ||
         (body.roles !== undefined && !sameList(body.roles, (existing as any).roles)) ||
-        (body.enabledModules !== undefined && !sameList(body.enabledModules, (existing as any).enabledModules));
+        (body.enabledModules !== undefined && !sameList(body.enabledModules, (existing as any).enabledModules)) ||
+        // A branch grant widens what this person can SEE, so it belongs in the
+        // same audit trail as a role or permission change.
+        (body.allowedBranches !== undefined && !sameList(body.allowedBranches, existing.allowedBranches));
       // users.sessions_invalid_after is the revocation epoch the token check
       // actually reads — revoking the user_sessions rows alone only tidies the
       // device list and would leave the old token working.

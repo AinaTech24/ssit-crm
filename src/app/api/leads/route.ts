@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
           sql`leads.lost_reason IS DISTINCT FROM '__deleted__'`,
           sql`leads.deleted_at IS NULL`,
           sql`leads.converted_investor_id IS NULL`,
-          leadScopeSql(session, "leads"),
+          await leadScopeSql(tx, session, "leads"),
         ];
         if (q) conds.push(sql`(leads.name ILIKE ${`%${q}%`} OR leads.phone ILIKE ${`%${q}%`} OR leads.email ILIKE ${`%${q}%`} OR users.name ILIKE ${`%${q}%`})`);
         if (stageFilter.length) conds.push(sql`leads.stage IN (${sql.join(stageFilter.map((v) => sql`${v}`), sql`, `)})`);

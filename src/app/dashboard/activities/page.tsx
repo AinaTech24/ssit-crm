@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { Phone, MapPin, StickyNote, Activity as ActivityIcon, MessageCircle } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
@@ -38,7 +39,11 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
   const data = await withTenant(
     session.tenantId,
     async (tx) => {
-      const conds: any[] = [sql`a.tenant_id = ${session.tenantId}::uuid`];
+      const activityScope = await dataScopeSqlFor(tx, session, {
+        branch: "a.branch_id",
+        owner: "a.owner_user_id",
+      });
+      const conds: any[] = [sql`a.tenant_id = ${session.tenantId}::uuid`, activityScope];
       if (q) conds.push(sql`(a.subject_name ILIKE ${`%${q}%`} OR a.subject ILIKE ${`%${q}%`} OR a.notes ILIKE ${`%${q}%`})`);
       if (kind.length) conds.push(sql`a.kind IN (${sql.join(kind.map((k) => sql`${k}`), sql`, `)})`);
       if (mine) conds.push(sql`a.owner_user_id = ${session.userId}::uuid`);
@@ -56,7 +61,13 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
         LIMIT 300
       `);
 
-      const mineSql = mine ? sql` AND owner_user_id = ${session.userId}::uuid` : sql``;
+      const bareScope = await dataScopeSqlFor(tx, session, {
+        branch: "branch_id",
+        owner: "owner_user_id",
+      });
+      const mineSql = mine
+        ? sql` AND owner_user_id = ${session.userId}::uuid AND ${bareScope}`
+        : sql` AND ${bareScope}`;
       const stats = await tx.execute(sql`
         SELECT
           COUNT(*)::int AS total,

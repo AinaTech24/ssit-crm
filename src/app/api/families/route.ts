@@ -11,6 +11,7 @@ import { v4 as uuid } from "uuid";
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny, can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
@@ -67,8 +68,9 @@ export async function GET(req: NextRequest) {
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
-        const where: any[] = [];
-        if (!canViewAll) where.push(sql`f.rm_id = ${userId}::uuid`);
+        const where: any[] = [
+          await dataScopeSqlFor(tx, session, { branch: "f.branch_id", owner: "f.rm_id" }),
+        ];
         if (q) {
           where.push(sql`(
             f.head_name ILIKE ${`%${q}%`}

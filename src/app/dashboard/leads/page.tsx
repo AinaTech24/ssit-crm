@@ -155,12 +155,12 @@ export default async function LeadsPage({
       // Hide soft-deleted (archived) leads — they carry the __deleted__ sentinel.
       sql`leads.lost_reason IS DISTINCT FROM '__deleted__'`,
       sql`leads.deleted_at IS NULL`,
-      // Role scope: RMs see only their own leads, branch heads only their
-      // branch, owner/managers the whole book. RLS isolates by TENANT only, so
-      // this owner/branch slice MUST be applied in the query (the API enforces
-      // the same via leadScopeCondition — the page used to skip it, exposing the
-      // whole firm's pipeline to every RM).
-      leadScopeSql(session, "leads"),
+      // The data wall (lib/auth/data-scope.ts): back office and the owner see
+      // the firm, a branch-granted user sees those branches, everyone else sees
+      // only the leads assigned to them. RLS isolates by TENANT only, so this
+      // slice MUST be applied in the query — the page used to skip it entirely,
+      // exposing the whole firm's pipeline to every RM.
+      await leadScopeSql(tx, session, "leads"),
     ];
     if (q) {
       conds.push(
@@ -283,7 +283,7 @@ export default async function LeadsPage({
       WHERE leads.tenant_id = ${session.tenantId}::uuid
         AND leads.lost_reason IS DISTINCT FROM '__deleted__'
         AND leads.deleted_at IS NULL
-        AND ${leadScopeSql(session, "leads")}
+        AND ${await leadScopeSql(tx, session, "leads")}
     `);
     const kpi = (kpiRes.rows[0] as any) ?? { total: 0, created_today: 0, converted: 0, lost: 0 };
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { Plus, HeartHandshake } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny, can } from "@/lib/auth/rbac";
 import { formatINR, formatRelative } from "@/lib/utils";
@@ -34,7 +35,6 @@ export default async function FamiliesPage({
   // capability and scope non-managers to their own families (the page used to
   // show the whole firm's households to any role; "mine" was only opt-in).
   requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
-  const canViewAll = can(session.roles, "investor.view.all", session.permissions);
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const userId = session.userId;
@@ -68,9 +68,12 @@ export default async function FamiliesPage({
     // additive WHERE conditions on the family row + a HAVING on member-level
     // aggregates after the LEFT JOIN.
     const where: any[] = [];
-    // Owner slice for non-managers (applies to the list, the count, and — below
-    // — the wealth-band chips).
-    if (!canViewAll) where.push(sql`f.rm_id = ${userId}::uuid`);
+    // The data wall (lib/auth/data-scope.ts) — applies to the list, the count
+    // and, below, the wealth-band chips. It replaces a capability check here:
+    // holding investor.view.all no longer means seeing every family, because
+    // "which records" is now decided by branch grant, not by role.
+    const scope = await dataScopeSqlFor(tx, session, { branch: "f.branch_id", owner: "f.rm_id" });
+    where.push(scope);
     if (q) {
       where.push(sql`(
         f.head_name ILIKE ${`%${q}%`}
@@ -166,7 +169,7 @@ export default async function FamiliesPage({
           SELECT f.id, COALESCE(SUM(i.aum::numeric) FILTER (WHERE i.status = 'active'), 0) AS aum
           FROM families f LEFT JOIN investors i ON i.family_id = f.id AND i.deleted_at IS NULL
           WHERE f.tenant_id = ${session.tenantId}::uuid
-            ${canViewAll ? sql`` : sql`AND f.rm_id = ${userId}::uuid`}
+            AND ${scope}
           GROUP BY f.id
         ) agg
       ) b GROUP BY band

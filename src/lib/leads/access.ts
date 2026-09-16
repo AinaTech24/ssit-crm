@@ -1,8 +1,18 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { leads } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import type { Tx } from "@/db/client";
+import { dataScopeSql, isInScope, resolveDataScope } from "@/lib/auth/data-scope";
+
+/**
+ * Lead access.
+ *
+ * CAPABILITY answers "may this person work leads at all"; the DATA WALL in
+ * lib/auth/data-scope.ts answers "which leads". They are separate on purpose —
+ * holding lead.view.all no longer implies seeing the firm's pipeline, it means
+ * you may view leads, within whatever the wall leaves you.
+ */
 
 export function requireLeadView(session: SessionUser) {
   requireAny(session.roles, ["lead.view.all", "lead.view.assigned"], session.permissions);
@@ -20,53 +30,56 @@ export function canEditAllLeads(session: SessionUser) {
   return can(session.roles, "lead.edit.all", session.permissions);
 }
 
+/** The columns the wall filters leads on. */
+const LEAD_COLS = (alias: string) => ({
+  branch: `${alias}.branch_id`,
+  owner: `${alias}.owner_id`,
+});
+
 /**
- * A branch head is scoped to their OWN branch — even though their role can
- * "view all", they only ever see their branch's pipeline. Only applies when a
- * branch is actually assigned to them (else they fall through to the normal
- * caps, so a mis-configured branch head is never locked out). Owner is never
- * branch-limited.
+ * Drizzle condition narrowing a lead query to what this session may see.
+ *
+ * Async because the wall reads the user's branch grant from the database —
+ * deliberately not from the session token, so revoking a grant bites on the
+ * next request rather than the next login.
  */
-export function isBranchScoped(session: SessionUser): boolean {
-  return (
-    !session.roles.includes("owner") &&
-    session.roles.includes("branch_head") &&
-    !!session.branchId
-  );
+export async function leadScopeCondition(tx: Tx, session: SessionUser) {
+  requireLeadView(session);
+  return dataScopeSql(await resolveDataScope(tx, session), LEAD_COLS("leads"));
 }
 
-export function leadScopeCondition(session: SessionUser) {
+/** Same rule for queries built from raw sql`` fragments. */
+export async function leadScopeSql(tx: Tx, session: SessionUser, alias = "leads") {
   requireLeadView(session);
-  if (isBranchScoped(session)) return eq(leads.branchId, session.branchId!);
-  if (canViewAllLeads(session)) return undefined;
-  return eq(leads.ownerId, session.userId);
-}
-
-export function leadScopeSql(session: SessionUser, alias = "leads") {
-  requireLeadView(session);
-  if (isBranchScoped(session)) return sql`${sql.raw(`${alias}.branch_id`)} = ${session.branchId}::uuid`;
-  if (canViewAllLeads(session)) return sql`TRUE`;
-  return sql`${sql.raw(`${alias}.owner_id`)} = ${session.userId}::uuid`;
+  return dataScopeSql(await resolveDataScope(tx, session), LEAD_COLS(alias));
 }
 
 export async function loadEditableLead(tx: Tx, session: SessionUser, leadId: string) {
   requireLeadEdit(session);
-  const [lead] = await tx.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.tenantId, session.tenantId))).limit(1);
+  const [lead] = await tx
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, leadId), eq(leads.tenantId, session.tenantId)))
+    .limit(1);
   if (!lead) throw Object.assign(new Error("lead not found"), { status: 404 });
-  if (isBranchScoped(session)) {
-    if (lead.branchId === session.branchId) return lead;
-    throw Object.assign(new Error("forbidden: lead is in another branch"), { status: 403 });
+  const scope = await resolveDataScope(tx, session);
+  if (!isInScope(scope, { branchId: lead.branchId, ownerId: lead.ownerId })) {
+    throw Object.assign(
+      new Error("forbidden: this lead belongs to another branch or team member"),
+      { status: 403 }
+    );
   }
-  if (canEditAllLeads(session)) return lead;
-  if (lead.ownerId === session.userId) return lead;
-  throw Object.assign(new Error("forbidden: lead is not assigned to you"), { status: 403 });
+  return lead;
 }
 
 export async function loadViewableLead(tx: Tx, session: SessionUser, leadId: string) {
   requireLeadView(session);
-  const [lead] = await tx.select().from(leads).where(and(eq(leads.id, leadId), eq(leads.tenantId, session.tenantId))).limit(1);
+  const [lead] = await tx
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, leadId), eq(leads.tenantId, session.tenantId)))
+    .limit(1);
   if (!lead) return null;
-  if (isBranchScoped(session)) return lead.branchId === session.branchId ? lead : null;
-  if (canViewAllLeads(session) || lead.ownerId === session.userId) return lead;
-  return null;
+  const scope = await resolveDataScope(tx, session);
+  return isInScope(scope, { branchId: lead.branchId, ownerId: lead.ownerId }) ? lead : null;
 }
