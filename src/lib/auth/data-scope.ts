@@ -5,17 +5,20 @@
  *
  *   1. A branch's data is not visible to another branch.
  *   2. Inside a branch, one person's data is not visible to another person —
- *      for EVERY role, not just RM. A branch head, a sub broker, an RIA and a
- *      compliance officer are all walled to their own records by default.
+ *      for EVERY role, not just RM. A sub broker, an RIA and a compliance
+ *      officer are all walled to their own records by default.
  *   3. Back office (back_office / ops) and the firm admin (owner) see
  *      everything, every branch, every owner.
- *   4. Anyone else can be granted specific branches on their employee record
- *      (users.allowed_branches, migration 0216). A grant lifts BOTH walls for
- *      those branches: every record in them, whoever owns it.
+ *   4. A BRANCH HEAD sees every user's records in their OWN branch, and nothing
+ *      from any other branch. This is automatic — running that branch is the
+ *      job, so it does not wait on someone remembering to tick a box.
+ *   5. Anyone can additionally be granted specific branches on their employee
+ *      record (users.allowed_branches, migration 0216). A grant lifts BOTH
+ *      walls for those branches: every record in them, whoever owns it. Grants
+ *      ADD to (4), so a branch head covering a second branch gets both.
  *
- * Why (2) is stated as "every role": the previous model special-cased
- * branch_head and sub_broker to see their whole branch, which meant a role name
- * silently widened someone's view. Now the only thing that widens a view is an
+ * Note what (4) does NOT do: it never widens anyone beyond a single branch, and
+ * it is the only place a role name still widens a view. Everything else is an
  * explicit grant a human made on that person's record, which is auditable and
  * changes without inventing a new role.
  *
@@ -41,6 +44,22 @@ export const ALL_BRANCH_ROLES = ["owner", "back_office", "ops"];
 
 export function seesAllBranches(session: SessionUser): boolean {
   return session.roles.some((r) => ALL_BRANCH_ROLES.includes(r));
+}
+
+/**
+ * Roles that automatically see their OWN branch in full — every user's records
+ * in it, no grant required.
+ *
+ * Only branch_head. Running a branch means seeing what the branch is doing; a
+ * branch head who could see only their own handful of records could not do the
+ * job, and making that wait on an admin ticking a box means it is wrong by
+ * default for every branch head created from here on.
+ */
+export const OWN_BRANCH_ROLES = ["branch_head"];
+
+/** Does this session manage its own branch (and actually have one)? */
+export function managesOwnBranch(session: SessionUser): boolean {
+  return !!session.branchId && session.roles.some((r) => OWN_BRANCH_ROLES.includes(r));
 }
 
 /** What a session is allowed to see, resolved once and reused per query. */
@@ -88,8 +107,14 @@ export async function loadAllowedBranches(
 /** Resolve the wall for this session. Call inside the tenant transaction. */
 export async function resolveDataScope(tx: any, session: SessionUser): Promise<DataScope> {
   if (seesAllBranches(session)) return { kind: "all" };
-  const granted = await loadAllowedBranches(tx, session.tenantId, session.userId);
-  if (granted.length > 0) return { kind: "branches", branchIds: granted };
+
+  // A branch head's own branch is implicit; explicit grants ADD to it, so one
+  // covering a second branch sees both. Deduped because the two overlap the
+  // moment an admin also ticks the branch they already run.
+  const branchIds = new Set(await loadAllowedBranches(tx, session.tenantId, session.userId));
+  if (managesOwnBranch(session)) branchIds.add(session.branchId!);
+
+  if (branchIds.size > 0) return { kind: "branches", branchIds: [...branchIds] };
   return { kind: "own", userId: session.userId };
 }
 

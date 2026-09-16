@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   ALL_BRANCH_ROLES,
+  OWN_BRANCH_ROLES,
+  managesOwnBranch,
   seesAllBranches,
   resolveDataScope,
   dataScopeSql,
@@ -13,10 +15,11 @@ import type { SessionUser } from "@/lib/auth/session";
  * The data wall.
  *
  *   a branch's data is invisible to another branch;
- *   inside a branch, one person's data is invisible to another person, for
- *     EVERY role;
+ *   inside a branch, one person's data is invisible to another person;
  *   back office + the firm admin see everything;
- *   a per-user branch grant lifts both walls for the granted branches.
+ *   a branch head sees their own branch in full, automatically;
+ *   a per-user branch grant lifts both walls for the granted branches, and
+ *     stacks on top of a branch head's own branch.
  *
  * These tests pin the rule itself. The SQL it produces is exercised against a
  * real database separately — here we care that the right SHAPE comes out for
@@ -56,9 +59,9 @@ describe("seesAllBranches", () => {
   });
 
   it("is false for every other role — including the ones that used to see all", () => {
-    // compliance and gifting_hr hold investor.view.all, marketing holds
-    // lead.view.all, and branch_head used to get its whole branch. None of that
-    // widens the wall any more; only a grant does.
+    // compliance and gifting_hr hold investor.view.all and marketing holds
+    // lead.view.all; none of that means the whole FIRM any more. branch_head is
+    // here too: it sees one branch, which is not the same as all of them.
     for (const role of ["compliance", "gifting_hr", "marketing", "branch_head", "sub_broker", "rm", "ria", "insurance"]) {
       expect(seesAllBranches(session([role]))).toBe(false);
     }
@@ -69,14 +72,55 @@ describe("seesAllBranches", () => {
   });
 });
 
+describe("managesOwnBranch", () => {
+  it("is true for a branch head with a branch", () => {
+    for (const role of OWN_BRANCH_ROLES) {
+      expect(managesOwnBranch(session([role], BRANCH_A))).toBe(true);
+    }
+  });
+
+  it("is false for a branch head with NO branch assigned", () => {
+    // Nothing to wall to — they fall through to own-records rather than being
+    // walled against a branch that does not exist, which would match nothing.
+    expect(managesOwnBranch(session(["branch_head"], null))).toBe(false);
+  });
+
+  it("is false for every non-managing role", () => {
+    for (const role of ["rm", "sub_broker", "compliance", "ria", "insurance", "marketing"]) {
+      expect(managesOwnBranch(session([role], BRANCH_A))).toBe(false);
+    }
+  });
+});
+
 describe("resolveDataScope", () => {
   it("gives back office everything without reading a grant", async () => {
     const tx = { execute: async () => { throw new Error("should not query"); } };
     expect(await resolveDataScope(tx, session(["back_office"]))).toEqual({ kind: "all" });
   });
 
-  it("falls back to own-records when there is no grant", async () => {
+  it("gives a branch head their OWN branch with no grant at all", async () => {
     const scope = await resolveDataScope(txWithGrant(null), session(["branch_head"], BRANCH_A));
+    expect(scope).toEqual({ kind: "branches", branchIds: [BRANCH_A] });
+  });
+
+  it("adds a grant ON TOP of a branch head's own branch", async () => {
+    const scope = await resolveDataScope(txWithGrant([BRANCH_B]), session(["branch_head"], BRANCH_A));
+    expect(scope.kind).toBe("branches");
+    expect([...(scope as { branchIds: string[] }).branchIds].sort()).toEqual([BRANCH_A, BRANCH_B].sort());
+  });
+
+  it("does not list a branch twice when the grant repeats the head's own branch", async () => {
+    const scope = await resolveDataScope(txWithGrant([BRANCH_A]), session(["branch_head"], BRANCH_A));
+    expect(scope).toEqual({ kind: "branches", branchIds: [BRANCH_A] });
+  });
+
+  it("falls back to own-records for a branch head with no branch assigned", async () => {
+    const scope = await resolveDataScope(txWithGrant(null), session(["branch_head"], null));
+    expect(scope).toEqual({ kind: "own", userId: ME });
+  });
+
+  it("still gives a plain RM own-records when there is no grant", async () => {
+    const scope = await resolveDataScope(txWithGrant(null), session(["rm"], BRANCH_A));
     expect(scope).toEqual({ kind: "own", userId: ME });
   });
 

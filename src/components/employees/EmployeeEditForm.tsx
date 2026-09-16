@@ -170,6 +170,9 @@ export function EmployeeEditForm({
   // Roles that already see every branch — the grant below is meaningless for
   // them. Mirrors ALL_BRANCH_ROLES in lib/auth/data-scope.ts.
   const seesAllBranchesByRole = v.roles.some((r) => ["owner", "back_office", "ops"].includes(r));
+  // Mirrors OWN_BRANCH_ROLES in lib/auth/data-scope.ts — a branch head gets
+  // their own branch without a grant, so the card must not imply otherwise.
+  const isBranchHead = v.roles.includes("branch_head");
   // The firm's accessible sidebar items, grouped — the pool the owner grants from.
   const tenantNavSet = new Set(tenantNavKeys);
   const accessibleNavGroups = NAV_ACCESS_GROUPS.map((g) => ({
@@ -655,9 +658,13 @@ export function EmployeeEditForm({
                   })}
                 </div>
                 <div className="text-[11px] text-muted-foreground">
-                  {branchAccess.length === 0
-                    ? "No branches granted — this person sees only their own records."
-                    : `Sees every record in ${branchAccess.length} branch${branchAccess.length === 1 ? "" : "es"}.`}
+                  {isBranchHead
+                    ? branchAccess.length === 0
+                      ? "Branch heads already see every record in their own branch. Tick extra branches only if they cover more than one."
+                      : `Their own branch, plus every record in ${branchAccess.length} more.`
+                    : branchAccess.length === 0
+                      ? "No branches granted — this person sees only their own records."
+                      : `Sees every record in ${branchAccess.length} branch${branchAccess.length === 1 ? "" : "es"}.`}
                 </div>
               </>
             )}
