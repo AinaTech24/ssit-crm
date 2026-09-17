@@ -294,13 +294,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Reassigning the RM must stay inside the firm: a uuid from another tenant
       // is a valid uuid but would orphan the client under an RM who can't see
       // them. Verify the target user belongs to this tenant before assigning.
+      // Also re-home the client's branch to the NEW RM's own branch — this
+      // used to leave branch_id pointing at whoever's branch it happened to
+      // already be, so after a reassignment the branch head who could see it
+      // (the old RM's) and the branch head who should now be able to (the new
+      // RM's) were both wrong. Same fix as the importer (see migration 0218).
+      let rmBranchPatch: { branchId?: string | null } = {};
       if (parse.data.rmId !== undefined && parse.data.rmId !== before.rmId) {
         const [u] = await tx
-          .select({ id: users.id })
+          .select({ id: users.id, branchId: users.branchId })
           .from(users)
           .where(and(eq(users.id, parse.data.rmId), eq(users.tenantId, session.tenantId)))
           .limit(1);
         if (!u) return "bad_rm" as const;
+        if (u.branchId) rmBranchPatch = { branchId: u.branchId };
       }
 
       // Stamp KYC audit fields when any KYC-related column is touched.
@@ -380,6 +387,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...reviewPatch,
           ...datePatch,
           ...mirror,
+          ...rmBranchPatch,
           ...(parse.data.uccCodes !== undefined ? { uccCodes: cleanUccCodes(parse.data.uccCodes) } : {}),
           // De-duplicate rather than trusting the client: the tag chips and the
           // free-text box can both produce "Motilal Oswal".

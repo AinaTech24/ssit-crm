@@ -209,12 +209,29 @@ export async function POST(req: NextRequest) {
       const cfDefs = await loadCustomFieldDefs(tx, session.tenantId, "investor");
       const customFields = sanitizeCustomFields(cfDefs, body.customFields);
 
+      // The client's branch is the ASSIGNED RM's own branch, not the
+      // creator's — this used to be session.branchId unconditionally, so a
+      // back_office/ops user (investor.edit.all, no branch of their own)
+      // assigning a new client to an RM in another branch left the client
+      // tagged with the creator's branch (or NULL). A branch head then either
+      // couldn't see clients their own RMs actually own, or — if the creator
+      // happened to be based at the branch everyone imports/creates from —
+      // saw every RM's clients lumped into that one branch. Same fix as the
+      // bulk importer (see the import/commit route + migration 0218).
+      const resolvedRmId = (canAssignAnyRm ? body.rmId : undefined) ?? session.userId;
+      const rmRow = (
+        await tx.execute(
+          sql`SELECT branch_id FROM users WHERE id = ${resolvedRmId}::uuid AND tenant_id = ${session.tenantId}::uuid LIMIT 1`
+        )
+      ).rows[0] as { branch_id: string | null } | undefined;
+      const resolvedBranchId = rmRow?.branch_id ?? session.branchId ?? null;
+
       const inserted = await tx
         .insert(investors)
         .values({
           id,
           tenantId: session.tenantId,
-          branchId: session.branchId,
+          branchId: resolvedBranchId,
           name: body.name,
           pan: body.pan,
           email: body.email || null,
@@ -235,7 +252,7 @@ export async function POST(req: NextRequest) {
           nomineeDob: body.nominees?.[0]?.dob || null,
           // Assigned-only callers may only create into their own book, so a
         // supplied rmId is ignored for them.
-        rmId: (canAssignAnyRm ? body.rmId : undefined) ?? session.userId,
+        rmId: resolvedRmId,
         // Servicing RM is a plain assignment — it grants no scope of its own,
         // so it is not gated the way the owning rmId is.
         serviceRmId: body.serviceRmId ?? null,

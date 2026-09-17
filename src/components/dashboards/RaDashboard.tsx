@@ -8,6 +8,8 @@ import { formatRelative, formatDate } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
 import { formatTrackerItems, type TrackerItem } from "@/db/schema/activity_entries";
+import { loadTenantLicense } from "@/lib/auth/license";
+import { tenantAccessibleNavKeys } from "@/config/nav-access";
 
 /**
  * RA (Research Analyst) dashboard — the two people this platform files under
@@ -33,6 +35,19 @@ type TaskRow = { id: string; title: string; priority: string; due_at: string | n
 export async function RaDashboard({ session }: { session: SessionUser }) {
   const isResearch = session.roles.includes("ra_research");
   const isSales = session.roles.includes("ra_sales");
+
+  // Only render sections for modules this firm actually has turned on — the
+  // sales body's Leads/Proposals/Meetings links used to show unconditionally
+  // even for a tenant without those modules enabled.
+  const license = await loadTenantLicense(session.tenantId, session.roles);
+  const navKeys = new Set(
+    tenantAccessibleNavKeys({
+      allowedNav: license.allowedNav,
+      enabledModules: license.enabledModules,
+      enabledFeatures: license.enabledFeatures,
+    })
+  );
+  const showNav = (href: string) => navKeys.has(href);
 
   const data = await withTenant(session.tenantId, async (tx) => {
     const tasks = await tx.execute(sql`
@@ -128,15 +143,17 @@ export async function RaDashboard({ session }: { session: SessionUser }) {
               <Kpi label="Research entries" value={String(data.research!.monthCount)} sub="This month" />
             </>
           )}
-          {isSales && (
+          {isSales && showNav("/dashboard/leads") && (
             <>
               <Kpi label="Open leads" value={String(data.salesFunnel!.open)} sub="In pipeline" />
               <Kpi label="Converted" value={String(data.salesFunnel!.convertedMtd)} sub="This month" />
               <Kpi label="Follow-ups today" value={String(data.salesFunnel!.followUpsToday)} tone={data.salesFunnel!.followUpsToday > 0 ? "amber" : undefined} />
-              <Kpi label="Meetings this week" value={String(data.salesFunnel!.meetingsDue)} />
             </>
           )}
-          <Kpi label="Open tasks" value={String(data.tasks.length)} />
+          {isSales && showNav("/dashboard/review-meetings") && (
+            <Kpi label="Meetings this week" value={String(data.salesFunnel!.meetingsDue)} />
+          )}
+          {showNav("/dashboard/tasks") && <Kpi label="Open tasks" value={String(data.tasks.length)} />}
         </div>
       </div>
 
@@ -168,7 +185,7 @@ export async function RaDashboard({ session }: { session: SessionUser }) {
         </Section>
       )}
 
-      {isSales && (
+      {isSales && showNav("/dashboard/leads") && (
         <Section title="Follow-ups today" count={data.salesFunnel!.leads.length} icon={Phone}>
           {data.salesFunnel!.leads.length === 0 ? (
             <DashboardEmptyState compact title="No follow-ups due today 🎉" hint="You're caught up on the pipeline." />
@@ -188,20 +205,22 @@ export async function RaDashboard({ session }: { session: SessionUser }) {
         </Section>
       )}
 
-      <Section title="My open tasks" count={data.tasks.length} icon={ListChecks}>
-        {data.tasks.length === 0 ? (
-          <DashboardEmptyState compact title="No open tasks 🎉" hint="Your task list is clear." />
-        ) : (
-          <ul className="divide-y">
-            {data.tasks.map((t: TaskRow) => (
-              <li key={t.id} className="py-2 flex items-center justify-between text-sm">
-                <span className="truncate">{t.title}</span>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">{t.due_at ? formatRelative(t.due_at) : "no due"}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      {showNav("/dashboard/tasks") && (
+        <Section title="My open tasks" count={data.tasks.length} icon={ListChecks}>
+          {data.tasks.length === 0 ? (
+            <DashboardEmptyState compact title="No open tasks 🎉" hint="Your task list is clear." />
+          ) : (
+            <ul className="divide-y">
+              {data.tasks.map((t: TaskRow) => (
+                <li key={t.id} className="py-2 flex items-center justify-between text-sm">
+                  <span className="truncate">{t.title}</span>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{t.due_at ? formatRelative(t.due_at) : "no due"}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {isResearch && (
@@ -211,15 +230,21 @@ export async function RaDashboard({ session }: { session: SessionUser }) {
         )}
         {isSales && (
           <>
-            <Link href="/dashboard/leads" className="btn-secondary text-xs inline-flex items-center gap-1.5">
-              <TrendingUp className="size-3.5" /> Leads
-            </Link>
-            <Link href="/dashboard/proposals" className="btn-secondary text-xs inline-flex items-center gap-1.5">
-              <FileSignature className="size-3.5" /> Proposals
-            </Link>
-            <Link href="/dashboard/review-meetings" className="btn-secondary text-xs inline-flex items-center gap-1.5">
-              <CalendarClock className="size-3.5" /> Meetings
-            </Link>
+            {showNav("/dashboard/leads") && (
+              <Link href="/dashboard/leads" className="btn-secondary text-xs inline-flex items-center gap-1.5">
+                <TrendingUp className="size-3.5" /> Leads
+              </Link>
+            )}
+            {showNav("/dashboard/proposals") && (
+              <Link href="/dashboard/proposals" className="btn-secondary text-xs inline-flex items-center gap-1.5">
+                <FileSignature className="size-3.5" /> Proposals
+              </Link>
+            )}
+            {showNav("/dashboard/review-meetings") && (
+              <Link href="/dashboard/review-meetings" className="btn-secondary text-xs inline-flex items-center gap-1.5">
+                <CalendarClock className="size-3.5" /> Meetings
+              </Link>
+            )}
           </>
         )}
       </div>

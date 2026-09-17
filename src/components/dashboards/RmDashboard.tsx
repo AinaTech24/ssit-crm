@@ -391,12 +391,13 @@ export async function RmDashboard({
             at half width, with the reviews list beneath them. */}
         <Section title={viewingOther ? `${targetName ?? "Team member"} at glance` : "At glance"}>
           <div className="grid grid-cols-2 gap-3">
-        <Kpi label={`${who} clients`} value={String(data.myClients)} sub={formatINR(data.myAum) + " AUM"} />
-        <Kpi label={`${who} SIP book`} value={formatINR(data.mySipBook)} sub="per month" />
+        <Kpi label={`${who} clients`} value={String(data.myClients)} sub={formatINR(data.myAum) + " AUM"} href="/dashboard/investors" />
+        <Kpi label={`${who} SIP book`} value={formatINR(data.mySipBook)} sub="per month" href="/dashboard/sips" />
         <Kpi
           label={`${who} net sales`}
           value={formatINR(data.netMtd)}
           sub={`Gross ${formatINR(data.grossMtd)} · ${periodLabel}`}
+          href="/dashboard/reports/net_sales"
         >
           {data.netSeries.length >= 2 && (
             <Sparkline
@@ -406,10 +407,13 @@ export async function RmDashboard({
             />
           )}
         </Kpi>
-        <Kpi label="Open leads" value={String(data.openLeads)} sub={`${data.convertedMtd} converted · ${periodLabel}`} />
+        <Kpi label="Open leads" value={String(data.openLeads)} sub={`${data.convertedMtd} converted · ${periodLabel}`} href="/dashboard/leads" />
         {/* Sales Quota Ring — driven by users.annual_target / 12 */}
         {data.monthlyTarget > 0 ? (
-          <div className="rounded-xl border bg-background/60 p-4 flex flex-col items-center justify-center text-center">
+          <Link
+            href="/dashboard/settings/targets"
+            className="rounded-xl border bg-background/60 p-4 flex flex-col items-center justify-center text-center hover-glow-cyan transition-colors"
+          >
             <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">MTD Sales Quota</div>
             <div className="relative size-16 flex items-center justify-center">
               <svg className="size-full transform -rotate-90">
@@ -453,7 +457,7 @@ export async function RmDashboard({
                 SIP target: {formatINR(data.sipMonthlyTarget)}/mo
               </div>
             )}
-          </div>
+          </Link>
         ) : (
           <Link
             href="/dashboard/settings/targets"
@@ -782,21 +786,25 @@ function Kpi({
   label,
   value,
   sub,
+  href,
   children,
 }: {
   label: string;
   value: string;
   sub?: string;
+  /** When set, the whole tile links to the module it summarizes. */
+  href?: string;
   children?: React.ReactNode;
 }) {
-  return (
-    <div className="rounded-xl border bg-background/60 p-4 hover-glow-cyan transition-colors">
+  const inner = (
+    <div className="rounded-xl border bg-background/60 p-4 hover-glow-cyan transition-colors h-full">
       <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">{label}</div>
       <div className="text-2xl font-bold mt-2 tracking-tight text-gradient">{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-1 font-medium">{sub}</div>}
       {children}
     </div>
   );
+  return href ? <Link href={href}>{inner}</Link> : inner;
 }
 
 function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {

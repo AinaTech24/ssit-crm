@@ -7,6 +7,8 @@ import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { formatINR, formatDate, formatRelative } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
+import { loadTenantLicense } from "@/lib/auth/license";
+import { tenantAccessibleNavKeys } from "@/config/nav-access";
 
 /**
  * RIA dashboard — a Registered Investment Advisor works fee-based advice, not
@@ -28,6 +30,20 @@ type ReviewDueRow = { id: string; name: string; avatar_url: string | null; next_
 type TaskRow = { id: string; title: string; priority: string; due_at: string | null };
 
 export async function RiaDashboard({ session }: { session: SessionUser }) {
+  // Only show a section/link for a module this firm actually has turned on —
+  // an RIA dashboard hard-coded every section regardless of which CRM modules
+  // the tenant is licensed for, so a firm without (say) Financial Plans still
+  // saw an empty "Financial plans" card pointing at a page they can't open.
+  const license = await loadTenantLicense(session.tenantId, session.roles);
+  const navKeys = new Set(
+    tenantAccessibleNavKeys({
+      allowedNav: license.allowedNav,
+      enabledModules: license.enabledModules,
+      enabledFeatures: license.enabledFeatures,
+    })
+  );
+  const showNav = (href: string) => navKeys.has(href);
+
   const data = await withTenant(session.tenantId, async (tx) => {
     // Every query below aliases the table as "i" — the scope predicate must
     // use the SAME alias, or Postgres can't resolve it ("invalid reference to
@@ -145,106 +161,132 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
       <div className="card-surface glass-card p-4">
         <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-3">At a glance</div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Kpi label="My clients" value={String(data.clients)} sub={`${formatINR(data.aua)} AUA`} />
-          <Kpi label="Financial plans" value={String(data.draftPlans + data.finalizedPlans)} sub={`${data.draftPlans} draft · ${data.finalizedPlans} final`} />
-          <Kpi label="Risk profile gaps" value={String(data.riskGapTotal)} sub="No response in 12 months" tone={data.riskGapTotal > 0 ? "amber" : undefined} />
-          <Kpi label="Reviews due" value={String(data.reviewsDue.length)} sub="Next 7 days" />
-          <Kpi label="Families" value={String(data.families)} sub="Under advice" />
+          {showNav("/dashboard/investors") && (
+            <Kpi label="My clients" value={String(data.clients)} sub={`${formatINR(data.aua)} AUA`} />
+          )}
+          {showNav("/dashboard/financial-plans") && (
+            <Kpi label="Financial plans" value={String(data.draftPlans + data.finalizedPlans)} sub={`${data.draftPlans} draft · ${data.finalizedPlans} final`} />
+          )}
+          {showNav("/dashboard/risk-profiles") && (
+            <Kpi label="Risk profile gaps" value={String(data.riskGapTotal)} sub="No response in 12 months" tone={data.riskGapTotal > 0 ? "amber" : undefined} />
+          )}
+          {showNav("/dashboard/investors") && (
+            <Kpi label="Reviews due" value={String(data.reviewsDue.length)} sub="Next 7 days" />
+          )}
+          {showNav("/dashboard/families") && (
+            <Kpi label="Families" value={String(data.families)} sub="Under advice" />
+          )}
         </div>
       </div>
 
+      {(showNav("/dashboard/financial-plans") || showNav("/dashboard/risk-profiles")) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {showNav("/dashboard/financial-plans") && (
+            <Section title="Financial plans" count={data.plans.length} icon={FileSignature}>
+              {data.plans.length === 0 ? (
+                <DashboardEmptyState
+                  compact
+                  title="No financial plans yet"
+                  hint="Start one from a client's page to capture goals, cash flow and an asset-allocation recommendation."
+                  cta={{ href: "/dashboard/financial-plans", label: "Financial plans" }}
+                />
+              ) : (
+                <ul className="divide-y">
+                  {data.plans.map((p: PlanRow) => (
+                    <li key={p.id} className="py-2 flex items-center justify-between text-sm gap-2">
+                      <Link href={`/dashboard/financial-plans/${p.id}`} className="min-w-0 hover:underline">
+                        <span className="block truncate font-medium">{p.client_name ?? p.plan_number}</span>
+                        <span className="block text-[11px] text-muted-foreground">{p.plan_number}</span>
+                      </Link>
+                      <span className={`chip text-xs border ${p.status === "finalized" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
+                        {p.status}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          )}
+
+          {showNav("/dashboard/risk-profiles") && (
+            <Section title="Risk profile gaps" count={data.riskGaps.length} icon={Gauge}>
+              {data.riskGaps.length === 0 ? (
+                <DashboardEmptyState compact title="Every client is covered 🎉" hint="No client is missing a risk profile from the last 12 months." />
+              ) : (
+                <ul className="divide-y">
+                  {data.riskGaps.map((c: RiskGapRow) => (
+                    <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
+                      <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
+                        <Avatar src={c.avatar_url ? `/api/investors/${c.id}/avatar` : null} name={c.name} size={26} />
+                        <span className="truncate">{c.name}</span>
+                      </Link>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {c.last_profiled ? `Last ${formatDate(c.last_profiled)}` : "Never profiled"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Section title="Financial plans" count={data.plans.length} icon={FileSignature}>
-          {data.plans.length === 0 ? (
-            <DashboardEmptyState
-              compact
-              title="No financial plans yet"
-              hint="Start one from a client's page to capture goals, cash flow and an asset-allocation recommendation."
-              cta={{ href: "/dashboard/financial-plans", label: "Financial plans" }}
-            />
-          ) : (
-            <ul className="divide-y">
-              {data.plans.map((p: PlanRow) => (
-                <li key={p.id} className="py-2 flex items-center justify-between text-sm gap-2">
-                  <Link href={`/dashboard/financial-plans/${p.id}`} className="min-w-0 hover:underline">
-                    <span className="block truncate font-medium">{p.client_name ?? p.plan_number}</span>
-                    <span className="block text-[11px] text-muted-foreground">{p.plan_number}</span>
-                  </Link>
-                  <span className={`chip text-xs border ${p.status === "finalized" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
-                    {p.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        {showNav("/dashboard/investors") && (
+          <Section title="Reviews due" count={data.reviewsDue.length} icon={CalendarClock}>
+            {data.reviewsDue.length === 0 ? (
+              <DashboardEmptyState compact title="Nothing due this week 🎉" hint="No client review falls in the next 7 days." />
+            ) : (
+              <ul className="divide-y">
+                {data.reviewsDue.map((c: ReviewDueRow) => (
+                  <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
+                    <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
+                      <Avatar src={c.avatar_url ? `/api/investors/${c.id}/avatar` : null} name={c.name} size={26} />
+                      <span className="truncate">{c.name}</span>
+                    </Link>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(c.next_review_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        )}
 
-        <Section title="Risk profile gaps" count={data.riskGaps.length} icon={Gauge}>
-          {data.riskGaps.length === 0 ? (
-            <DashboardEmptyState compact title="Every client is covered 🎉" hint="No client is missing a risk profile from the last 12 months." />
-          ) : (
-            <ul className="divide-y">
-              {data.riskGaps.map((c: RiskGapRow) => (
-                <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
-                  <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
-                    <Avatar src={c.avatar_url ? `/api/investors/${c.id}/avatar` : null} name={c.name} size={26} />
-                    <span className="truncate">{c.name}</span>
-                  </Link>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {c.last_profiled ? `Last ${formatDate(c.last_profiled)}` : "Never profiled"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Section title="Reviews due" count={data.reviewsDue.length} icon={CalendarClock}>
-          {data.reviewsDue.length === 0 ? (
-            <DashboardEmptyState compact title="Nothing due this week 🎉" hint="No client review falls in the next 7 days." />
-          ) : (
-            <ul className="divide-y">
-              {data.reviewsDue.map((c: ReviewDueRow) => (
-                <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
-                  <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
-                    <Avatar src={c.avatar_url ? `/api/investors/${c.id}/avatar` : null} name={c.name} size={26} />
-                    <span className="truncate">{c.name}</span>
-                  </Link>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(c.next_review_at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        <Section title="My open tasks" count={data.tasks.length} icon={ListChecks}>
-          {data.tasks.length === 0 ? (
-            <DashboardEmptyState compact title="No open tasks 🎉" hint="Your task list is clear." />
-          ) : (
-            <ul className="divide-y">
-              {data.tasks.map((t: TaskRow) => (
-                <li key={t.id} className="py-2 flex items-center justify-between text-sm">
-                  <span className="truncate">{t.title}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{t.due_at ? formatRelative(t.due_at) : "no due"}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        {showNav("/dashboard/tasks") && (
+          <Section title="My open tasks" count={data.tasks.length} icon={ListChecks}>
+            {data.tasks.length === 0 ? (
+              <DashboardEmptyState compact title="No open tasks 🎉" hint="Your task list is clear." />
+            ) : (
+              <ul className="divide-y">
+                {data.tasks.map((t: TaskRow) => (
+                  <li key={t.id} className="py-2 flex items-center justify-between text-sm">
+                    <span className="truncate">{t.title}</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{t.due_at ? formatRelative(t.due_at) : "no due"}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link href="/dashboard/investors" className="btn-secondary text-xs inline-flex items-center gap-1.5">
-          <Briefcase className="size-3.5" /> My clients
-        </Link>
-        <Link href="/dashboard/families" className="btn-secondary text-xs inline-flex items-center gap-1.5">
-          <HeartHandshake className="size-3.5" /> Family mapping
-        </Link>
-        <Link href="/dashboard/risk-profiles" className="btn-secondary text-xs inline-flex items-center gap-1.5">
-          <Gauge className="size-3.5" /> Risk profiles
-        </Link>
+        {showNav("/dashboard/investors") && (
+          <Link href="/dashboard/investors" className="btn-secondary text-xs inline-flex items-center gap-1.5">
+            <Briefcase className="size-3.5" /> My clients
+          </Link>
+        )}
+        {showNav("/dashboard/families") && (
+          <Link href="/dashboard/families" className="btn-secondary text-xs inline-flex items-center gap-1.5">
+            <HeartHandshake className="size-3.5" /> Family mapping
+          </Link>
+        )}
+        {showNav("/dashboard/risk-profiles") && (
+          <Link href="/dashboard/risk-profiles" className="btn-secondary text-xs inline-flex items-center gap-1.5">
+            <Gauge className="size-3.5" /> Risk profiles
+          </Link>
+        )}
       </div>
     </div>
   );
