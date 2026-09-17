@@ -10,7 +10,9 @@
  * just the client-shaped adapter on top of it:
  *
  *   owner / back_office / ops        → the whole firm's book
- *   anyone with a branch grant       → every client in those branches
+ *   a branch head / branch grant     → every client whose RM sits in that
+ *                                      branch (NOT the client's own stored
+ *                                      branch column, which drifts)
  *   everyone else                    → clients assigned to them
  *
  * The capability gate is separate and still applies first: a role with no
@@ -31,13 +33,9 @@ import { investors } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import {
-  dataScopeSql,
   resolveDataScope,
-  assertInScope,
-  applyScopeView,
-  resolveScopeView,
-  hasBranchView,
-  type ScopeView,
+  dataScopeSqlViaOwnerBranch,
+  isInScopeViaOwnerBranch,
 } from "@/lib/auth/data-scope";
 
 /** Throws 403 when the caller has no client visibility at all. */
@@ -91,50 +89,16 @@ const INVESTOR_COLS = (alias: string) => ({
  * gets a `TRUE` fragment, so callers can drop it into an `and(...)` without a
  * null check. Callers that still branch on falsiness keep working.
  */
-export async function investorScopeCondition(tx: any, session: SessionUser, view?: ScopeView) {
+export async function investorScopeCondition(tx: any, session: SessionUser) {
   requireInvestorView(session);
-  const scope = await resolveDataScope(tx, session);
-  return dataScopeSql(
-    view ? applyScopeView(scope, session.userId, view) : scope,
-    INVESTOR_COLS("investors")
-  );
+  return investorScopeSql(tx, session);
 }
 
 /** Same rule as raw SQL, for queries built with sql`` fragments. */
-export async function investorScopeSql(
-  tx: any,
-  session: SessionUser,
-  alias = "investors",
-  view?: ScopeView
-) {
+export async function investorScopeSql(tx: any, session: SessionUser, alias = "investors") {
   requireInvestorView(session);
-  const scope = await resolveDataScope(tx, session);
-  return dataScopeSql(
-    view ? applyScopeView(scope, session.userId, view) : scope,
-    INVESTOR_COLS(alias)
-  );
-}
-
-/**
- * The client list's "My clients / My branch" switch, resolved for this session.
- *
- * Returns the predicate to filter on, plus whether to render the switch at all
- * and which side it's on. Only a branch-scoped session has two sides — an RM
- * sees their own records either way, and an owner sees the firm.
- */
-export async function investorListScope(
-  tx: any,
-  session: SessionUser,
-  rawView: string | undefined
-): Promise<{ condition: SQL; view: ScopeView; showSwitch: boolean }> {
-  requireInvestorView(session);
-  const scope = await resolveDataScope(tx, session);
-  const view = resolveScopeView(rawView, session, scope);
-  return {
-    condition: dataScopeSql(applyScopeView(scope, session.userId, view), INVESTOR_COLS("investors")),
-    view,
-    showSwitch: hasBranchView(scope),
-  };
+  const cols = INVESTOR_COLS(alias);
+  return dataScopeSqlViaOwnerBranch(await resolveDataScope(tx, session), cols.owner);
 }
 
 /**
@@ -156,11 +120,14 @@ export async function assertCanViewClient(
   inv: { rmId?: string | null; serviceRmId?: string | null; branchId?: string | null }
 ): Promise<void> {
   requireInvestorView(session);
-  await assertInScope(
-    tx,
-    session,
-    { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] },
-    "client"
+  // Same rule as the list: visible if you own it, or if whoever owns it sits in
+  // your branch. Checked against the OWNER's branch, not the client's stored
+  // branch column, so the detail page can't disagree with the list.
+  const scope = await resolveDataScope(tx, session);
+  if (await isInScopeViaOwnerBranch(tx, scope, [inv.rmId, inv.serviceRmId])) return;
+  throw Object.assign(
+    new Error("forbidden: this client belongs to another branch or team member"),
+    { status: 403 }
   );
 }
 

@@ -5,8 +5,7 @@ import { withTenant } from "@/db/client";
 import { investors } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
-import { investorListScope, requireInvestorView } from "@/lib/investors/access";
-import { BookScopeSwitch } from "@/components/investors/BookScopeSwitch";
+import { investorScopeCondition, requireInvestorView } from "@/lib/investors/access";
 import { RecomputeTiersButton } from "@/components/investors/RecomputeTiersButton";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { dateRangeFilter } from "@/lib/filters/date-range";
@@ -134,17 +133,14 @@ export default async function InvestorsPage({
   const PAGE_SIZE = 50;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
 
-  const { rows, total, kanbanRows, rms, allIds, dupCount, bookView, showSwitch } = await withTenant(session.tenantId, async (tx) => {
+  const { rows, total, kanbanRows, rms, allIds, dupCount } = await withTenant(session.tenantId, async (tx) => {
     // Filters live in one shared helper so the page and the Excel export apply
     // identical WHERE logic. Tenant isolation is handled by RLS.
     // Row scope: an RM sees only their own book, a branch head only their
     // branch. RLS isolates by TENANT only, so without this every RM saw the
     // whole firm’s client list (and could export it) — the JSON API scoped
     // correctly but this page did not.
-    // "My clients" vs "My branch". A branch head who also carries a book opens
-    // on their own clients and switches to the branch when they want it; for
-    // everyone else this resolves to their normal scope and no switch renders.
-    const { condition: scope, view: bookView, showSwitch } = await investorListScope(tx, session, sp.book);
+    const scope = await investorScopeCondition(tx, session);
     const filters = buildInvestorWhere(sp, userId);
     const where = scope ? and(filters as any, scope) : filters;
 
@@ -277,7 +273,7 @@ export default async function InvestorsPage({
     // Possible-duplicate count (same PAN / mobile) — surfaced as a banner.
     const dupCount = await countPossibleDuplicates(tx as any, session.tenantId);
 
-    return { rows: r, total: Number(c[0]?.c ?? 0), kanbanRows, rms, allIds, dupCount, bookView, showSwitch };
+    return { rows: r, total: Number(c[0]?.c ?? 0), kanbanRows, rms, allIds, dupCount };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
   const rmOptions = (rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -306,9 +302,8 @@ export default async function InvestorsPage({
   return (
     <div className="space-y-6 max-w-7xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div>
           <h1 className="text-2xl font-bold tracking-tight">Clients</h1>
-          {showSwitch && <BookScopeSwitch view={bookView} />}
         </div>
         <div className="flex gap-2 items-center flex-wrap">
           {/* View toggle — Table vs Kanban. Mirrors the leads page pattern.

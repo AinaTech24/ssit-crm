@@ -22,7 +22,7 @@ import { investors, users } from "@/db/schema";
 import { loadTenantLicense } from "@/lib/auth/license";
 import { isFieldAllowed } from "@/lib/auth/field-gate";
 import { buildInvestorWhere } from "@/lib/investors/list-filters";
-import { investorListScope } from "@/lib/investors/access";
+import { investorScopeCondition } from "@/lib/investors/access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -86,9 +86,7 @@ export async function GET(req: NextRequest) {
     const rows = await withTenant(
       session.tenantId,
       async (tx) => {
-        // Honours the same ?book=mine|branch switch the Clients page shows, so an
-        // export (and the mobile list) matches exactly what is on screen.
-        const { condition: scope } = await investorListScope(tx, session, sp.book);
+        const scope = await investorScopeCondition(tx, session);
         const filters = buildInvestorWhere(sp, session.userId);
         const where = scope ? and(filters as any, scope) : filters;
         const r = await tx

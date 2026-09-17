@@ -32,7 +32,6 @@
 
 import { sql, type SQL } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth/session";
-import { CLIENT_OWNING_ROLES } from "@/lib/auth/rbac";
 
 /**
  * Roles that see every branch and every owner's records before any grant.
@@ -286,47 +285,6 @@ export async function explainDataScope(
   };
 }
 
-/**
- * Which half of a branch-scoped person's world a list is showing.
- *
- * A branch head who ALSO carries a book (the common shape — an RM promoted to
- * run the branch) works their own clients day to day, but has to be able to
- * look at the whole branch. One default can't serve both, so the list offers
- * the switch and defaults to whichever matches the job.
- */
-export type ScopeView = "mine" | "branch";
-
-/** Is there anything to switch between? Only a branch scope has two halves. */
-export function hasBranchView(scope: DataScope): boolean {
-  return scope.kind === "branches";
-}
-
-/**
- * The switch's default position. Someone who owns clients starts on their own
- * book; a pure branch head (no book of their own) would see an empty list, so
- * they start on the branch.
- */
-export function defaultScopeView(session: SessionUser, scope: DataScope): ScopeView {
-  if (scope.kind !== "branches") return "branch"; // no switch — use the scope as-is
-  return session.roles.some((r) => CLIENT_OWNING_ROLES.includes(r)) ? "mine" : "branch";
-}
-
-/** Narrow a branch scope to just this person's records when "mine" is chosen. */
-export function applyScopeView(scope: DataScope, userId: string, view: ScopeView): DataScope {
-  if (view === "mine" && scope.kind === "branches") return { kind: "own", userId };
-  return scope;
-}
-
-/** Read the switch off the query string, falling back to the sensible default. */
-export function resolveScopeView(
-  raw: string | undefined,
-  session: SessionUser,
-  scope: DataScope
-): ScopeView {
-  if (raw === "branch" || raw === "mine") return raw;
-  return defaultScopeView(session, scope);
-}
-
 /** The columns a table exposes to the wall. Raw identifiers, never user input. */
 export type ScopeColumns = {
   /** e.g. "investors.branch_id" */
@@ -366,19 +324,29 @@ export function dataScopeSql(scope: DataScope, cols: ScopeColumns): SQL {
  * branch-scoped session this becomes a correlated EXISTS against users;
  * everything else behaves exactly like dataScopeSql.
  */
-export function dataScopeSqlViaOwnerBranch(scope: DataScope, ownerCol: string): SQL {
+export function dataScopeSqlViaOwnerBranch(
+  scope: DataScope,
+  ownerCol: string | string[]
+): SQL {
   if (scope.kind === "all") return sql`TRUE`;
+  const cols = Array.isArray(ownerCol) ? ownerCol : [ownerCol];
   if (scope.kind === "branches") {
+    // "Every record owned by someone in my branch." A record can have more than
+    // one legitimate owner (a client's relationship RM and its separate
+    // servicing RM), and ANY of them being in the branch is enough.
     return sql`EXISTS (
       SELECT 1 FROM users su
-      WHERE su.id = ${sql.raw(ownerCol)}
+      WHERE su.id IN (${sql.join(cols.map((c) => sql`${sql.raw(c)}`), sql`, `)})
         AND su.branch_id IN (${sql.join(
           scope.branchIds.map((b) => sql`${b}::uuid`),
           sql`, `
         )})
     )`;
   }
-  return sql`${sql.raw(ownerCol)} = ${scope.userId}::uuid`;
+  return sql`(${sql.join(
+    cols.map((c) => sql`${sql.raw(c)} = ${scope.userId}::uuid`),
+    sql` OR `
+  )})`;
 }
 
 /** Resolve + build in one step, for callers that need nothing else. */
@@ -407,6 +375,32 @@ export function isInScope(
   }
   const owners = Array.isArray(row.ownerId) ? row.ownerId : [row.ownerId];
   return owners.some((o) => o === scope.userId);
+}
+
+/**
+ * Single-row counterpart to `dataScopeSqlViaOwnerBranch`: is this record
+ * visible because the person who OWNS it sits in one of my branches?
+ *
+ * Must agree with the list predicate or a client shows in the list and 403s on
+ * the detail page (or worse, the reverse). Looks the owners up rather than
+ * trusting a branch column on the record itself.
+ */
+export async function isInScopeViaOwnerBranch(
+  tx: any,
+  scope: DataScope,
+  ownerIds: (string | null | undefined)[]
+): Promise<boolean> {
+  if (scope.kind === "all") return true;
+  const owners = ownerIds.filter((o): o is string => !!o);
+  if (!owners.length) return false;
+  if (scope.kind === "own") return owners.includes(scope.userId);
+  const r = await tx.execute(sql`
+    SELECT 1 FROM users su
+    WHERE su.id IN (${sql.join(owners.map((o) => sql`${o}::uuid`), sql`, `)})
+      AND su.branch_id IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})
+    LIMIT 1
+  `);
+  return r.rows.length > 0;
 }
 
 /** Throw 403 unless the row is visible to this session. */
