@@ -32,6 +32,7 @@
 
 import { sql, type SQL } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth/session";
+import { CLIENT_OWNING_ROLES } from "@/lib/auth/rbac";
 
 /**
  * Roles that see every branch and every owner's records before any grant.
@@ -283,6 +284,47 @@ export async function explainDataScope(
     scope: { kind: "own", userId: session.userId },
     reason: "Sees only the records assigned to them.",
   };
+}
+
+/**
+ * Which half of a branch-scoped person's world a list is showing.
+ *
+ * A branch head who ALSO carries a book (the common shape — an RM promoted to
+ * run the branch) works their own clients day to day, but has to be able to
+ * look at the whole branch. One default can't serve both, so the list offers
+ * the switch and defaults to whichever matches the job.
+ */
+export type ScopeView = "mine" | "branch";
+
+/** Is there anything to switch between? Only a branch scope has two halves. */
+export function hasBranchView(scope: DataScope): boolean {
+  return scope.kind === "branches";
+}
+
+/**
+ * The switch's default position. Someone who owns clients starts on their own
+ * book; a pure branch head (no book of their own) would see an empty list, so
+ * they start on the branch.
+ */
+export function defaultScopeView(session: SessionUser, scope: DataScope): ScopeView {
+  if (scope.kind !== "branches") return "branch"; // no switch — use the scope as-is
+  return session.roles.some((r) => CLIENT_OWNING_ROLES.includes(r)) ? "mine" : "branch";
+}
+
+/** Narrow a branch scope to just this person's records when "mine" is chosen. */
+export function applyScopeView(scope: DataScope, userId: string, view: ScopeView): DataScope {
+  if (view === "mine" && scope.kind === "branches") return { kind: "own", userId };
+  return scope;
+}
+
+/** Read the switch off the query string, falling back to the sensible default. */
+export function resolveScopeView(
+  raw: string | undefined,
+  session: SessionUser,
+  scope: DataScope
+): ScopeView {
+  if (raw === "branch" || raw === "mine") return raw;
+  return defaultScopeView(session, scope);
 }
 
 /** The columns a table exposes to the wall. Raw identifiers, never user input. */

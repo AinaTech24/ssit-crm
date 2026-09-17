@@ -26,11 +26,19 @@
  * pipeline.
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, type SQL } from "drizzle-orm";
 import { investors } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
-import { dataScopeSql, resolveDataScope, assertInScope } from "@/lib/auth/data-scope";
+import {
+  dataScopeSql,
+  resolveDataScope,
+  assertInScope,
+  applyScopeView,
+  resolveScopeView,
+  hasBranchView,
+  type ScopeView,
+} from "@/lib/auth/data-scope";
 
 /** Throws 403 when the caller has no client visibility at all. */
 export function requireInvestorView(session: SessionUser) {
@@ -83,15 +91,50 @@ const INVESTOR_COLS = (alias: string) => ({
  * gets a `TRUE` fragment, so callers can drop it into an `and(...)` without a
  * null check. Callers that still branch on falsiness keep working.
  */
-export async function investorScopeCondition(tx: any, session: SessionUser) {
+export async function investorScopeCondition(tx: any, session: SessionUser, view?: ScopeView) {
   requireInvestorView(session);
-  return dataScopeSql(await resolveDataScope(tx, session), INVESTOR_COLS("investors"));
+  const scope = await resolveDataScope(tx, session);
+  return dataScopeSql(
+    view ? applyScopeView(scope, session.userId, view) : scope,
+    INVESTOR_COLS("investors")
+  );
 }
 
 /** Same rule as raw SQL, for queries built with sql`` fragments. */
-export async function investorScopeSql(tx: any, session: SessionUser, alias = "investors") {
+export async function investorScopeSql(
+  tx: any,
+  session: SessionUser,
+  alias = "investors",
+  view?: ScopeView
+) {
   requireInvestorView(session);
-  return dataScopeSql(await resolveDataScope(tx, session), INVESTOR_COLS(alias));
+  const scope = await resolveDataScope(tx, session);
+  return dataScopeSql(
+    view ? applyScopeView(scope, session.userId, view) : scope,
+    INVESTOR_COLS(alias)
+  );
+}
+
+/**
+ * The client list's "My clients / My branch" switch, resolved for this session.
+ *
+ * Returns the predicate to filter on, plus whether to render the switch at all
+ * and which side it's on. Only a branch-scoped session has two sides — an RM
+ * sees their own records either way, and an owner sees the firm.
+ */
+export async function investorListScope(
+  tx: any,
+  session: SessionUser,
+  rawView: string | undefined
+): Promise<{ condition: SQL; view: ScopeView; showSwitch: boolean }> {
+  requireInvestorView(session);
+  const scope = await resolveDataScope(tx, session);
+  const view = resolveScopeView(rawView, session, scope);
+  return {
+    condition: dataScopeSql(applyScopeView(scope, session.userId, view), INVESTOR_COLS("investors")),
+    view,
+    showSwitch: hasBranchView(scope),
+  };
 }
 
 /**

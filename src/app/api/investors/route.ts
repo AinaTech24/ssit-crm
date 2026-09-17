@@ -16,7 +16,7 @@ import { require as requireCap, requireAny, can } from "@/lib/auth/rbac";
 import { assertActiveLicense, assertModuleEnabled } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { buildInvestorConditions } from "@/lib/investors/list-filters";
-import { investorScopeCondition } from "@/lib/investors/access";
+import { investorListScope } from "@/lib/investors/access";
 import { healthFields } from "@/lib/investors/health";
 import { NomineesArray } from "@/lib/investors/nominee";
 import { ReferralsArray } from "@/lib/investors/referral";
@@ -159,7 +159,9 @@ export async function GET(req: NextRequest) {
         // Scope: branch heads → their whole branch; assigned-only RMs → their
         // book. Shared with the list page and the Excel export so all three
         // return the same rows.
-        const scope = await investorScopeCondition(tx, session);
+        // Honours the same ?book=mine|branch switch the Clients page shows, so an
+        // export (and the mobile list) matches exactly what is on screen.
+        const { condition: scope } = await investorListScope(tx, session, sp.book);
         if (scope) conditions.push(scope);
         const where = and(...conditions);
         const rows = await tx
