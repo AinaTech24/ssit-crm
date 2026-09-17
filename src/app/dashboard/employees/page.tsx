@@ -70,11 +70,13 @@ export default async function EmployeesPage({
       SELECT u.id, u.name, u.email, u.phone, u.roles, u.status,
              u.department, u.joining_date, u.annual_target, u.sip_monthly_target,
              u.reporting_manager_id, mgr.name AS manager_name,
+             u.branch_id, br.name AS branch_name, u.restrict_to_own_records,
              u.euin, u.nism_expiry_at, u.last_login_at, u.created_at,
              (SELECT COUNT(*)::int FROM investors i WHERE i.rm_id = u.id AND i.status = 'active') AS assigned_clients,
              (SELECT COALESCE(SUM(i.aum::numeric), 0)::numeric FROM investors i WHERE i.rm_id = u.id AND i.status = 'active') AS my_aum
       FROM users u
       LEFT JOIN users mgr ON mgr.id = u.reporting_manager_id
+      LEFT JOIN branches br ON br.id = u.branch_id
       ${whereSql}
       ORDER BY u.created_at DESC
     `);
@@ -175,6 +177,7 @@ export default async function EmployeesPage({
               <thead className="text-xs text-muted-foreground border-b sticky top-0 z-10 bg-card">
                 <tr>
                   <th className="text-left px-4 py-2 font-medium">Employee</th>
+                  <th className="text-left py-2 font-medium">Branch</th>
                   <th className="text-left py-2 font-medium">Department</th>
                   <th className="text-left py-2 font-medium">Manager</th>
                   <th className="text-left py-2 font-medium">Joined</th>
@@ -199,6 +202,20 @@ export default async function EmployeesPage({
                         </Link>
                         <div className="text-[11px] text-muted-foreground">{e.email}</div>
                         {e.phone && <div className="text-[10px] text-muted-foreground font-mono">{e.phone}</div>}
+                      </td>
+                      <td className="py-3 text-xs">
+                        {e.branch_name ? (
+                          <span className="inline-flex items-center gap-1">
+                            {e.branch_name}
+                            {(e.roles ?? []).includes("branch_head") && (
+                              <span className="chip bg-amber-50 text-amber-800 border border-amber-200 text-[9px] px-1 py-0">
+                                head
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-amber-700">— no branch —</span>
+                        )}
                       </td>
                       <td className="py-3 text-xs capitalize">
                         {e.department ? e.department.replace(/_/g, " ") : ""}
