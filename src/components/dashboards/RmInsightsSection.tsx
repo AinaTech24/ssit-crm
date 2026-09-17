@@ -154,7 +154,16 @@ export async function RmInsightsSection({
           (
             SELECT 'lead' AS kind, l.id::text AS id, l.name AS title,
               ('Stage: ' || COALESCE(l.stage, 'new')) AS subtitle,
-              COALESCE(NULLIF(regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g'), '')::numeric, 0) AS impact_value,
+              -- intended_amount is free text ("12.5 lakh", "15-20L", "₹10,00,000") — stripping
+              -- everything but digits/dots can still leave something like "12.515.5" (multiple
+              -- dots from a typed range), which is not a valid numeric literal and throws
+              -- "invalid input syntax for type numeric" mid-query, taking the whole dashboard
+              -- down for that RM. Validate the cleaned text is a well-formed decimal before the
+              -- cast; anything else (including empty) falls back to 0 rather than erroring.
+              CASE WHEN regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g') ~ '^[0-9]+(\.[0-9]+)?$'
+                THEN regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g')::numeric
+                ELSE 0
+              END AS impact_value,
               CASE WHEN l.next_follow_up_at <= now() THEN 100
                    WHEN l.next_follow_up_at <= now() + interval '2 days' THEN 80
                    ELSE 50 END AS urgency,

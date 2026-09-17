@@ -316,6 +316,31 @@ export async function RmDashboard({
     };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
+  // Rendered as JSX (`<RmInsightsSection />`) this would only ever be caught by
+  // the caller's error boundary — the element is built here but its async body
+  // runs later, once React actually renders the tree, by which point we're long
+  // past any try/catch in the dashboard router. Calling it directly means a bad
+  // row (e.g. a lead's free-text intended_amount that doesn't parse as a number)
+  // degrades to "this section didn't load" instead of taking the whole page down.
+  let insights: React.ReactNode = null;
+  if (!limited) {
+    try {
+      insights = await RmInsightsSection({ session, targetUserId });
+    } catch (err) {
+      console.error("[RmDashboard] RmInsightsSection failed, omitting section", {
+        userId: session.userId,
+        tenantId: session.tenantId,
+        targetUserId,
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+      });
+      insights = (
+        <div className="card-surface glass-card p-5 text-sm text-muted-foreground">
+          This section couldn&apos;t load right now.
+        </div>
+      );
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-7xl">
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -748,7 +773,7 @@ export async function RmDashboard({
 
 
       {/* ---------- RM Insights — service-first cockpit additions ---------- */}
-      {!limited && <RmInsightsSection session={session} targetUserId={targetUserId} />}
+      {!limited && insights}
     </div>
   );
 }
