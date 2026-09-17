@@ -17,7 +17,8 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap, requireAny, can } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
+import { assertInScope } from "@/lib/auth/data-scope";
 import { cleanUccCodes } from "@/lib/investors/ucc";
 import { normaliseTags } from "@/lib/investors/client-tags";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
@@ -205,26 +206,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    const seesAll = can(session.roles, "investor.view.all", session.permissions);
-    const seesAssigned = can(session.roles, "investor.view.assigned", session.permissions);
-    if (!seesAll && !seesAssigned) {
-      return NextResponse.json({ error: "forbidden: missing view capability" }, { status: 403 });
-    }
+    requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
 
     const result = await withTenant(session.tenantId, async (tx) => {
       const inv = (await tx.select().from(investors).where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId))).limit(1))[0];
       if (!inv) return null;
 
-      // Enforce scope gating: branch heads → own branch; RMs → assigned only.
-      const branchScoped =
-        !session.roles.includes("owner") && session.roles.includes("branch_head") && !!session.branchId;
-      if (!seesAll && branchScoped) {
-        if (inv.branchId !== session.branchId) {
-          throw Object.assign(new Error("forbidden: client is in another branch"), { status: 403 });
-        }
-      } else if (!seesAll && seesAssigned && inv.rmId !== session.userId) {
-        throw Object.assign(new Error("forbidden: client not assigned to you"), { status: 403 });
-      }
+      // The data wall (lib/auth/data-scope.ts) — the same rule the list page
+      // enforces. Holding the view capability says you may see SOME clients;
+      // this says whether you may see THIS one. Without it, changing the id in
+      // the URL/mobile request was a way past a walled list straight to any
+      // client's PAN, DOB, address and portfolio.
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
       const [foliosRows, sipsRows, goalsRows, commsRows, tasksRows, srRows] = await Promise.all([
         tx.select().from(folios).where(eq(folios.investorId, id)),
@@ -275,7 +268,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const session = await requireSession();
     requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
-    const editsAll = can(session.roles, "investor.edit.all", session.permissions);
     const parse = Patch.safeParse(await req.json().catch(() => ({})));
     if (!parse.success)
       return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
@@ -287,18 +279,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // Row scope. PATCH used to require investor.edit.all, a firm-wide
       // capability, so it never needed a per-row check. Now that an
       // assigned-only RM can edit, the check has to exist or widening the
-      // capability would let any RM edit any client in the firm.
-      if (!editsAll) {
-        const branchScoped =
-          !session.roles.includes("owner") && session.roles.includes("branch_head") && !!session.branchId;
-        if (branchScoped) {
-          if (before.branchId !== session.branchId) {
-            throw Object.assign(new Error("forbidden: client is in another branch"), { status: 403 });
-          }
-        } else if (before.rmId !== session.userId) {
-          throw Object.assign(new Error("forbidden: client is not assigned to you"), { status: 403 });
-        }
-      }
+      // capability would let any RM edit any client in the firm. Runs the same
+      // wall as the list/GET — back office and the owner clear it unconditionally.
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: [before.rmId, before.serviceRmId] }, "client");
 
       // Optimistic concurrency: reject if the record moved under the editor.
       // 1s tolerance absorbs sub-second clock/serialisation drift.
@@ -515,11 +498,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const [inv] = await tx
-        .select({ name: investors.name, pan: investors.pan })
+        .select({
+          name: investors.name, pan: investors.pan, branchId: investors.branchId,
+          rmId: investors.rmId, serviceRmId: investors.serviceRmId,
+        })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return "not_found" as const;
+
+      // Deleting (even soft-delete) is an edit of the client record and goes
+      // through the same wall — investor.delete is narrow (owner/compliance),
+      // but compliance is walled to its own branch like every other role, so
+      // this is the one place that narrow grant could still reach a client
+      // outside it without this check.
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
       if (!purge) {
         // ── Soft delete → Trash bin. Preserves the whole owned-data subgraph so

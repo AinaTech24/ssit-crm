@@ -15,6 +15,7 @@ import { withTenant } from "@/db/client";
 import { requireSession, type SessionUser } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { investors, folios, tenants } from "@/db/schema";
+import { assertInScope } from "@/lib/auth/data-scope";
 import { renderCalcPdf, type PdfBlock } from "@/lib/calculators/calc-pdf";
 import { fetchBrandLogoBytes } from "@/lib/calculators/share-helpers";
 import { pickLogo } from "@/lib/branding/logo";
@@ -58,7 +59,7 @@ const monLabel = (iso: string) =>
 
 /* ────────────────────────── data loader ────────────────────────── */
 
-async function loadStory(tx: any, tenantId: string, investorId: string): Promise<WealthStory | null> {
+async function loadStory(tx: any, session: SessionUser, investorId: string): Promise<WealthStory | null> {
   const [inv] = await tx
     .select({
       id: investors.id,
@@ -67,11 +68,17 @@ async function loadStory(tx: any, tenantId: string, investorId: string): Promise
       riskProfile: investors.riskProfile,
       createdAt: investors.createdAt,
       onboardedAt: investors.onboardedAt,
+      branchId: investors.branchId,
+      rmId: investors.rmId,
+      serviceRmId: investors.serviceRmId,
     })
     .from(investors)
-    .where(and(eq(investors.id, investorId), eq(investors.tenantId, tenantId), isNull(investors.deletedAt)))
+    .where(and(eq(investors.id, investorId), eq(investors.tenantId, session.tenantId), isNull(investors.deletedAt)))
     .limit(1);
   if (!inv) return null;
+  // Same wall as the client's other pages — the wealth story is a PDF of the
+  // client's full portfolio, transactions and goals.
+  await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
   const to = new Date();
   const from = new Date(to);
@@ -100,7 +107,7 @@ async function loadStory(tx: any, tenantId: string, investorId: string): Promise
   const folioRows = await tx
     .select({ aum: folios.aum, amcName: folios.amcName, schemes: folios.schemes })
     .from(folios)
-    .where(and(eq(folios.investorId, investorId), eq(folios.tenantId, tenantId)));
+    .where(and(eq(folios.investorId, investorId), eq(folios.tenantId, session.tenantId)));
 
   const currentValue = folioRows.reduce((s: number, f: any) => s + num(f.aum), 0);
   const byScheme = new Map<string, { value: number; category?: string }>();
@@ -302,7 +309,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
-        const story = await loadStory(tx, session.tenantId, id);
+        const story = await loadStory(tx, session, id);
         if (!story) return null;
         if (!wantPdf) return { story, tenant: null as any };
         const tenant = (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null;
@@ -348,7 +355,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
-        const story = await loadStory(tx, session.tenantId, id);
+        const story = await loadStory(tx, session, id);
         if (!story) return null;
         const tenant = (await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1))[0] ?? null;
         let sender: any;

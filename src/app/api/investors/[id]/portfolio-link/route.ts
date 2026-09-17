@@ -13,6 +13,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { investors, tenants } from "@/db/schema";
 import { createShareToken } from "@/lib/share-tokens";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +33,15 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
     const ctx = await withTenant(session.tenantId, async (tx) => {
       const [inv] = await tx
-        .select({ id: investors.id, name: investors.name, phone: investors.phone })
+        .select({
+          id: investors.id, name: investors.name, phone: investors.phone,
+          branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId,
+        })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1);
       return { inv, tenant: t as any };
     });

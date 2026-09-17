@@ -17,6 +17,7 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { families, investors, users } from "@/db/schema";
 import { familyHealthFields } from "@/lib/families/health";
+import { assertInScope } from "@/lib/auth/data-scope";
 import { computeFamilyNextReview } from "@/lib/families/cadence";
 
 export const dynamic = "force-dynamic";
@@ -41,9 +42,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const session = await requireSession();
     // Require an investor-view capability (this GET was open to any role).
     requireAny(session.roles, ["family.view", "investor.view.all", "investor.view.assigned"], session.permissions);
-    const row = await withTenant(session.tenantId, async (tx) =>
-      (await tx.select().from(families).where(and(eq(families.id, id), eq(families.tenantId, session.tenantId))).limit(1))[0] ?? null
-    );
+    const row = await withTenant(session.tenantId, async (tx) => {
+      const r = (await tx.select().from(families).where(and(eq(families.id, id), eq(families.tenantId, session.tenantId))).limit(1))[0];
+      if (!r) return null;
+      // Same wall as every client-derived list — capability said "some
+      // households", this says whether this one is among them.
+      await assertInScope(tx, session, { branchId: r.branchId, ownerId: r.rmId }, "family");
+      return r;
+    });
     if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json(row);
   } catch (err: any) {
@@ -68,6 +74,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const result = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(families).where(and(eq(families.id, id), eq(families.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return null;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: before.rmId }, "family");
 
       // A reassigned RM must be a user in this firm (a stray uuid would orphan
       // the household under someone outside the tenant).
@@ -155,6 +162,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       }
       const before = (await tx.select().from(families).where(and(eq(families.id, id), eq(families.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return null;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: before.rmId }, "family");
 
       await tx.delete(families).where(and(eq(families.id, id), eq(families.tenantId, session.tenantId)));
       await recordAudit(tx, {

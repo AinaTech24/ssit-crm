@@ -30,7 +30,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { investors } from "@/db/schema";
 import type { SessionUser } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
-import { dataScopeSql, isInScope, resolveDataScope } from "@/lib/auth/data-scope";
+import { dataScopeSql, resolveDataScope, assertInScope } from "@/lib/auth/data-scope";
 
 /** Throws 403 when the caller has no client visibility at all. */
 export function requireInvestorView(session: SessionUser) {
@@ -63,10 +63,17 @@ export async function isDataScopeRestricted(tx: any, tenantId: string): Promise<
   }
 }
 
-/** The columns the wall filters clients on. */
+/**
+ * The columns the wall filters clients on. Owner is BOTH the relationship RM
+ * (rm_id) and the separate day-to-day servicing RM (service_rm_id, migration
+ * 0209) — either one makes the client "yours". Missing this was a real
+ * regression: since the wall shipped, a servicing RM who is not also the
+ * relationship RM was invisible everywhere — list, export, every single-client
+ * route — because only rm_id was checked.
+ */
 const INVESTOR_COLS = (alias: string) => ({
   branch: `${alias}.branch_id`,
-  owner: `${alias}.rm_id`,
+  owner: [`${alias}.rm_id`, `${alias}.service_rm_id`],
 });
 
 /**
@@ -103,14 +110,14 @@ export async function investorScopeSql(tx: any, session: SessionUser, alias = "i
 export async function assertCanViewClient(
   tx: any,
   session: SessionUser,
-  inv: { rmId?: string | null; branchId?: string | null }
+  inv: { rmId?: string | null; serviceRmId?: string | null; branchId?: string | null }
 ): Promise<void> {
   requireInvestorView(session);
-  const scope = await resolveDataScope(tx, session);
-  if (isInScope(scope, { branchId: inv.branchId, ownerId: inv.rmId })) return;
-  throw Object.assign(
-    new Error("forbidden: this client belongs to another branch or team member"),
-    { status: 403 }
+  await assertInScope(
+    tx,
+    session,
+    { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] },
+    "client"
   );
 }
 

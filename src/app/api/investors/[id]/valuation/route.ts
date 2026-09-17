@@ -13,6 +13,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { investors } from "@/db/schema";
 import { valueInvestor } from "@/lib/finance/valuation";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -27,11 +28,12 @@ export async function GET(
 
     const result = await withTenant(session.tenantId, async (tx) => {
       const [inv] = await tx
-        .select({ id: investors.id })
+        .select({ id: investors.id, branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
       return await valueInvestor(tx, id);
     });
 

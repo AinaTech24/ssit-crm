@@ -8,6 +8,7 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { handleApiError } from "@/lib/api/error-handler";
 import { templates, templateVersions, investors } from "@/db/schema";
 import { dispatch } from "@/lib/comms/pipeline";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession();
+    requireCap(session.roles, "investor.note.add", session.permissions);
     const { id } = await params;
 
     const data = await withTenant(session.tenantId, async (tx) => {
@@ -25,6 +27,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         .limit(1);
       // A missing client is a 404, not a server error.
       if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
       const rows = await tx
         .select({
@@ -85,6 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return { error: "Client not found", status: 404 } as const;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
       let recipient = "";
       if (channel === "email") {

@@ -12,6 +12,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { investors, auditLog } from "@/db/schema";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     requireCap(session.roles, "investor.delete", session.permissions);
 
     const outcome = await withTenant(session.tenantId, async (tx) => {
+      const [before] = await tx
+        .select({ branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
+        .from(investors)
+        .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
+        .limit(1);
+      if (!before) return "not_found" as const;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: [before.rmId, before.serviceRmId] }, "client");
+
       const restored = await tx
         .update(investors)
         .set({ deletedAt: null, deletedBy: null, updatedAt: new Date() } as any)

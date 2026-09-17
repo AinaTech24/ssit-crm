@@ -14,6 +14,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { complianceDocuments, investors } from "@/db/schema";
 import { computeCompleteness } from "@/lib/onboarding/doc-completeness";
+import { assertInScope } from "@/lib/auth/data-scope";
 import { CLIENT_TYPE_LABELS, type ClientType } from "@/lib/onboarding/doc-checklists";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +30,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const out = await withTenant(session.tenantId, async (tx) => {
       const [inv] = await tx
-        .select({ id: investors.id, category: investors.investorCategory })
+        .select({
+          id: investors.id, category: investors.investorCategory,
+          branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId,
+        })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
       const docs = await tx
         .select({ id: complianceDocuments.id, name: complianceDocuments.name, description: complianceDocuments.description, tags: complianceDocuments.tags })

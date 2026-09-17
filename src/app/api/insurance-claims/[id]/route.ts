@@ -15,6 +15,7 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { insuranceClaims, insurancePolicies, investors, CLAIM_STATUSES, CLAIM_TYPES, CLAIM_MODES, INTIMATION_MODES, SUBMITTED_MODES } from "@/db/schema";
 import { policyStatusForClaim } from "@/lib/insurance/claim-status";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -64,6 +65,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const row = await withTenant(session.tenantId, async (tx) => {
       const c = (await tx.select().from(insuranceClaims).where(and(eq(insuranceClaims.id, id), eq(insuranceClaims.tenantId, session.tenantId))).limit(1))[0];
       if (!c) return null;
+      // Same wall as the client the claim belongs to. insurance.view alone says
+      // "some claims"; this route had no per-row check at all before, so any
+      // holder could pull any client's claim by id.
+      await assertInScope(tx, session, { branchId: c.branchId, ownerId: c.rmId }, "claim");
       const inv = c.investorId
         ? (await tx.select({ name: investors.name }).from(investors).where(eq(investors.id, c.investorId)).limit(1))[0]
         : null;
@@ -89,6 +94,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const result = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(insuranceClaims).where(and(eq(insuranceClaims.id, id), eq(insuranceClaims.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return null;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: before.rmId }, "claim");
       const patch: any = { ...parse.data, updatedAt: new Date() };
       for (const k of ["claimedAmount", "settledAmount"] as const) {
         if (patch[k] != null) patch[k] = String(patch[k]);
@@ -139,6 +145,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const ok = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(insuranceClaims).where(and(eq(insuranceClaims.id, id), eq(insuranceClaims.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return false;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: before.rmId }, "claim");
       await tx.delete(insuranceClaims).where(and(eq(insuranceClaims.id, id), eq(insuranceClaims.tenantId, session.tenantId)));
       await recordAudit(tx, {
         tenantId: session.tenantId,

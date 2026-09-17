@@ -122,8 +122,13 @@ export async function resolveDataScope(tx: any, session: SessionUser): Promise<D
 export type ScopeColumns = {
   /** e.g. "investors.branch_id" */
   branch: string;
-  /** e.g. "investors.rm_id" — the person the record belongs to. */
-  owner: string;
+  /**
+   * e.g. "investors.rm_id" — the person the record belongs to. A record can
+   * have more than one legitimate owner (a client's relationship RM and its
+   * separate day-to-day SERVICING rm, migration 0209): pass an array and any
+   * one of them counts as "yours". OR'd, never AND'd.
+   */
+  owner: string | string[];
 };
 
 /**
@@ -138,7 +143,11 @@ export function dataScopeSql(scope: DataScope, cols: ScopeColumns): SQL {
       sql`, `
     )})`;
   }
-  return sql`${sql.raw(cols.owner)} = ${scope.userId}::uuid`;
+  const ownerCols = Array.isArray(cols.owner) ? cols.owner : [cols.owner];
+  return sql`(${sql.join(
+    ownerCols.map((c) => sql`${sql.raw(c)} = ${scope.userId}::uuid`),
+    sql` OR `
+  )})`;
 }
 
 /** Resolve + build in one step, for callers that need nothing else. */
@@ -159,20 +168,21 @@ export async function dataScopeSqlFor(
  */
 export function isInScope(
   scope: DataScope,
-  row: { branchId?: string | null; ownerId?: string | null }
+  row: { branchId?: string | null; ownerId?: string | null | (string | null | undefined)[] }
 ): boolean {
   if (scope.kind === "all") return true;
   if (scope.kind === "branches") {
     return !!row.branchId && scope.branchIds.includes(row.branchId);
   }
-  return row.ownerId === scope.userId;
+  const owners = Array.isArray(row.ownerId) ? row.ownerId : [row.ownerId];
+  return owners.some((o) => o === scope.userId);
 }
 
 /** Throw 403 unless the row is visible to this session. */
 export async function assertInScope(
   tx: any,
   session: SessionUser,
-  row: { branchId?: string | null; ownerId?: string | null },
+  row: { branchId?: string | null; ownerId?: string | null | (string | null | undefined)[] },
   what = "record"
 ): Promise<void> {
   const scope = await resolveDataScope(tx, session);

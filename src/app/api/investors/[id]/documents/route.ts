@@ -26,6 +26,7 @@ import { require as requireCap } from "@/lib/auth/rbac";
 import { complianceDocuments, investors } from "@/db/schema";
 import { deleteObject } from "@/lib/storage/s3";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +50,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireSession();
     requireCap(session.roles, "document.view", session.permissions);
-    const rows = await withTenant(session.tenantId, async (tx) =>
-      tx
+    const rows = await withTenant(session.tenantId, async (tx) => {
+      // document.view says "may see SOME clients' documents" — the wall says
+      // whether THIS client's are among them, same as every other single-client
+      // route. Without it, an RM could pull another RM's client's KYC/PAN
+      // documents by putting that client's id in the URL.
+      const [inv] = await tx
+        .select({ branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
+        .from(investors)
+        .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
+        .limit(1);
+      if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
+      return tx
         .select()
         .from(complianceDocuments)
         .where(
@@ -61,8 +73,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             isNull(complianceDocuments.supersededById)
           )
         )
-        .orderBy(desc(complianceDocuments.createdAt))
-    );
+        .orderBy(desc(complianceDocuments.createdAt));
+    });
+    if (rows === null) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json({
       documents: rows.map((d) => ({
         id: d.id,
@@ -93,13 +106,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const docId = uuid();
     const outcome = await withTenant(session.tenantId, async (tx) => {
-      // The client must be in this firm (the storageKey was already tenant-scoped).
+      // The client must be in this firm (the storageKey was already tenant-scoped)
+      // AND in this session's scope — uploading a document is a client-linked
+      // write, same bar as editing the client itself.
       const [inv] = await tx
-        .select({ id: investors.id })
+        .select({ id: investors.id, branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
       if (!inv) return "no_client" as const;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
       await tx.insert(complianceDocuments).values({
         id: docId,
@@ -158,6 +174,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         )
         .limit(1);
       if (!doc) return "not_found" as const;
+      const [inv] = await tx
+        .select({ branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
+        .from(investors)
+        .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
+        .limit(1);
+      if (!inv) return "not_found" as const;
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
       if (doc.storageKey) await deleteObject(doc.storageKey).catch(() => {});
       await tx.delete(complianceDocuments).where(eq(complianceDocuments.id, docId));
       await recordAudit(tx, {

@@ -43,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       const [inv] = await tx
         .select({
           id: investors.id, name: investors.name, pan: investors.pan,
-          rmId: investors.rmId, branchId: investors.branchId,
+          rmId: investors.rmId, serviceRmId: investors.serviceRmId, branchId: investors.branchId,
         })
         .from(investors)
         .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))

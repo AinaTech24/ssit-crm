@@ -11,11 +11,12 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap, can } from "@/lib/auth/rbac";
+import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { proposals } from "@/db/schema";
 import { proposalTotals } from "@/lib/proposals/projections";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -48,14 +49,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireSession();
     requireCap(session.roles, "proposal.view", session.permissions);
-    const seesAll = can(session.roles, "investor.view.all", session.permissions) || can(session.roles, "compliance.view", session.permissions);
-    const row = await withTenant(session.tenantId, async (tx) =>
-      (await tx.select().from(proposals).where(and(eq(proposals.id, id), eq(proposals.tenantId, session.tenantId))).limit(1))[0] ?? null
-    );
-    // Non-managers only see proposals they prepared (mirrors the collection GET).
-    if (!row || (!seesAll && row.preparedByUserId !== session.userId)) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
-    }
+    const row = await withTenant(session.tenantId, async (tx) => {
+      const r = (await tx.select().from(proposals).where(and(eq(proposals.id, id), eq(proposals.tenantId, session.tenantId))).limit(1))[0];
+      if (!r) return null;
+      // The data wall (lib/auth/data-scope.ts) — replaces the old ad-hoc
+      // investor.view.all/compliance.view check, which let compliance see
+      // every proposal in the firm even though compliance is walled to its own
+      // branch everywhere else now.
+      try {
+        await assertInScope(tx, session, { branchId: r.branchId, ownerId: r.preparedByUserId }, "proposal");
+      } catch {
+        return null;
+      }
+      return r;
+    });
+    // 404 (not 403) so we don't leak which proposal ids exist outside the
+    // caller's book — mirrors the collection GET's behaviour.
+    if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
     return NextResponse.json(row);
   } catch (err: any) {
     return handleApiError(err);
@@ -82,6 +92,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         await tx.select().from(proposals).where(and(eq(proposals.id, id), eq(proposals.tenantId, session.tenantId))).limit(1)
       )[0];
       if (!before) return null;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: before.preparedByUserId }, "proposal");
 
       const patch: any = { ...parse.data, updatedAt: new Date() };
 
@@ -144,6 +155,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         await tx.select().from(proposals).where(and(eq(proposals.id, id), eq(proposals.tenantId, session.tenantId))).limit(1)
       )[0];
       if (!before) return;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: before.preparedByUserId }, "proposal");
       await tx
         .update(proposals)
         .set({

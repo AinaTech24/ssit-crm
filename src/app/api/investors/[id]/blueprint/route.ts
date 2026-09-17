@@ -28,8 +28,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { requireAny, can } from "@/lib/auth/rbac";
+import { requireAny } from "@/lib/auth/rbac";
 import { getStage } from "@/lib/blueprints/engine";
+import { assertInScope } from "@/lib/auth/data-scope";
 import type { Tx } from "@/db/client";
 
 export const dynamic = "force-dynamic";
@@ -115,31 +116,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const session = await requireSession();
     // Investor-data capability gate (marketing is excluded from investor.view.*).
     requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
-    const viewAll = can(session.roles, "investor.view.all", session.permissions);
     const { id: investorId } = await params;
     const data = await withTenant(session.tenantId, async (tx) => {
-      // Assigned-only roles may read just their own clients' journey. 404 (not
-      // 403) so we don't leak which investor ids exist outside their book.
-      if (!viewAll) {
-        // Owning RM, servicing RM, or a branch head looking inside their own
-        // branch. Matching only rm_id made the journey disappear for the other
-        // two, who can open the very same client record.
-        const branchScoped =
-          !session.roles.includes("owner") && session.roles.includes("branch_head") && !!session.branchId;
-        const own = await tx.execute(
-          sql`SELECT 1 FROM investors
-               WHERE id = ${investorId}::uuid
-                 AND tenant_id = ${session.tenantId}::uuid
-                 AND (
-                   rm_id = ${session.userId}::uuid
-                   OR service_rm_id = ${session.userId}::uuid
-                   ${branchScoped ? sql`OR branch_id = ${session.branchId}::uuid` : sql``}
-                 )
-               LIMIT 1` as any
+      // Row scope — the same wall the client record itself uses (owning RM,
+      // servicing RM, branch-head's branch, or a branch grant). 404 (not 403)
+      // so we don't leak which investor ids exist outside the caller's book.
+      const scopeRes = await tx.execute(sql`
+        SELECT branch_id, rm_id, service_rm_id FROM investors
+        WHERE id = ${investorId}::uuid AND tenant_id = ${session.tenantId}::uuid
+        LIMIT 1
+      `);
+      const scopeRow = scopeRes.rows[0] as
+        | { branch_id: string | null; rm_id: string | null; service_rm_id: string | null }
+        | undefined;
+      if (!scopeRow) throw Object.assign(new Error("Not found"), { status: 404 });
+      try {
+        await assertInScope(
+          tx,
+          session,
+          { branchId: scopeRow.branch_id, ownerId: [scopeRow.rm_id, scopeRow.service_rm_id] },
+          "client"
         );
-        if ((own.rows?.length ?? 0) === 0) {
-          throw Object.assign(new Error("Not found"), { status: 404 });
-        }
+      } catch {
+        throw Object.assign(new Error("Not found"), { status: 404 });
       }
 
       // Path 1: real blueprint via source lead

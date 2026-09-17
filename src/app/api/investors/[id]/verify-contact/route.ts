@@ -14,6 +14,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { investors } from "@/db/schema";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const stamp = verified ? new Date() : null;
 
     const result = await withTenant(session.tenantId, async (tx) => {
+      const [before] = await tx
+        .select({ branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
+        .from(investors)
+        .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
+        .limit(1);
+      if (!before) return null;
+      await assertInScope(tx, session, { branchId: before.branchId, ownerId: [before.rmId, before.serviceRmId] }, "client");
+
       const patch: any = { contactVerifiedBy: verified ? session.userId : null, updatedAt: new Date() };
       if (channel === "email") patch.emailVerifiedAt = stamp;
       else patch.phoneVerifiedAt = stamp;

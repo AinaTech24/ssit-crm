@@ -15,6 +15,7 @@ import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { investors } from "@/db/schema";
 import { verifyKyc } from "@/lib/kyc/verify";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 /** Client-phase stages BEFORE "KYC Validated" — only from one of these does a
  *  verified KYC advance the journey, so re-running verify on an already-active
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
           .limit(1);
         if (!inv) return null;
+        // Running (and writing back) a KYC verification is an edit of the
+        // client record — same wall as PATCH on the client itself.
+        await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
         const r = await verifyKyc({
           pan: inv.pan,

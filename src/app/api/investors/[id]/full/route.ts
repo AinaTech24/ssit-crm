@@ -12,6 +12,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
+import { assertInScope } from "@/lib/auth/data-scope";
 import { valueInvestor } from "@/lib/finance/valuation";
 import { churnForInvestor } from "@/lib/churn/scan";
 import { assetClassExposure } from "@/lib/investors/asset-class";
@@ -42,6 +43,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       async (tx) => {
         const inv = (await tx.select().from(investors).where(eq(investors.id, id)).limit(1))[0];
         if (!inv || (inv as any).deletedAt) return null;
+
+        // Same wall as the web 360 view. Capability above only says "some
+        // clients"; this route otherwise served ANY client in the tenant to
+        // anyone holding investor.view.assigned — the mobile app's client-360
+        // endpoint had no per-row check at all.
+        await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
 
         const [foliosRows, sipsRows, goalsRows, commsRows, tasksRows, srRows, consentsRows, rmRow, familyRow, lumpsumSum, valuation, reviewMeetingsRows, riskHistoryRows, recentTxRows, txCountRow, sipBouncesRow] = await Promise.all([
           tx.select().from(folios).where(eq(folios.investorId, id)),

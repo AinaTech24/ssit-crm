@@ -15,12 +15,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { investors } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { createShareToken } from "@/lib/share-tokens";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +33,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
     const inv = await withTenant(session.tenantId, async (tx) => {
       const [row] = await tx
-        .select({ id: investors.id, name: investors.name, phone: investors.phone, email: investors.email })
+        .select({
+          id: investors.id, name: investors.name, phone: investors.phone, email: investors.email,
+          branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId,
+        })
         .from(investors)
-        .where(eq(investors.id, id))
+        .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
         .limit(1);
-      return row ?? null;
+      if (!row) return null;
+      await assertInScope(tx, session, { branchId: row.branchId, ownerId: [row.rmId, row.serviceRmId] }, "client");
+      return row;
     });
     if (!inv) return NextResponse.json({ error: "investor not found" }, { status: 404 });
 

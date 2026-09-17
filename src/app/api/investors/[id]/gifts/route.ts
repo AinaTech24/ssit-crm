@@ -20,6 +20,7 @@ import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { notifyGiftDelivered } from "@/lib/gifts/notify";
 import { GIFT_CATEGORIES, isValidGrade } from "@/lib/gifts/catalogue";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -61,15 +62,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
+    requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
     const result = await withTenant(session.tenantId, async (tx) => {
       const invRes = await tx.execute(sql`
-        SELECT dob, birthday_gift_budget AS budget
+        SELECT dob, birthday_gift_budget AS budget, branch_id, rm_id, service_rm_id
         FROM investors
         WHERE id = ${id}::uuid AND tenant_id = ${session.tenantId}::uuid
         LIMIT 1
       `);
-      const inv = invRes.rows[0];
+      const inv = invRes.rows[0] as
+        | { dob: string | null; budget: number | string | null; branch_id: string | null; rm_id: string | null; service_rm_id: string | null }
+        | undefined;
       if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
 
       const giftRes = await tx.execute(sql`
         SELECT id, occasion, category, grade, title, amount, given_on, delivered_on, notes, created_at
@@ -118,12 +123,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Pull the RM up front — the intimation below needs it, and it doubles
       // as the in-tenant existence check.
       const invRes = await tx.execute(sql`
-        SELECT name, rm_id FROM investors
+        SELECT name, rm_id, service_rm_id, branch_id FROM investors
         WHERE id = ${id}::uuid AND tenant_id = ${session.tenantId}::uuid
         LIMIT 1
       `);
       if (invRes.rows.length === 0) return null;
-      const inv = invRes.rows[0] as { name: string | null; rm_id: string | null };
+      const inv = invRes.rows[0] as { name: string | null; rm_id: string | null; service_rm_id: string | null; branch_id: string | null };
+      await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
 
       const ins = await tx.execute(sql`
         INSERT INTO client_gifts (tenant_id, investor_id, category, grade, rm_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
@@ -187,6 +193,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const { budget } = parse.data;
 
     const result = await withTenant(session.tenantId, async (tx) => {
+      const invRes = await tx.execute(sql`
+        SELECT branch_id, rm_id, service_rm_id FROM investors
+        WHERE id = ${id}::uuid AND tenant_id = ${session.tenantId}::uuid
+        LIMIT 1
+      `);
+      const inv = invRes.rows[0] as { branch_id: string | null; rm_id: string | null; service_rm_id: string | null } | undefined;
+      if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
+
       const upd = await tx.execute(sql`
         UPDATE investors
         SET birthday_gift_budget = ${budget}

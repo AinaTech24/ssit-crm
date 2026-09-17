@@ -10,10 +10,13 @@ import { handleApiError } from "@/lib/api/error-handler";
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { sendInvestorStatement } from "@/lib/finance/send-statement";
+import { investors } from "@/db/schema";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -29,13 +32,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const result = await withTenant(
       session.tenantId,
-      async (tx) =>
-        sendInvestorStatement(tx, {
+      async (tx) => {
+        const [inv] = await tx
+          .select({ branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
+          .from(investors)
+          .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
+          .limit(1);
+        if (!inv) return { ok: false, error: "not found", status: 404 } as const;
+        await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
+        return sendInvestorStatement(tx, {
           tenantId: session.tenantId,
           investorId: id,
           channel: parse.data.channel,
           actorUserId: session.userId,
-        }),
+        });
+      },
       { userId: session.userId, branchId: session.branchId, roles: session.roles }
     );
 

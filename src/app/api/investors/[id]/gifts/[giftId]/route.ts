@@ -17,6 +17,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { notifyGiftDelivered } from "@/lib/gifts/notify";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,14 @@ export async function DELETE(
     requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     await withTenant(session.tenantId, async (tx) => {
+      const invRes = await tx.execute(sql`
+        SELECT branch_id, rm_id, service_rm_id FROM investors
+        WHERE id = ${id}::uuid AND tenant_id = ${session.tenantId}::uuid
+        LIMIT 1
+      `);
+      const inv = invRes.rows[0] as { branch_id: string | null; rm_id: string | null; service_rm_id: string | null } | undefined;
+      if (inv) await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
+
       await tx.execute(sql`
         DELETE FROM client_gifts
         WHERE id = ${giftId}::uuid
@@ -87,6 +96,15 @@ export async function PATCH(
     const { deliveredOn } = parse.data;
 
     const result = await withTenant(session.tenantId, async (tx) => {
+      const invRes = await tx.execute(sql`
+        SELECT branch_id, rm_id, service_rm_id FROM investors
+        WHERE id = ${id}::uuid AND tenant_id = ${session.tenantId}::uuid
+        LIMIT 1
+      `);
+      const inv = invRes.rows[0] as { branch_id: string | null; rm_id: string | null; service_rm_id: string | null } | undefined;
+      if (!inv) return null;
+      await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
+
       const upd = await tx.execute(sql`
         UPDATE client_gifts
            SET delivered_on = ${deliveredOn}::date,

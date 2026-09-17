@@ -11,9 +11,10 @@ import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
-import { complianceDocuments } from "@/db/schema";
+import { complianceDocuments, investors } from "@/db/schema";
 import { presignedGetUrl } from "@/lib/storage/s3";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!docId) return NextResponse.json({ error: "docId required" }, { status: 400 });
 
     const doc = await withTenant(session.tenantId, async (tx) => {
+      const [inv] = await tx
+        .select({ branchId: investors.branchId, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
+        .from(investors)
+        .where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)))
+        .limit(1);
+      if (!inv) return null;
+      // Same wall as every other client route — a presigned URL for a KYC
+      // document is exactly the kind of PII this exists to protect.
+      await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
+
       const [d] = await tx
         .select({ storageKey: complianceDocuments.storageKey, name: complianceDocuments.name, mimeType: complianceDocuments.mimeType })
         .from(complianceDocuments)
