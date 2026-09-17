@@ -93,6 +93,32 @@ const FIELD_DEFS: FieldDef[] = [
   { key: "bankName", label: "Bank Name", group: "Nominee & Bank" },
   { key: "bankAccountNumberMasked", label: "Bank Account Number", group: "Nominee & Bank" },
   { key: "bankIfsc", label: "Bank IFSC", group: "Nominee & Bank" },
+  // Everything else the importer can write. A migrated book arrives with far
+  // more than the headline columns — distributor codes, mandate details, CKYC,
+  // the running SIP/inflow figures — and anything not offered here had to be
+  // re-entered by hand afterwards.
+  { key: "alternatePhone", label: "Alternate Phone", group: "Contact" },
+  { key: "familyRole", label: "Family Role (head/spouse/child)", group: "Contact" },
+  { key: "incomeRange", label: "Income Range", group: "Contact" },
+  { key: "languagePref", label: "Preferred Language", group: "Contact" },
+  { key: "mfCode", label: "MF Code", group: "Codes & Distributor" },
+  { key: "moCode", label: "MO Code", group: "Codes & Distributor" },
+  { key: "bajajCode", label: "Bajaj Code", group: "Codes & Distributor" },
+  { key: "lasCode", label: "LAS Code", group: "Codes & Distributor" },
+  { key: "relationshipCategory", label: "Relationship Category", group: "Relationship & Review" },
+  { key: "serviceTier", label: "Service Tier (A/B/C)", group: "Relationship & Review" },
+  { key: "statementCadence", label: "Statement Cadence", group: "Relationship & Review" },
+  { key: "ckycNumber", label: "CKYC Number", group: "KYC & Compliance" },
+  { key: "kraName", label: "KRA Name", group: "KYC & Compliance" },
+  { key: "fatcaStatus", label: "FATCA Status", group: "KYC & Compliance" },
+  { key: "panAadhaarLinkStatus", label: "PAN–Aadhaar Link Status", group: "KYC & Compliance" },
+  { key: "mandateStatus", label: "Mandate Status", group: "Mandate" },
+  { key: "mandateRefNo", label: "Mandate Reference No", group: "Mandate" },
+  { key: "mandateAmount", label: "Mandate Amount (₹)", group: "Mandate" },
+  { key: "activeSipAmount", label: "Active SIP Amount (₹/month)", group: "Relationship & Review" },
+  { key: "lifetimeInflow", label: "Lifetime Inflow (₹)", group: "Relationship & Review" },
+  { key: "lifetimeOutflow", label: "Lifetime Outflow (₹)", group: "Relationship & Review" },
+  { key: "ckycExpiryAt", label: "CKYC Expiry Date", group: "KYC & Compliance" },
   // Notes
   { key: "notes", label: "Notes", group: "Notes" },
 ];

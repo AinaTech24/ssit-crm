@@ -9,6 +9,7 @@ import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
 import { ColumnManager } from "@/components/common/ColumnManager";
 import { buildTransactionConditions } from "@/lib/transactions/list-filters";
+import { investorScopeCondition } from "@/lib/investors/access";
 
 const TRANSACTIONS_COLUMNS = [
   { key: "date", label: "Date", required: true },
@@ -115,6 +116,13 @@ export default async function TransactionsPage({
   }
 
   const data = await withTenant(session.tenantId, async (tx) => {
+    // The client data wall. RLS isolates by TENANT only, so without this every
+    // RM saw the firm's whole transaction ledger — every client's name, scheme
+    // and amount — on this page and in its Excel export. Scoped through the
+    // joined `investors` row, the same rule the Clients list uses.
+    const scope = await investorScopeCondition(tx, session);
+    baseConds.push(scope);
+    conds.push(scope);
     // KPI cards reflect the CURRENT filter selection (period-aware) — picking a
     // date range / type / RM updates the headline totals too, and each card
     // links into the rows behind it.

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { ChevronLeft, BarChart3 } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { requireAny } from "@/lib/auth/rbac";
 import { formatINR, formatDate } from "@/lib/utils";
 import { ReportExportButtons } from "@/components/reports/ReportExportButtons";
 
@@ -1359,6 +1360,17 @@ export default async function ReportPage({ params }: { params: Promise<{ key: st
   if (!report) notFound();
 
   const session = await requireSession();
+  // Every report here is FIRM-WIDE by construction — a whole-book roll-up with
+  // no per-owner filter. This page had no capability check at all, so any
+  // logged-in RM could open one (or guess a /dashboard/reports/<key> URL) and
+  // read the entire firm's client list, AUM and pipeline. Limited to the roles
+  // that are supposed to see firm-level MIS; an RM's own numbers live on their
+  // dashboard and in the walled module lists.
+  requireAny(
+    session.roles,
+    ["reports.business", "reports.manage", "reports.commission", "investor.view.all"],
+    session.permissions
+  );
   const rows = await withTenant(session.tenantId, async (tx) => {
     const r = await tx.execute(report.runSql(sql));
     return r.rows as any[];

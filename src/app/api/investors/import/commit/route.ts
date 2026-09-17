@@ -370,6 +370,22 @@ export async function POST(req: NextRequest) {
           aum: reverse.aum ? parseAum(pick(row, reverse.aum)) ?? "0" : "0",
         };
 
+
+        // Only the columns this file actually MAPPED. Spreading them
+        // unconditionally sent an explicit null for every unmapped one, which
+        // overrides the column DEFAULT — and statement_cadence / language_pref
+        // are NOT NULL with a default, so a plain 2-column import started
+        // failing with "null value in column ... violates not-null".
+        const extras: Record<string, any> = {};
+        for (const k of ["alternatePhone","familyRole","incomeRange","languagePref","mfCode","moCode","bajajCode","lasCode","relationshipCategory","serviceTier","statementCadence","ckycNumber","kraName","fatcaStatus","panAadhaarLinkStatus","mandateStatus","mandateRefNo"]) {
+          if (reverse[k]) extras[k] = pick(row, reverse[k]) || null;
+        }
+        for (const k of ["mandateAmount","activeSipAmount","lifetimeInflow","lifetimeOutflow"]) {
+          if (reverse[k]) extras[k] = parseAum(pick(row, reverse[k]));
+        }
+        for (const k of ["ckycExpiryAt"]) {
+          if (reverse[k]) extras[k] = parseDate(pick(row, reverse[k]));
+        }
         try {
           // Each row in its OWN savepoint: a bad row (e.g. an odd date) rolls
           // back only itself instead of poisoning the whole transaction (which
@@ -390,6 +406,7 @@ export async function POST(req: NextRequest) {
               pan,
               dedupPan: false,
               ...core,
+              ...extras,
               customFields: Object.keys(cleanCf).length ? cleanCf : null,
               onboardedAt: parseTimestamp(pick(row, reverse.onboardedAt)) ?? new Date(),
               rmId: resolvedRmId,
@@ -408,7 +425,15 @@ export async function POST(req: NextRequest) {
             keyToExisting.set(key, { id: newId, rmId: resolvedRmId, address: core.address, customFields: cleanCf, riskProfile: rowRisk });
           }
         } catch (err: any) {
-          errors.push({ rowIndex: i, error: String(err.message ?? "insert failed"), pan, name });
+          // Drizzle's message is the full SQL + params; the REASON is on
+          // `cause` ("invalid input syntax for …", "violates not-null …").
+          // Without it an import error told you nothing you could act on.
+          errors.push({
+            rowIndex: i,
+            error: String(err?.cause?.message ?? err?.message ?? "insert failed"),
+            pan,
+            name,
+          });
         }
       }
 
@@ -521,6 +546,28 @@ function buildUpdateSet(
     { field: "status", col: "status", parse: (s) => enumize(s, ["active", "dormant", "inactive", "redemption_risk", "closed"], null) },
     { field: "notes", col: "notes" },
     { field: "aum", col: "aum", parse: parseAum },
+    { field: "alternatePhone", col: "alternatePhone" },
+    { field: "familyRole", col: "familyRole" },
+    { field: "incomeRange", col: "incomeRange" },
+    { field: "languagePref", col: "languagePref" },
+    { field: "mfCode", col: "mfCode" },
+    { field: "moCode", col: "moCode" },
+    { field: "bajajCode", col: "bajajCode" },
+    { field: "lasCode", col: "lasCode" },
+    { field: "relationshipCategory", col: "relationshipCategory" },
+    { field: "serviceTier", col: "serviceTier" },
+    { field: "statementCadence", col: "statementCadence" },
+    { field: "ckycNumber", col: "ckycNumber" },
+    { field: "kraName", col: "kraName" },
+    { field: "fatcaStatus", col: "fatcaStatus" },
+    { field: "panAadhaarLinkStatus", col: "panAadhaarLinkStatus" },
+    { field: "mandateStatus", col: "mandateStatus" },
+    { field: "mandateRefNo", col: "mandateRefNo" },
+    { field: "mandateAmount", col: "mandateAmount", parse: parseAum },
+    { field: "activeSipAmount", col: "activeSipAmount", parse: parseAum },
+    { field: "lifetimeInflow", col: "lifetimeInflow", parse: parseAum },
+    { field: "lifetimeOutflow", col: "lifetimeOutflow", parse: parseAum },
+    { field: "ckycExpiryAt", col: "ckycExpiryAt", parse: parseDate },
   ];
 
   for (const def of SCALARS) {

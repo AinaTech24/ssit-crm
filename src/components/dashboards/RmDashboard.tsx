@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { and, eq, sql, desc, isNotNull, gte, lte } from "drizzle-orm";
 import { Calendar, Users, TrendingUp, AlertCircle, Phone } from "lucide-react";
 import { withTenant } from "@/db/client";
@@ -316,30 +317,6 @@ export async function RmDashboard({
     };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
-  // Rendered as JSX (`<RmInsightsSection />`) this would only ever be caught by
-  // the caller's error boundary — the element is built here but its async body
-  // runs later, once React actually renders the tree, by which point we're long
-  // past any try/catch in the dashboard router. Calling it directly means a bad
-  // row (e.g. a lead's free-text intended_amount that doesn't parse as a number)
-  // degrades to "this section didn't load" instead of taking the whole page down.
-  let insights: React.ReactNode = null;
-  if (!limited) {
-    try {
-      insights = await RmInsightsSection({ session, targetUserId });
-    } catch (err) {
-      console.error("[RmDashboard] RmInsightsSection failed, omitting section", {
-        userId: session.userId,
-        tenantId: session.tenantId,
-        targetUserId,
-        error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
-      });
-      insights = (
-        <div className="card-surface glass-card p-5 text-sm text-muted-foreground">
-          This section couldn&apos;t load right now.
-        </div>
-      );
-    }
-  }
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -397,7 +374,7 @@ export async function RmDashboard({
           label={`${who} net sales`}
           value={formatINR(data.netMtd)}
           sub={`Gross ${formatINR(data.grossMtd)} · ${periodLabel}`}
-          href="/dashboard/reports/net_sales"
+          href="/dashboard/transactions"
         >
           {data.netSeries.length >= 2 && (
             <Sparkline
@@ -777,7 +754,17 @@ export async function RmDashboard({
 
 
       {/* ---------- RM Insights — service-first cockpit additions ---------- */}
-      {!limited && insights}
+      {/* Streamed, not awaited inline: RmInsightsSection runs seven more
+          queries, and blocking on them meant a big book (150+ clients) stared
+          at a blank page until ALL of this dashboard's ~20 round-trips had
+          finished. Behind Suspense the cockpit above paints as soon as its own
+          data lands and the insights fill in after. RmInsightsSafe keeps the
+          error containment — see the note on it. */}
+      {!limited && (
+        <Suspense fallback={<InsightsSkeleton />}>
+          <RmInsightsSafe session={session} targetUserId={targetUserId} />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -819,6 +806,53 @@ function Section({ title, count, children }: { title: string; count?: number; ch
         )}
       </div>
       {children}
+    </div>
+  );
+}
+
+/**
+ * RmInsightsSection with its own error containment, as a component so it can
+ * sit behind <Suspense> and stream.
+ *
+ * The try/catch has to live INSIDE an async component like this. Writing
+ * `<RmInsightsSection />` at the call site only builds an element — its async
+ * body runs later, when React walks the tree, long past any try/catch up
+ * there — which is exactly how a single unparsable lead amount once took the
+ * whole dashboard down. Awaiting it here catches it and degrades to one dead
+ * card instead.
+ */
+async function RmInsightsSafe({
+  session,
+  targetUserId,
+}: {
+  session: SessionUser;
+  targetUserId?: string;
+}) {
+  try {
+    return await RmInsightsSection({ session, targetUserId });
+  } catch (err) {
+    console.error("[RmDashboard] RmInsightsSection failed, omitting section", {
+      userId: session.userId,
+      tenantId: session.tenantId,
+      targetUserId,
+      error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+    });
+    return (
+      <div className="card-surface glass-card p-5 text-sm text-muted-foreground">
+        This section couldn&apos;t load right now.
+      </div>
+    );
+  }
+}
+
+function InsightsSkeleton() {
+  return (
+    <div className="space-y-4" aria-hidden>
+      <div className="h-28 rounded-xl bg-card border border-border/50 animate-pulse" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="h-44 rounded-xl bg-card border border-border/50 animate-pulse" />
+        <div className="h-44 rounded-xl bg-card border border-border/50 animate-pulse" />
+      </div>
     </div>
   );
 }

@@ -48,7 +48,11 @@ function resolveConfig(args: {
   webhookUrl?: string | null;
   defaultLanguage?: string;
 }): VartifyConfig {
-  const apiKey = args.apiKey ?? process.env.VARTIFY_API_TOKEN ?? process.env.VARTIFY_API_KEY;
+  // `||`, not `??`: a saved-but-blank token must fall through to the env var
+  // rather than becoming a `Bearer ` header that fails later as a confusing
+  // 401 from the provider.
+  const apiKey =
+    args.apiKey?.trim() || process.env.VARTIFY_API_TOKEN?.trim() || process.env.VARTIFY_API_KEY?.trim();
   if (!apiKey) {
     throw new Error(
       "WhatsApp isn't connected — save your Vartify API token in Settings → Integrations."

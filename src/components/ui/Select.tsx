@@ -18,6 +18,9 @@ const useIsoLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : use
 
 export type SelectOption = { value: string; label: string; disabled?: boolean };
 
+/** Option count at which the menu grows its own search box automatically. */
+const SEARCHABLE_FROM = 8;
+
 export function Select({
   value,
   onChange,
@@ -29,7 +32,7 @@ export function Select({
   ariaLabel,
   size = "md",
   id,
-  searchable = false,
+  searchable,
   searchPlaceholder = "Search…",
   leadingIcon,
 }: {
@@ -43,7 +46,13 @@ export function Select({
   ariaLabel?: string;
   size?: "sm" | "md";
   id?: string;
-  /** Show a filter box at the top of the menu (handy for long lists). */
+  /**
+   * Show a filter box at the top of the menu. Left unset it turns itself ON
+   * for any list long enough to be worth scrolling (see SEARCHABLE_FROM), so
+   * every long dropdown in the app — column mapping, RM pickers, scheme and
+   * AMC lists — is type-to-filter without each call site remembering to ask.
+   * Pass `false` to force it off, `true` to force it on.
+   */
   searchable?: boolean;
   searchPlaceholder?: string;
   /** Optional icon rendered *inside* the trigger, before the label (e.g. a sort glyph). */
@@ -59,8 +68,11 @@ export function Select({
   const rafRef = useRef<number | null>(null);
 
   const selected = options.find((o) => o.value === value);
+  // Long enough that scanning beats scrolling. Short menus (yes/no, a handful
+  // of statuses) stay plain — a search box on three options is just clutter.
+  const canSearch = searchable ?? options.length >= SEARCHABLE_FROM;
   const visible =
-    searchable && query.trim()
+    canSearch && query.trim()
       ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
       : options;
 
@@ -205,7 +217,7 @@ export function Select({
           style={menuStyle}
           className={`w-max max-w-[min(20rem,90vw)] max-h-72 overflow-y-auto scrollbar-none card-elevated bg-card p-1 animate-scale-in ${flipUp ? "origin-bottom" : "origin-top"} ${menuClassName}`}
         >
-          {searchable && (
+          {canSearch && (
             <li className="sticky -top-1 bg-card px-1 pt-1 pb-1.5 -mx-1 -mt-1 mb-1 border-b border-border z-10">
               <input
                 autoFocus
@@ -234,7 +246,7 @@ export function Select({
             </li>
           )}
           {visible.length === 0 && (
-            <li className="px-2.5 py-2 text-xs text-muted-foreground">{searchable && query ? "No matches" : "No options"}</li>
+            <li className="px-2.5 py-2 text-xs text-muted-foreground">{canSearch && query ? "No matches" : "No options"}</li>
           )}
           {visible.map((o, i) => {
             const isSel = o.value === value;

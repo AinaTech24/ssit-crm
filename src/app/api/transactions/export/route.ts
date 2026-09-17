@@ -14,6 +14,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { transactions, investors, users } from "@/db/schema";
 import { buildTransactionConditions } from "@/lib/transactions/list-filters";
+import { investorScopeCondition } from "@/lib/investors/access";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest) {
 
     const rows = await withTenant(session.tenantId, async (tx) => {
       const conds = buildTransactionConditions(sp);
+      // Same wall as the page — an export must never be the way around it.
+      conds.push(await investorScopeCondition(tx, session));
       const baseQ = tx
         .select({ tx: transactions, investorName: investors.name, rmName: users.name })
         .from(transactions)

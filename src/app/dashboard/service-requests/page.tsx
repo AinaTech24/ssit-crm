@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { Plus, LifeBuoy, FileText } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { investorScopeSql } from "@/lib/investors/access";
 import { ServiceRequestsTable } from "@/components/service-requests/ServiceRequestsTable";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { dateRangeCond } from "@/lib/filters/date-range";
@@ -82,10 +83,17 @@ export default async function ServiceRequestsPage({
   if (breached) conds.push(sql`sr.status NOT IN ('resolved','closed') AND sr.sla_resolution_at < now()`);
   const dr = dateRangeCond(sp, "created", "sr.created_at");
   if (dr) conds.push(dr);
-  const whereClause =
-    conds.length === 0 ? sql`` : sql`WHERE ${sql.join(conds, sql` AND `)}`;
-
   const result = await withTenant(session.tenantId, async (tx) => {
+    // The client data wall. RLS isolates by TENANT only, so without this every
+    // RM saw every client's tickets. A ticket ASSIGNED to this user stays
+    // visible whoever the client belongs to — that's their own work queue, and
+    // it's how a back-office ticket on another RM's client reaches them.
+    // A role with no client-view capability at all falls back to "assigned to
+    // me", rather than the page 500-ing.
+    const clientScope = await investorScopeSql(tx, session, "i").catch(() => sql`FALSE`);
+    conds.push(sql`(${clientScope} OR sr.assigned_to_user_id = ${session.userId}::uuid)`);
+    const whereClause = sql`WHERE ${sql.join(conds, sql` AND `)}`;
+
     const rows = await tx.execute(sql`
       SELECT sr.id, sr.ticket_no, sr.investor_id, sr.type, sr.subject, sr.description,
              sr.status, sr.priority, sr.assigned_to_user_id,

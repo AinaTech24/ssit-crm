@@ -528,6 +528,12 @@ export async function dispatch(tx: Tx, input: DispatchInput): Promise<DispatchRe
         tokens: rendered.tokens,
         renderedText: rendered.text,
         recipient: input.recipient,
+        // The tenant's saved token. Without this the adapter fell through to
+        // process.env.VARTIFY_API_TOKEN — unset on a per-tenant-credential
+        // deployment — and every send failed with "WhatsApp isn't connected",
+        // even though the integration row existed, showed CONNECTED and could
+        // fetch templates (both of those read config.apiKey directly).
+        apiKey: integration?.config?.apiKey,
         webhookUrl: integration?.config?.webhookUrl,
         defaultLanguage: integration?.config?.defaultLanguage,
         // Stable across step retries → adapter can dedupe a re-fired send.
