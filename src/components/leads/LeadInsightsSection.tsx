@@ -83,7 +83,10 @@ export async function LeadInsightsSection({ session }: { session: SessionUser })
             stage,
             COUNT(*)::int AS lead_count,
             COALESCE(SUM(
-              NULLIF(regexp_replace(COALESCE(intended_amount, ''), '[^0-9.]', '', 'g'), '')::numeric
+              CASE WHEN regexp_replace(COALESCE(intended_amount, ''), '[^0-9.]', '', 'g') ~ '^[0-9]+(\.[0-9]+)?$'
+                THEN regexp_replace(COALESCE(intended_amount, ''), '[^0-9.]', '', 'g')::numeric
+                ELSE 0
+              END
             ), 0)::numeric AS intended_total
           FROM leads
           WHERE converted_investor_id IS NULL
@@ -98,7 +101,10 @@ export async function LeadInsightsSection({ session }: { session: SessionUser })
             COUNT(*)::int AS total,
             COUNT(*) FILTER (WHERE converted_investor_id IS NOT NULL)::int AS converted,
             COALESCE(SUM(
-              NULLIF(regexp_replace(COALESCE(intended_amount, ''), '[^0-9.]', '', 'g'), '')::numeric
+              CASE WHEN regexp_replace(COALESCE(intended_amount, ''), '[^0-9.]', '', 'g') ~ '^[0-9]+(\.[0-9]+)?$'
+                THEN regexp_replace(COALESCE(intended_amount, ''), '[^0-9.]', '', 'g')::numeric
+                ELSE 0
+              END
             ) FILTER (WHERE converted_investor_id IS NOT NULL), 0)::numeric AS converted_value
           FROM leads
           WHERE created_at >= ${startOfMonth}
@@ -185,7 +191,10 @@ export async function LeadInsightsSection({ session }: { session: SessionUser })
               WHERE EXTRACT(DAY FROM (now() - COALESCE(l.last_contact_at, l.last_follow_up_at, l.updated_at))) > 7
             )::int AS silent_leads,
             COALESCE(SUM(
-              NULLIF(regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g'), '')::numeric
+              CASE WHEN regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g') ~ '^[0-9]+(\.[0-9]+)?$'
+                THEN regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g')::numeric
+                ELSE 0
+              END
             ), 0)::numeric AS pipeline_value
           FROM users u
           INNER JOIN leads l ON l.owner_id = u.id

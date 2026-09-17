@@ -48,12 +48,27 @@ export type TeamDashboard = {
   range: { from: string; to: string };
 };
 
-// Parse the free-text lead "intended amount" into numeric rupees.
+// Parse the free-text lead "intended amount" into numeric rupees. Validate the
+// cleaned text is a well-formed decimal before casting — a range typed as text
+// ("12.5-15.5 Lakhs") strips to something like "12.515.5", which is not a valid
+// numeric literal and throws "invalid input syntax for type numeric" mid-query,
+// taking down whatever dashboard/report ran it. See RmInsightsSection.tsx for
+// the original crash this pattern caused.
 const AMT = (col: string) =>
-  sql.raw(`COALESCE(SUM(NULLIF(regexp_replace(COALESCE(${col},''),'[^0-9.]','','g'),'')::numeric),0)`);
+  sql.raw(
+    `COALESCE(SUM(CASE WHEN regexp_replace(COALESCE(${col},''),'[^0-9.]','','g') ~ '^[0-9]+(\\.[0-9]+)?$' ` +
+      `THEN regexp_replace(COALESCE(${col},''),'[^0-9.]','','g')::numeric ELSE 0 END),0)`
+  );
 
 const OPEN_LEAD_STAGES = sql.raw(
   `stage NOT IN ('not_qualified','lost','not_interested','converted')`
+);
+
+// Same safe-cast expression as AMT() above, for inline use inside a FILTER
+// clause where the column is always `intended_amount` on `leads`.
+const SAFE_LEAD_AMT = sql.raw(
+  `CASE WHEN regexp_replace(COALESCE(intended_amount,''),'[^0-9.]','','g') ~ '^[0-9]+(\\.[0-9]+)?$' ` +
+    `THEN regexp_replace(COALESCE(intended_amount,''),'[^0-9.]','','g')::numeric ELSE 0 END`
 );
 
 export async function getTeamDashboard(
@@ -224,10 +239,10 @@ export async function getTeamDashboard(
     await tx.execute(sql`
       SELECT owner_id,
         count(*) FILTER (WHERE converted_investor_id IS NULL AND ${OPEN_LEAD_STAGES})::int AS open_leads,
-        COALESCE(SUM(NULLIF(regexp_replace(COALESCE(intended_amount,''),'[^0-9.]','','g'),'')::numeric)
+        COALESCE(SUM(${SAFE_LEAD_AMT})
           FILTER (WHERE converted_investor_id IS NULL AND ${OPEN_LEAD_STAGES}), 0) AS open_amt,
         count(*) FILTER (WHERE converted_at IS NOT NULL AND converted_at >= ${fromISO} AND converted_at < ${toEndISO})::int AS converted,
-        COALESCE(SUM(NULLIF(regexp_replace(COALESCE(intended_amount,''),'[^0-9.]','','g'),'')::numeric)
+        COALESCE(SUM(${SAFE_LEAD_AMT})
           FILTER (WHERE converted_at IS NOT NULL AND converted_at >= ${fromISO} AND converted_at < ${toEndISO}), 0) AS converted_amt
       FROM leads WHERE owner_id IS NOT NULL
       GROUP BY owner_id

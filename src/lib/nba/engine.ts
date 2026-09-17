@@ -217,7 +217,14 @@ export async function buildNextBestActions(
     const leadScope = firmWide ? sql`` : sql` AND l.owner_id = ${userId}::uuid`;
     const r = await tx.execute(sql`
       SELECT l.id, l.name, l.avatar_url, l.phone, l.email, l.stage, l.next_follow_up_at, u.name AS rm_name,
-             COALESCE(NULLIF(regexp_replace(COALESCE(l.intended_amount,''),'[^0-9.]','','g'),'')::numeric, 0) AS amt
+             -- intended_amount is free text; a typed range ("12.5-15.5L") strips to
+             -- "12.515.5", which is not a valid numeric literal — validate before
+             -- casting instead of letting the engine 500 on that lead. See the
+             -- identical fix + writeup in RmInsightsSection.tsx.
+             CASE WHEN regexp_replace(COALESCE(l.intended_amount,''),'[^0-9.]','','g') ~ '^[0-9]+(\.[0-9]+)?$'
+               THEN regexp_replace(COALESCE(l.intended_amount,''),'[^0-9.]','','g')::numeric
+               ELSE 0
+             END AS amt
       FROM leads l LEFT JOIN users u ON u.id = l.owner_id
       WHERE l.converted_investor_id IS NULL AND l.stage NOT IN ('not_qualified','lost','not_interested','converted')
         AND l.next_follow_up_at IS NOT NULL AND l.next_follow_up_at < now() ${leadScope}

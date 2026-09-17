@@ -17,7 +17,14 @@ const PIPELINE_VIEWS = [
   { value: "/dashboard/lifecycle", label: "Lifecycle" },
 ];
 
-const AMT = (col: string) => sql.raw(`NULLIF(regexp_replace(COALESCE(${col},''),'[^0-9.]','','g'),'')::numeric`);
+// Free-text intended_amount can strip to an invalid numeric literal (e.g. a
+// typed range "12.5-15.5L" -> "12.515.5") and throw mid-query; validate before
+// casting instead. Same fix as RmInsightsSection.tsx.
+const AMT = (col: string) =>
+  sql.raw(
+    `CASE WHEN regexp_replace(COALESCE(${col},''),'[^0-9.]','','g') ~ '^[0-9]+(\\.[0-9]+)?$' ` +
+      `THEN regexp_replace(COALESCE(${col},''),'[^0-9.]','','g')::numeric ELSE NULL END`
+  );
 
 export default async function PipelineBoardPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const session = await requireSession();
