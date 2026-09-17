@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, HeartHandshake } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
+import { CLIENT_OWNING_ROLES as OWNING_ROLES } from "@/lib/auth/rbac";
 import { SelectField as UiSelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
 import { NomineesField } from "@/components/investors/NomineesField";
@@ -349,7 +350,7 @@ function NewInvestorPageInner() {
               Assigned RM
               <span className="ml-1 text-[10px] text-muted-foreground font-normal">· optional — defaults to the firm owner</span>
             </label>
-            <RmSelector value={form.rmId || null} onChange={(id) => setForm((s) => ({ ...s, rmId: id ?? "" }))} role="rm" placeholder="— Use firm default (owner) —" />
+            <RmSelector value={form.rmId || null} onChange={(id) => setForm((s) => ({ ...s, rmId: id ?? "" }))} role={OWNING_ROLES} placeholder="— Use firm default (owner) —" />
           </div>
           <div className="sm:col-span-2">
             <label className="text-xs font-medium block mb-1">
@@ -361,7 +362,7 @@ function NewInvestorPageInner() {
             <RmSelector
               value={form.serviceRmId || null}
               onChange={(id) => setForm((s) => ({ ...s, serviceRmId: id ?? "" }))}
-              role="rm"
+              role={OWNING_ROLES}
               placeholder="— Same as assigned RM —"
             />
           </div>

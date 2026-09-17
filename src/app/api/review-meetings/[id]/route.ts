@@ -17,8 +17,9 @@ import { v4 as uuid } from "uuid";
 import { eq, and, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
-import { requireSession } from "@/lib/auth/session";
-import { can, requireAny } from "@/lib/auth/rbac";
+import { requireSession, type SessionUser } from "@/lib/auth/session";
+import { requireAny } from "@/lib/auth/rbac";
+import { resolveDataScope, isInScope } from "@/lib/auth/data-scope";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
@@ -49,6 +50,20 @@ function canTouchMeeting(m: { createdById?: string | null; collaboratorIds?: unk
 }
 
 /**
+ * Does the data wall (back office/owner "all", a branch head or grant "their
+ * branch") cover a meeting run by `rmId`? review_meetings has no branch_id of
+ * its own, so this derives it from the RM's own branch on `users`.
+ */
+async function meetingInBranchScope(tx: any, session: SessionUser, rmId: string | null): Promise<boolean> {
+  const scope = await resolveDataScope(tx, session);
+  if (scope.kind === "all") return true;
+  if (scope.kind === "own") return false; // canTouchMeeting already covers "own"
+  if (!rmId) return false;
+  const [rm] = await tx.execute(sql`SELECT branch_id FROM users WHERE id = ${rmId}::uuid LIMIT 1`).then((r: any) => r.rows);
+  return !!rm?.branch_id && scope.branchIds.includes(rm.branch_id);
+}
+
+/**
  * GET /api/review-meetings/[id] — single meeting bundle.
  *
  * Returns the meeting row (snake_case, mirroring the list) with the subject
@@ -61,13 +76,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireSession();
     requireAny(session.roles, ["review_meeting.manage.all", "review_meeting.manage.assigned"], session.permissions);
-    const canAll = can(session.roles, "review_meeting.manage.all", session.permissions);
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
         const r = await tx.execute(sql`
           SELECT m.*, COALESCE(i.name, l.name) AS investor_name, l.name AS lead_name,
-                 i.segment_tag, i.pan AS investor_pan, u.name AS rm_name
+                 i.segment_tag, i.pan AS investor_pan, u.name AS rm_name, u.branch_id AS rm_branch_id
           FROM review_meetings m
           LEFT JOIN investors i ON i.id = m.investor_id
           LEFT JOIN leads l ON l.id = m.lead_id
@@ -77,8 +91,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         `);
         const m = r.rows[0] as any;
         if (!m) return null;
-        // RMs (manage.assigned) may only view their own meetings.
-        if (!canAll && m.rm_id !== session.userId) return { forbidden: true as const };
+        // Same wall as the list: back office/owner see all, a branch head or
+        // grant sees anyone's meeting in their branch (derived from the RM's
+        // own branch — review_meetings has none of its own), everyone else
+        // only their own.
+        const scope = await resolveDataScope(tx, session);
+        if (!isInScope(scope, { branchId: m.rm_branch_id ?? null, ownerId: m.rm_id })) {
+          return { forbidden: true as const };
+        }
 
         // Prep brief — only for upcoming/in-progress INVESTOR meetings.
         let prep: any = null;
@@ -169,7 +189,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const session = await requireSession();
     requireAny(session.roles, ["review_meeting.manage.all", "review_meeting.manage.assigned"], session.permissions);
-    const canAll = can(session.roles, "review_meeting.manage.all", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const parse = Patch.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {
@@ -181,11 +200,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const result = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return null;
-      // RMs (manage.assigned) may only touch meetings they own — as the creator
-      // or as an invited collaborator. This replaces the old rm_id check; without
-      // the collaborator arm, inviting someone would show them a meeting they
-      // could not then edit.
-      if (!canAll && !canTouchMeeting(before, session.userId)) {
+      // Owner/creator/invited collaborator may always touch their own meeting;
+      // the data wall (branch head, or a branch grant) additionally covers
+      // anyone else's meeting run by someone in their branch — derived from the
+      // RM's own branch, since review_meetings has none of its own.
+      if (!canTouchMeeting(before, session.userId) && !(await meetingInBranchScope(tx, session, before.rmId))) {
         return { forbidden: true as const };
       }
 
@@ -495,13 +514,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const session = await requireSession();
     requireAny(session.roles, ["review_meeting.manage.all", "review_meeting.manage.assigned"], session.permissions);
-    const canAll = can(session.roles, "review_meeting.manage.all", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const clientMeta = clientMetaFromHeaders(req.headers);
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return "not_found" as const;
-      if (!canAll && !canTouchMeeting(before, session.userId)) return "forbidden" as const;
+      if (!canTouchMeeting(before, session.userId) && !(await meetingInBranchScope(tx, session, before.rmId))) return "forbidden" as const;
       await tx
         .update(reviewMeetings)
         .set({ status: "cancelled", updatedAt: new Date() } as any)

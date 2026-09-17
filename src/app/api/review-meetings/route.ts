@@ -16,7 +16,8 @@ import { sql, eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { can, requireAny } from "@/lib/auth/rbac";
+import { requireAny } from "@/lib/auth/rbac";
+import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
@@ -67,7 +68,6 @@ export async function GET(req: NextRequest) {
     // Was wide-open to any session. Require the meeting capability, and scope
     // RMs (manage.assigned, not .all) to their OWN meetings.
     requireAny(session.roles, ["review_meeting.manage.all", "review_meeting.manage.assigned"], session.permissions);
-    const canAll = can(session.roles, "review_meeting.manage.all", session.permissions);
 
     // Full filter set, mirroring the web list page (/dashboard/review-meetings).
     const url = req.nextUrl;
@@ -91,8 +91,15 @@ export async function GET(req: NextRequest) {
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
-        const filters: any[] = [sql`m.tenant_id = ${session.tenantId}::uuid`];
-        if (!canAll) filters.push(sql`m.rm_id = ${session.userId}::uuid`);
+        // The same data wall every other module runs. review_meetings has no
+        // branch_id of its own, so branch scope is derived from the RM's own
+        // branch on `users` — this is what lets a branch head see every RM in
+        // their branch's meetings, not only meetings they personally ran.
+        const meetingScope = await resolveDataScope(tx, session);
+        const filters: any[] = [
+          sql`m.tenant_id = ${session.tenantId}::uuid`,
+          dataScopeSqlViaOwnerBranch(meetingScope, "m.rm_id"),
+        ];
         if (leadId) filters.push(sql`m.lead_id = ${leadId}::uuid`);
         if (q) filters.push(sql`(i.name ILIKE ${`%${q}%`} OR l.name ILIKE ${`%${q}%`} OR u.name ILIKE ${`%${q}%`} OR m.discussion_points ILIKE ${`%${q}%`} OR m.meeting_notes ILIKE ${`%${q}%`})`);
         if (categoryFilter.length) filters.push(sql`m.category IN (${sql.join(categoryFilter.map((v) => sql`${v}`), sql`, `)})`);
@@ -117,15 +124,16 @@ export async function GET(req: NextRequest) {
           LIMIT 500
         `);
 
-        // Stats ribbon — the 4 fixed metrics, scoped to tenant (+ RM for .assigned).
-        const scopeStats = canAll ? sql`` : sql` AND rm_id = ${session.userId}::uuid`;
+        // Stats ribbon — the 4 fixed metrics, scoped to tenant + the same wall.
         const statsRes = await tx.execute(sql`
           SELECT
             COUNT(*) FILTER (WHERE status IN ('scheduled','confirmed') AND meeting_date >= now())::int AS upcoming,
             COUNT(*) FILTER (WHERE status IN ('scheduled','confirmed') AND meeting_date >= date_trunc('week', now()) AND meeting_date < date_trunc('week', now()) + interval '7 days')::int AS this_week,
             COUNT(*) FILTER (WHERE status = 'completed' AND meeting_date >= date_trunc('month', now()))::int AS completed_mtd,
             COUNT(*) FILTER (WHERE status IN ('scheduled','confirmed','in_progress') AND meeting_date < now())::int AS overdue
-          FROM review_meetings WHERE tenant_id = ${session.tenantId}::uuid${scopeStats}
+          FROM review_meetings
+          WHERE tenant_id = ${session.tenantId}::uuid
+            AND ${dataScopeSqlViaOwnerBranch(meetingScope, "rm_id")}
         `);
 
         return { meetings: meetings.rows, stats: (statsRes.rows[0] ?? { upcoming: 0, this_week: 0, completed_mtd: 0, overdue: 0 }) };

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { can } from "@/lib/auth/rbac";
+import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
 import { Avatar } from "@/components/ui/Avatar";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -65,14 +65,6 @@ export default async function ReviewMeetingsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
-  // Who sees the WHOLE firm's meeting book. The capability matrix has always
-  // said "back_office plans for all, RM runs assigned"
-  // (review_meeting.manage.all vs .assigned) but this list honoured neither —
-  // it was firm-wide for everyone who could reach it. Now the roles that only
-  // hold .assigned (rm, sub_broker, ra_sales, ria, insurance) see the meetings
-  // they are the RM on, which is what makes the module safe to hand to a
-  // single-desk role such as insurance.
-  const seesAllMeetings = can(session.roles, "review_meeting.manage.all", session.permissions);
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const categoryFilter = (sp.category ?? "").split(",").filter(Boolean);
@@ -95,8 +87,16 @@ export default async function ReviewMeetingsPage({
   };
 
   const data = await withTenant(session.tenantId, async (tx) => {
-    const filters: any[] = [sql`m.tenant_id = ${session.tenantId}::uuid`];
-    if (!seesAllMeetings) filters.push(sql`m.rm_id = ${session.userId}::uuid`);
+    // The data wall (lib/auth/data-scope.ts) — the same rule every other
+    // module runs. review_meetings has no branch_id of its own (only rm_id),
+    // so branch scope is derived from the owning RM's own branch — this is
+    // what makes a branch head's meetings list include every RM in their
+    // branch's meetings, not just the ones they personally ran.
+    const meetingScope = await resolveDataScope(tx, session);
+    const filters: any[] = [
+      sql`m.tenant_id = ${session.tenantId}::uuid`,
+      dataScopeSqlViaOwnerBranch(meetingScope, "m.rm_id"),
+    ];
     if (q) {
       filters.push(
         sql`(i.name ILIKE ${`%${q}%`} OR l.name ILIKE ${`%${q}%`} OR u.name ILIKE ${`%${q}%`} OR m.discussion_points ILIKE ${`%${q}%`} OR m.meeting_notes ILIKE ${`%${q}%`})`
@@ -176,18 +176,23 @@ export default async function ReviewMeetingsPage({
           AND meeting_date < now())::int AS overdue
       FROM review_meetings
       WHERE tenant_id = ${session.tenantId}::uuid
-        ${seesAllMeetings ? sql`` : sql`AND rm_id = ${session.userId}::uuid`}
+        AND ${dataScopeSqlViaOwnerBranch(meetingScope, "rm_id")}
     `);
     const s = stats.rows[0] as any;
-    // RM roster for the "RM" filter dropdown (so the MFD can see meetings by RM).
-    // Pointless for an assigned-only viewer — every row is already theirs.
-    const rmRows = seesAllMeetings
-      ? await tx.execute(sql`
+    // RM roster for the "RM" filter dropdown (so the MFD/branch head can see
+    // meetings by RM). Pointless for an own-records-only viewer — every row is
+    // already theirs.
+    const rmRows =
+      meetingScope.kind === "own"
+        ? { rows: [] }
+        : await tx.execute(sql`
           SELECT id, name FROM users
           WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+            ${meetingScope.kind === "branches"
+              ? sql`AND branch_id IN (${sql.join(meetingScope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`
+              : sql``}
           ORDER BY name ASC
-        `)
-      : { rows: [] };
+        `);
     return { rows: meetings.rows as any[], stats: s, rms: rmRows.rows as any[] };
   });
 

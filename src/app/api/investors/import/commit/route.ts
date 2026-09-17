@@ -356,6 +356,7 @@ export async function POST(req: NextRequest) {
           bankAccountNumberMasked: p("bankAccountNumberMasked"),
           bankIfsc: p("bankIfsc"),
           notes: p("notes"),
+          aum: reverse.aum ? parseAum(pick(row, reverse.aum)) ?? "0" : "0",
         };
 
         try {
@@ -499,6 +500,7 @@ function buildUpdateSet(
     { field: "reviewFrequency", col: "reviewFrequency", parse: (s) => enumize(s, ["monthly", "quarterly", "half_yearly", "annual"], null) },
     { field: "status", col: "status", parse: (s) => enumize(s, ["active", "dormant", "inactive", "redemption_risk", "closed"], null) },
     { field: "notes", col: "notes" },
+    { field: "aum", col: "aum", parse: parseAum },
   ];
 
   for (const def of SCALARS) {
@@ -656,6 +658,20 @@ function coerceGender(v: string): "M" | "F" | "O" | null {
  * EVERY later edit of the client fail the API's enum validation ("invalid
  * body"). Returns the canonical-cased allowed value.
  */
+/**
+ * "₹12,34,567.50" / "1234567.5" / "" -> "1234567.50" (a numeric-column string)
+ * or null. Strips currency symbols, commas and stray whitespace; never throws
+ * on garbage input — an unparseable cell just leaves the column untouched
+ * (same "permissive import" rule every other field in this file follows).
+ */
+function parseAum(v: string): string | null {
+  const cleaned = String(v ?? "").replace(/[₹,s]/g, "").trim();
+  if (!cleaned) return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n.toFixed(2);
+}
+
 function enumize(raw: string | null | undefined, allowed: string[], fallback: string | null): string | null {
   const v = String(raw ?? "").trim();
   if (!v) return fallback;

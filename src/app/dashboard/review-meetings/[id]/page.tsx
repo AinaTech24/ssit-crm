@@ -5,7 +5,7 @@ import { ChevronLeft, Calendar, Wallet, CalendarClock, LifeBuoy, Repeat, Target 
 import { withTenant } from "@/db/client";
 import { reviewMeetings, investors, leads, users } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
-import { can } from "@/lib/auth/rbac";
+import { resolveDataScope, isInScope } from "@/lib/auth/data-scope";
 import { formatINR, formatRelative } from "@/lib/utils";
 import { ReviewMeetingDetailEditor } from "@/components/review-meetings/ReviewMeetingDetailEditor";
 import { MeetingPrepButton } from "@/components/review-meetings/MeetingPrepButton";
@@ -23,12 +23,6 @@ export default async function ReviewMeetingDetailPage({
   const data = await withTenant(session.tenantId, async (tx) => {
     const m = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
     if (!m) return null;
-    // Same scope as the list: a viewer who only holds
-    // review_meeting.manage.assigned sees the meetings they are the RM on, so
-    // a guessed/pasted id must not be a way around that.
-    if (!can(session.roles, "review_meeting.manage.all", session.permissions) && m.rmId !== session.userId) {
-      return null;
-    }
     // The meeting subject is either an investor (client) or a lead — exactly one.
     const inv = m.investorId
       ? (await tx.select().from(investors).where(and(eq(investors.id, m.investorId), eq(investors.tenantId, session.tenantId))).limit(1))[0]
@@ -39,6 +33,16 @@ export default async function ReviewMeetingDetailPage({
     const rm = m.rmId
       ? (await tx.select().from(users).where(and(eq(users.id, m.rmId), eq(users.tenantId, session.tenantId))).limit(1))[0]
       : null;
+
+    // Same wall as the list, applied to one row: a branch-scoped viewer (a
+    // branch head, or anyone granted this branch) sees a meeting run by
+    // anyone in their branch — derived from the owning RM's own branch, since
+    // review_meetings has no branch_id of its own. A guessed/pasted id must
+    // not be a way around it.
+    const meetingScope = await resolveDataScope(tx, session);
+    if (!isInScope(meetingScope, { branchId: rm?.branchId ?? null, ownerId: m.rmId })) {
+      return null;
+    }
 
     // Prep brief — only for upcoming/in-progress investor meetings. Pulls the
     // context an RM needs to walk in prepared, in one query.

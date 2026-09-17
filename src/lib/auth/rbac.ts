@@ -49,6 +49,9 @@ export type Role =
   | "insurance"
   | "investor";
 
+/** Roles a client record's rm_id / service_rm_id can point at. */
+export const CLIENT_OWNING_ROLES: string[] = ["rm", "sub_broker", "ra_sales", "ria", "insurance"];
+
 export const ROLE_LABELS: Record<string, string> = {
   platform_admin: "Super Admin (Equitywala)",
   platform_support: "Admin (Equitywala)",
@@ -175,6 +178,8 @@ export type Capability =
   | "dashboard.view.marketing"
   | "dashboard.view.ops"
   | "dashboard.view.rm"
+  | "dashboard.view.ria"
+  | "dashboard.view.ra"
   // Master settings + admin
   | "settings.users"
   | "settings.billing"
@@ -192,7 +197,12 @@ const MATRIX: Record<Capability, Role[]> = {
   "investor.view.all": ["compliance", "back_office", "ops", "gifting_hr"],
   "investor.view.assigned": ["rm", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
   "investor.edit.all": ["back_office", "ops"],
-  "investor.edit.assigned": ["rm", "ria", "gifting_hr"],
+  // sub_broker held investor.view.assigned (read) but never edit — an external
+  // channel partner could see their book but not create, correct, or import a
+  // single record in it. Every write path (create, import, PATCH) gates on
+  // this capability, so without it "sub broker uploads their own clients" had
+  // no possible entry point.
+  "investor.edit.assigned": ["rm", "ria", "gifting_hr", "sub_broker"],
   "investor.bulk_export": ["compliance"],
   // Permanent hard-delete of a client + its owned data subgraph (cascades).
   // Deliberately NARROWER than investor.edit.all: editing a phone number must
@@ -332,9 +342,15 @@ const MATRIX: Record<Capability, Role[]> = {
   // Dashboards
   "dashboard.view.owner": ["compliance", "branch_head"],
   "dashboard.view.compliance": ["compliance"],
-  "dashboard.view.marketing": ["marketing", "ra_research"],
+  "dashboard.view.marketing": ["marketing"],
   "dashboard.view.ops": ["back_office", "ops"],
-  "dashboard.view.rm": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
+  // ria and ra_sales/ra_research get their own purpose-built dashboards
+   // (RIA: AUA + financial plans + risk profiles, not a commission book;
+   // RA: research output or lead pipeline, not a SIP/AUM book) rather than
+   // riding the RM cockpit or the marketing one, which fit neither job.
+  "dashboard.view.rm": ["rm", "sub_broker", "insurance"],
+  "dashboard.view.ria": ["ria"],
+  "dashboard.view.ra": ["ra_sales", "ra_research"],
 
   // Org admin. User management + billing stay owner-only by design (account
   // ownership boundary) — owner is granted them via the hard-case in can().

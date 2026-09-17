@@ -80,6 +80,7 @@ const FIELD_DEFS: FieldDef[] = [
   { key: "secondHolderMaritalStatus", label: "2nd Holder — Marital Status", group: "Second Holder" },
   // Relationship & review
   { key: "rmId", label: "Assigned RM (name or email)", group: "Relationship & Review" },
+  { key: "aum", label: "AUM (current value, ₹)", group: "Relationship & Review" },
   { key: "onboardedAt", label: "Onboarded Date", group: "Relationship & Review" },
   { key: "anniversaryDate", label: "Anniversary Date", group: "Relationship & Review" },
   { key: "lastReviewAt", label: "Last Meeting Date", group: "Relationship & Review" },
@@ -133,6 +134,7 @@ function suggestMapping(headers: string[]): Record<string, string> {
     [/client.?cat|grade/i, "clientCategory"],
     [/entity.?type|investor.?cat|^category$|^type$/i, "investorCategory"],
     [/assigned.?rm|^rm$|relationship.?manager|advisor|servicing.?rm/i, "rmId"],
+    [/^aum$|assets?.?under.?management|current.?value|portfolio.?value/i, "aum"],
     [/risk.?profile|risk.?category|^risk$|risk.?appetite/i, "riskProfile"],
     [/client.?status|account.?status|lifecycle.?status|^status$/i, "status"],
     [/review.?freq|frequency/i, "reviewFrequency"],

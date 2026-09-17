@@ -150,6 +150,28 @@ export function dataScopeSql(scope: DataScope, cols: ScopeColumns): SQL {
   )})`;
 }
 
+/**
+ * Variant of dataScopeSql for a table with NO branch_id of its own — branch is
+ * derived from the OWNING USER's own branch_id (e.g. review_meetings has
+ * rm_id but no branch column; a meeting's branch is whoever ran it). For a
+ * branch-scoped session this becomes a correlated EXISTS against users;
+ * everything else behaves exactly like dataScopeSql.
+ */
+export function dataScopeSqlViaOwnerBranch(scope: DataScope, ownerCol: string): SQL {
+  if (scope.kind === "all") return sql`TRUE`;
+  if (scope.kind === "branches") {
+    return sql`EXISTS (
+      SELECT 1 FROM users su
+      WHERE su.id = ${sql.raw(ownerCol)}
+        AND su.branch_id IN (${sql.join(
+          scope.branchIds.map((b) => sql`${b}::uuid`),
+          sql`, `
+        )})
+    )`;
+  }
+  return sql`${sql.raw(ownerCol)} = ${scope.userId}::uuid`;
+}
+
 /** Resolve + build in one step, for callers that need nothing else. */
 export async function dataScopeSqlFor(
   tx: any,

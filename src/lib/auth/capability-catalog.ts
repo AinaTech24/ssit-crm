@@ -140,6 +140,8 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "dashboard.view.marketing": { group: "Reports & Dashboards", label: "Marketing dashboard" },
   "dashboard.view.ops": { group: "Reports & Dashboards", label: "Operations dashboard" },
   "dashboard.view.rm": { group: "Reports & Dashboards", label: "RM dashboard" },
+  "dashboard.view.ria": { group: "Reports & Dashboards", label: "RIA dashboard" },
+  "dashboard.view.ra": { group: "Reports & Dashboards", label: "RA dashboard" },
 
   // ── Settings ────────────────────────────────────────────────────────────
   "settings.users": { group: "Settings", label: "Manage team & permissions", hint: "Lets this member change others' access" },

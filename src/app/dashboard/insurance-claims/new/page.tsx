@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, FileText, Loader2, Save } from "lucide-react";
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
+import { CLIENT_OWNING_ROLES as OWNING_ROLES } from "@/lib/auth/rbac";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
 
@@ -165,7 +166,7 @@ function ClaimForm() {
           <Field label="Claimed amount (₹)"><input type="number" value={form.claimedAmount} onChange={(e) => set("claimedAmount", e.target.value)} className="input-base" /></Field>
           <Field label="Settled amount (₹)"><input type="number" value={form.settledAmount} onChange={(e) => set("settledAmount", e.target.value)} className="input-base" /></Field>
           <Field label="Settlement date"><DateField value={form.settlementDate} onChange={(e) => set("settlementDate", e.target.value)} /></Field>
-          <Field label="Relationship manager"><RmSelector value={rmId} onChange={(id) => setRmId(id ?? null)} role="rm" placeholder="Assign RM…" /></Field>
+          <Field label="Relationship manager"><RmSelector value={rmId} onChange={(id) => setRmId(id ?? null)} role={OWNING_ROLES} placeholder="Assign RM…" /></Field>
         </div>
         <Field label="Comments">
           <textarea value={form.comments} onChange={(e) => set("comments", e.target.value)} rows={2} placeholder="Status notes, follow-up, settlement remarks…" className="input-base" />

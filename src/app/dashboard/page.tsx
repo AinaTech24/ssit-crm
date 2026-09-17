@@ -20,6 +20,8 @@ import { OwnerCockpit } from "@/components/dashboards/OwnerCockpit";
 import { DashboardHeaderBar } from "@/components/dashboards/DashboardHeaderBar";
 import { resolvePeriodRange } from "@/lib/dashboard/period";
 import { RmDashboard } from "@/components/dashboards/RmDashboard";
+import { RiaDashboard } from "@/components/dashboards/RiaDashboard";
+import { RaDashboard } from "@/components/dashboards/RaDashboard";
 import { BackOfficeDashboard } from "@/components/dashboards/BackOfficeDashboard";
 import { MarketingDashboard } from "@/components/dashboards/MarketingDashboard";
 import { ComplianceCockpit } from "@/components/dashboards/ComplianceCockpit";
@@ -56,7 +58,13 @@ export default async function DashboardPage({
   const dateTo = (sp.date_to ?? "").slice(0, 10);
   const rmParam = (sp.rm ?? "").trim();
   // "b:<branchId>" or "d:<deskId>" — one param for both levels of the org.
-  const unitParam = (sp.unit ?? "").trim();
+  let unitParam = (sp.unit ?? "").trim();
+  // A branch head landing on /dashboard cold (no ?unit= yet — that's every
+  // normal login) fell through every "is a unit selected?" check below to
+  // OwnerCockpit, the FIRM-WIDE view — the exact bug this default closes. A
+  // branch head must default to THEIR branch, never to "no unit chosen".
+  const isBranchHeadSession = !roles.includes("owner") && roles.includes("branch_head") && !!session.branchId;
+  if (!unitParam && isBranchHeadSession) unitParam = `b:${session.branchId}`;
 
   // ── Custom default board ─────────────────────────────────────────────────
   // If the user has set one of their "My Dashboards" as default, render it here
@@ -211,6 +219,10 @@ export default async function DashboardPage({
     dash = <MarketingDashboard session={session} period={period} customStart={pstart} />;
   } else if (can(roles, "dashboard.view.ops", perms)) {
     dash = <BackOfficeDashboard session={session} />;
+  } else if (can(roles, "dashboard.view.ria", perms)) {
+    dash = <RiaDashboard session={session} />;
+  } else if (can(roles, "dashboard.view.ra", perms)) {
+    dash = <RaDashboard session={session} />;
   } else if (can(roles, "dashboard.view.rm", perms)) {
     dash = <RmDashboard session={session} from={dateFrom} to={dateTo} />;
   } else {
