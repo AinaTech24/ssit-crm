@@ -158,6 +158,13 @@ export const users = pgTable(
      */
     allowedBranches: jsonb("allowed_branches").$type<string[]>(),
     /**
+     * Explicit "only their own records" override (migration 0222). Beats the
+     * implicit branch_head widening and any allowed_branches grant — for the
+     * RM who also holds branch_head for administrative reasons and must still
+     * only see their own book. Owner is unaffected.
+     */
+    restrictToOwnRecords: boolean("restrict_to_own_records").notNull().default(false),
+    /**
      * Per-user CALENDAR DELEGATION (migration 0220). The colleagues whose
      * meetings this user handles — an EA/front-desk who runs one partner's
      * diary. NULL / empty = none. A list of user ids = this user additionally

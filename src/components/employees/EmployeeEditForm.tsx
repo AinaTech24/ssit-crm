@@ -103,6 +103,7 @@ export type EmployeeFormValues = {
   /** Per-user BRANCH data grant. null / [] = own records only. */
   allowedBranches: string[] | null;
   delegatesFor: string[] | null;
+  restrictToOwnRecords: boolean;
   customLeaveEntitlements: Partial<Record<string, number>> | null;
 };
 
@@ -175,6 +176,25 @@ export function EmployeeEditForm({
   // Mirrors OWN_BRANCH_ROLES in lib/auth/data-scope.ts — a branch head gets
   // their own branch without a grant, so the card must not imply otherwise.
   const isBranchHead = v.roles.includes("branch_head");
+  // Mirrors explainDataScope() in lib/auth/data-scope.ts. Kept in the same
+  // precedence order — owner, then the explicit override, then the all-branch
+  // roles, then branch_head + grants — so the form never claims something the
+  // server would decide differently.
+  const effectiveScope: { wide: boolean; text: string } = isOwnerRole
+    ? { wide: true, text: "every record in the firm (Owner)." }
+    : v.restrictToOwnRecords
+      ? { wide: false, text: "only the records assigned to them — “Only their own records” is ticked." }
+      : seesAllBranchesByRole
+        ? { wide: true, text: "every record in the firm, because they hold Back Office / Operations." }
+        : isBranchHead || branchAccess.length > 0
+          ? {
+              wide: true,
+              text: `EVERY record in ${(isBranchHead ? 1 : 0) + branchAccess.length} branch${(isBranchHead ? 1 : 0) + branchAccess.length === 1 ? "" : "es"} — whoever owns it — because ${[
+                isBranchHead ? "they hold Branch Head, which always includes their own branch" : "",
+                branchAccess.length ? `${branchAccess.length} branch grant${branchAccess.length === 1 ? "" : "s"} below` : "",
+              ].filter(Boolean).join(" and ")}.`,
+            }
+          : { wide: false, text: "only the records assigned to them." };
   // The firm's accessible sidebar items, grouped — the pool the owner grants from.
   const tenantNavSet = new Set(tenantNavKeys);
   const accessibleNavGroups = NAV_ACCESS_GROUPS.map((g) => ({
@@ -341,6 +361,7 @@ export function EmployeeEditForm({
           // would be a stored no-op that looks meaningful on screen.
           allowedBranches: seesAllBranchesByRole ? null : branchAccess,
           delegatesFor,
+          restrictToOwnRecords: v.restrictToOwnRecords,
           department: v.department || null,
           joiningDate: v.joiningDate || null,
           reportingManagerId: v.reportingManagerId || null,
@@ -623,6 +644,41 @@ export function EmployeeEditForm({
                 person see <em>every</em> record in it, whoever owns it.
               </div>
             </div>
+
+            {/* What this person actually sees, spelled out. A role badge shows
+                only the FIRST matching role, so an RM who also holds Branch
+                Head reads as "Relationship Manager" while quietly seeing the
+                whole branch's clients. This line is the answer to "why is this
+                person seeing everyone?". */}
+            <div
+              className={`text-[11px] p-2.5 rounded border ${
+                effectiveScope.wide
+                  ? "text-amber-800 bg-amber-50 border-amber-200"
+                  : "text-emerald-800 bg-emerald-50 border-emerald-200"
+              }`}
+            >
+              <span className="font-semibold">Currently sees: </span>
+              {effectiveScope.text}
+            </div>
+
+            {!isOwnerRole && (
+              <label className="flex items-start gap-2 text-xs cursor-pointer border rounded-md p-2.5 bg-card">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={v.restrictToOwnRecords}
+                  onChange={(e) => update("restrictToOwnRecords", e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">Only their own records</span>
+                  <span className="block text-[11px] text-muted-foreground mt-0.5">
+                    Overrides everything below and any widening role. Use this for someone who holds
+                    Branch Head (or Back Office) for administrative work — approvals, the office desk —
+                    but should still only see the clients, leads and meetings assigned to them.
+                  </span>
+                </span>
+              </label>
+            )}
 
             {seesAllBranchesByRole ? (
               <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 p-2.5 rounded">

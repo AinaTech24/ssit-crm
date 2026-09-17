@@ -93,6 +93,7 @@ const PatchBody = z.object({
    */
   allowedBranches: z.array(z.string().uuid()).nullable().optional(),
   delegatesFor: z.array(z.string().uuid()).nullable().optional(),
+  restrictToOwnRecords: z.boolean().optional(),
   customLeaveEntitlements: z.record(z.number()).nullable().optional(),
 });
 
@@ -228,6 +229,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.enabledModules !== undefined) patch.enabledModules = body.enabledModules;
       if (body.allowedBranches !== undefined) patch.allowedBranches = body.allowedBranches;
       if (body.delegatesFor !== undefined) patch.delegatesFor = body.delegatesFor;
+      if (body.restrictToOwnRecords !== undefined) patch.restrictToOwnRecords = body.restrictToOwnRecords;
       if (body.customLeaveEntitlements !== undefined) patch.customLeaveEntitlements = body.customLeaveEntitlements;
       // Access lives in the signed session token, so a permission / role /
       // sidebar change is invisible to whoever is already logged in until they
@@ -247,7 +249,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         (body.allowedBranches !== undefined && !sameList(body.allowedBranches, existing.allowedBranches)) ||
         // Handing over (or taking back) a colleague's calendar widens/narrows
         // what this person can see and do, so it revokes the session too.
-        (body.delegatesFor !== undefined && !sameList(body.delegatesFor, (existing as any).delegatesFor));
+        (body.delegatesFor !== undefined && !sameList(body.delegatesFor, (existing as any).delegatesFor)) ||
+        // Narrowing someone to their own records must bite immediately, not
+        // whenever their current token happens to expire.
+        (body.restrictToOwnRecords !== undefined &&
+          body.restrictToOwnRecords !== existing.restrictToOwnRecords);
       // users.sessions_invalid_after is the revocation epoch the token check
       // actually reads — revoking the user_sessions rows alone only tidies the
       // device list and would leave the old token working.

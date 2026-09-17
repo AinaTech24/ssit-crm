@@ -88,19 +88,47 @@ export async function loadAllowedBranches(
   tenantId: string,
   userId: string
 ): Promise<string[]> {
+  const row = await loadScopeRow(tx, tenantId, userId);
+  return row.allowedBranches;
+}
+
+/**
+ * The two per-user scope columns, read together (one query instead of two).
+ *
+ * `restrictToOwnRecords` (migration 0222) is an explicit "this person sees only
+ * their own records, full stop" switch that BEATS every widening below it
+ * except owner. It exists because branch_head widens to a whole branch
+ * implicitly — you hold the role, you get the branch — so a person who is an RM
+ * with a book of their own AND a branch head for, say, leave approvals silently
+ * saw the entire branch's clients, with nothing on screen explaining why. The
+ * firm needed a way to say "no, just their own" without stripping the role.
+ */
+export async function loadScopeRow(
+  tx: any,
+  tenantId: string,
+  userId: string
+): Promise<{ allowedBranches: string[]; restrictToOwnRecords: boolean }> {
   try {
     const r = await tx.execute(sql`
-      SELECT allowed_branches FROM users
+      SELECT allowed_branches, restrict_to_own_records FROM users
       WHERE id = ${userId}::uuid AND tenant_id = ${tenantId}::uuid
       LIMIT 1
     `);
-    const raw = (r.rows[0] as { allowed_branches?: unknown } | undefined)?.allowed_branches;
-    if (!Array.isArray(raw)) return [];
-    return raw.filter((v): v is string => typeof v === "string" && UUID_RE.test(v));
+    const row = r.rows[0] as
+      | { allowed_branches?: unknown; restrict_to_own_records?: unknown }
+      | undefined;
+    const raw = row?.allowed_branches;
+    return {
+      allowedBranches: Array.isArray(raw)
+        ? raw.filter((v): v is string => typeof v === "string" && UUID_RE.test(v))
+        : [],
+      restrictToOwnRecords: row?.restrict_to_own_records === true,
+    };
   } catch {
-    // A missing column (pre-0216 database) must not take the page down, and it
-    // must FAIL CLOSED — no grant, so the caller falls back to own-records.
-    return [];
+    // A missing column (pre-0216 / pre-0222 database) must not take the page
+    // down, and it must FAIL CLOSED — no grant, so the caller falls back to
+    // own-records.
+    return { allowedBranches: [], restrictToOwnRecords: false };
   }
 }
 
@@ -179,16 +207,82 @@ export function isMeetingInScope(
 
 /** Resolve the wall for this session. Call inside the tenant transaction. */
 export async function resolveDataScope(tx: any, session: SessionUser): Promise<DataScope> {
-  if (seesAllBranches(session)) return { kind: "all" };
+  return (await explainDataScope(tx, session)).scope;
+}
+
+/** Why a session sees what it sees — the scope plus the reason, for the UI. */
+export type DataScopeExplained = {
+  scope: DataScope;
+  /** One line an admin can read on the employee record. */
+  reason: string;
+};
+
+/**
+ * The wall, plus the reason for it.
+ *
+ * `resolveDataScope` is the hot path and just takes `.scope`; the reason exists
+ * so the employee record can SHOW an admin why someone sees a whole branch.
+ * That was the actual failure mode here: an RM who also held branch_head saw
+ * every client in the branch, the sidebar badge still said "Relationship
+ * Manager" (that label picks the first matching role, and rm comes first), and
+ * nothing anywhere said "…and the branch, because of Branch Head".
+ */
+export async function explainDataScope(
+  tx: any,
+  session: SessionUser
+): Promise<DataScopeExplained> {
+  if (session.roles.includes("owner")) {
+    return { scope: { kind: "all" }, reason: "Owner — sees every record in the firm." };
+  }
+
+  const { allowedBranches, restrictToOwnRecords } = await loadScopeRow(
+    tx,
+    session.tenantId,
+    session.userId
+  );
+
+  // The explicit override, ticked on the employee record. Deliberately ABOVE
+  // the role check: the whole point is to hold an otherwise-widening role
+  // (branch_head for leave approvals, back office for ops work) without the
+  // client book that normally comes with it.
+  if (restrictToOwnRecords) {
+    return {
+      scope: { kind: "own", userId: session.userId },
+      reason: "Limited to their own records — “Only their own records” is ticked on their employee record.",
+    };
+  }
+
+  if (seesAllBranches(session)) {
+    const role = session.roles.find((r) => ALL_BRANCH_ROLES.includes(r));
+    return {
+      scope: { kind: "all" },
+      reason: `Sees every record in the firm, because they hold ${role === "back_office" ? "Back Office" : role === "ops" ? "Operations" : role}.`,
+    };
+  }
 
   // A branch head's own branch is implicit; explicit grants ADD to it, so one
   // covering a second branch sees both. Deduped because the two overlap the
   // moment an admin also ticks the branch they already run.
-  const branchIds = new Set(await loadAllowedBranches(tx, session.tenantId, session.userId));
-  if (managesOwnBranch(session)) branchIds.add(session.branchId!);
+  const branchIds = new Set(allowedBranches);
+  const ownBranch = managesOwnBranch(session);
+  if (ownBranch) branchIds.add(session.branchId!);
 
-  if (branchIds.size > 0) return { kind: "branches", branchIds: [...branchIds] };
-  return { kind: "own", userId: session.userId };
+  if (branchIds.size > 0) {
+    const bits: string[] = [];
+    if (ownBranch) bits.push("they hold Branch Head, which always includes their own branch");
+    if (allowedBranches.length) {
+      bits.push(`they are granted ${allowedBranches.length} branch${allowedBranches.length === 1 ? "" : "es"} on this record`);
+    }
+    return {
+      scope: { kind: "branches", branchIds: [...branchIds] },
+      reason: `Sees EVERY record in ${branchIds.size} branch${branchIds.size === 1 ? "" : "es"} — whoever owns it — because ${bits.join(" and ")}.`,
+    };
+  }
+
+  return {
+    scope: { kind: "own", userId: session.userId },
+    reason: "Sees only the records assigned to them.",
+  };
 }
 
 /** The columns a table exposes to the wall. Raw identifiers, never user input. */
