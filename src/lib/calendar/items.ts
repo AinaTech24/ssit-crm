@@ -44,6 +44,12 @@ export type CalendarScope = {
   leadsAll: boolean;
   /** can(roles, "investor.view.all") — also gates compliance (NISM/KYC). */
   investorsAll: boolean;
+  /**
+   * Colleagues whose diary this user runs (users.delegates_for, migration
+   * 0220). Widens MEETINGS only — an EA who books for a partner gets that
+   * partner's meetings on their own calendar, not their clients or tasks.
+   */
+  delegatedUserIds?: string[];
 };
 
 /** Normalise a pg date/timestamp value to YYYY-MM-DD. */
@@ -69,6 +75,11 @@ export async function getCalendarItems(
   // 0203 added collaborator_ids. Matching rm_id alone meant every meeting booked
   // since that change (rm_id NULL) was filtered out of the calendar for anyone
   // without firm-wide client access: the meeting existed, the calendar was empty.
+  const delegated = (scope.delegatedUserIds ?? []).filter((u) => u && u !== scope.userId);
+  const delegatedMeetingSql = delegated.length
+    ? sql` OR rm.rm_id IN (${sql.join(delegated.map((u) => sql`${u}::uuid`), sql`, `)})
+        OR rm.created_by_id IN (${sql.join(delegated.map((u) => sql`${u}::uuid`), sql`, `)})`
+    : sql``;
   const meetingScope = scope.investorsAll
     ? sql``
     : sql` AND (
@@ -76,7 +87,7 @@ export async function getCalendarItems(
         OR rm.rm_id = ${scope.userId}::uuid
         OR jsonb_exists(COALESCE(rm.collaborator_ids, '[]'::jsonb), ${scope.userId})
         OR i.rm_id = ${scope.userId}::uuid
-        OR l.owner_id = ${scope.userId}::uuid
+        OR l.owner_id = ${scope.userId}::uuid${delegatedMeetingSql}
       )`;
   const sipScope = scope.investorsAll ? sql`` : sql` AND i.rm_id = ${scope.userId}::uuid`;
   const nismScope = scope.investorsAll ? sql`` : sql` AND id = ${scope.userId}::uuid`;

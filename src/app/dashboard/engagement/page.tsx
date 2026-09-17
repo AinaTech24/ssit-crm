@@ -16,10 +16,12 @@ export const dynamic = "force-dynamic";
  */
 export default async function EngagementPage() {
   const session = await requireSession();
-  requireAny(session.roles, ["investor.view.all"], session.permissions);
+  requireAny(session.roles, ["investor.view.all", "gifting.manage"], session.permissions);
   const canLog =
     can(session.roles, "investor.edit.all", session.permissions) ||
-    can(session.roles, "investor.edit.assigned", session.permissions);
+    can(session.roles, "investor.edit.assigned", session.permissions) ||
+    // The gifting desk logs gifts without holding client-edit rights.
+    can(session.roles, "gifting.manage", session.permissions);
 
   return (
     <div className="space-y-6 max-w-7xl">

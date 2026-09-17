@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { ArrowLeft, CalendarDays, Grid3x3 } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import {
   ATTENDANCE_STATUS_LABELS,
   ATTENDANCE_STATUS_TONE,
@@ -72,7 +73,7 @@ export default async function AttendanceCalendarPage({
 
   // Only managers may look at another employee's month; everyone else is pinned
   // to their own row regardless of what ?employee= says.
-  const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const isManager = can(session.roles, "attendance.manage.all", session.permissions);
   const requested = sp.employee && /^[0-9a-f-]{36}$/i.test(sp.employee) ? sp.employee : null;
   const employeeId = isManager && requested ? requested : session.userId;
 

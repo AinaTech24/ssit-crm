@@ -104,6 +104,79 @@ export async function loadAllowedBranches(
   }
 }
 
+/**
+ * The colleagues whose CALENDAR this user handles (users.delegates_for,
+ * migration 0220) — an EA/front-desk who runs one partner's diary.
+ *
+ * Read from the DB rather than the session JWT for the same reason as
+ * loadAllowedBranches: a delegation that is taken away must bite on the NEXT
+ * REQUEST, not whenever the user next logs in.
+ *
+ * Deliberately narrow — this widens MEETINGS only. It is not a data-scope
+ * `kind`, because a delegate is not a branch head: they get one named person's
+ * diary, not that person's clients, leads, tasks or book.
+ */
+export async function loadDelegatedUserIds(
+  tx: any,
+  tenantId: string,
+  userId: string
+): Promise<string[]> {
+  try {
+    const r = await tx.execute(sql`
+      SELECT delegates_for FROM users
+      WHERE id = ${userId}::uuid AND tenant_id = ${tenantId}::uuid
+      LIMIT 1
+    `);
+    const raw = (r.rows[0] as { delegates_for?: unknown } | undefined)?.delegates_for;
+    if (!Array.isArray(raw)) return [];
+    // Re-validated as uuids here — the column is free-form jsonb and a bad
+    // value would otherwise reach a `::uuid` cast and 500 the page.
+    return raw.filter((v): v is string => typeof v === "string" && UUID_RE.test(v) && v !== userId);
+  } catch {
+    // Missing column (pre-0220 database) must FAIL CLOSED — no delegation.
+    return [];
+  }
+}
+
+/** The meetings wall, resolved once and reused across a page's queries. */
+export type MeetingScope = { scope: DataScope; delegatedIds: string[] };
+
+/**
+ * Resolve the meetings wall: the normal data wall, plus whoever's diary this
+ * user has been delegated. Call once per request, build predicates from it with
+ * `meetingScopeSql` / check single rows with `isMeetingInScope`.
+ */
+export async function resolveMeetingScope(tx: any, session: SessionUser): Promise<MeetingScope> {
+  const [scope, delegatedIds] = await Promise.all([
+    resolveDataScope(tx, session),
+    loadDelegatedUserIds(tx, session.tenantId, session.userId),
+  ]);
+  return { scope, delegatedIds };
+}
+
+/**
+ * The meetings wall as SQL. The branch/own predicate OR'd with the delegated
+ * diaries — a delegate sees their own meetings AND the ones they run for
+ * someone else, and nothing further.
+ */
+export function meetingScopeSql(ms: MeetingScope, ownerCol: string): SQL {
+  const base = dataScopeSqlViaOwnerBranch(ms.scope, ownerCol);
+  if (!ms.delegatedIds.length) return base;
+  return sql`(${base} OR ${sql.raw(ownerCol)} IN (${sql.join(
+    ms.delegatedIds.map((u) => sql`${u}::uuid`),
+    sql`, `
+  )}))`;
+}
+
+/** Single-row counterpart, for routes that load one meeting by id. */
+export function isMeetingInScope(
+  ms: MeetingScope,
+  row: { branchId?: string | null; ownerId?: string | null }
+): boolean {
+  if (row.ownerId && ms.delegatedIds.includes(row.ownerId)) return true;
+  return isInScope(ms.scope, row);
+}
+
 /** Resolve the wall for this session. Call inside the tenant transaction. */
 export async function resolveDataScope(tx: any, session: SessionUser): Promise<DataScope> {
   if (seesAllBranches(session)) return { kind: "all" };

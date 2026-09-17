@@ -11,7 +11,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { expenseBudgets, EXPENSE_CATEGORIES } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ const PutBody = z.object({
 export async function GET() {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const rows = await withTenant(session.tenantId, (tx) =>
       tx.select().from(expenseBudgets).where(eq(expenseBudgets.tenantId, session.tenantId))
     );
@@ -38,7 +38,7 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const parsed = PutBody.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) {
       return NextResponse.json({ error: "invalid body", issues: parsed.error.issues }, { status: 400 });

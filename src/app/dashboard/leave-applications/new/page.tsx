@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { ChevronLeft, CalendarOff } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { currentFyStart } from "@/lib/leave/policy";
 import { loadLeavePolicy } from "@/lib/leave/settings";
 import { LeaveForm } from "@/components/leave/LeaveForm";
@@ -29,7 +30,7 @@ export default async function NewLeavePage() {
     return { employees: emp.rows as any[], usage: use.rows as any[], policy };
   });
 
-  const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const isManager = can(session.roles, "leave.manage.all", session.permissions);
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">

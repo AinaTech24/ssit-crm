@@ -16,7 +16,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { recurringExpenses, EXPENSE_CATEGORIES, PAID_FROM } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -41,7 +41,7 @@ const Body = z.discriminatedUnion("op", [CreateBody, PostMonthBody]);
 export async function GET() {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const rows = await withTenant(session.tenantId, (tx) =>
       tx.select().from(recurringExpenses).where(eq(recurringExpenses.tenantId, session.tenantId)).orderBy(desc(recurringExpenses.createdAt))
     );
@@ -54,7 +54,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const parsed = Body.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) {
       return NextResponse.json({ error: "invalid body", issues: parsed.error.issues }, { status: 400 });

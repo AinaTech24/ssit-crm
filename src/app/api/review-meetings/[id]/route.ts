@@ -19,7 +19,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession, type SessionUser } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
-import { resolveDataScope, isInScope } from "@/lib/auth/data-scope";
+import { resolveMeetingScope, isMeetingInScope } from "@/lib/auth/data-scope";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
@@ -50,17 +50,19 @@ function canTouchMeeting(m: { createdById?: string | null; collaboratorIds?: unk
 }
 
 /**
- * Does the data wall (back office/owner "all", a branch head or grant "their
- * branch") cover a meeting run by `rmId`? review_meetings has no branch_id of
- * its own, so this derives it from the RM's own branch on `users`.
+ * Does the data wall cover a meeting run by `rmId`? Three ways in: back
+ * office/owner ("all"), a branch head or branch grant (their branch — derived
+ * from the RM's own branch, since review_meetings has no branch_id of its
+ * own), or a calendar delegation (this user runs that RM's diary).
  */
 async function meetingInBranchScope(tx: any, session: SessionUser, rmId: string | null): Promise<boolean> {
-  const scope = await resolveDataScope(tx, session);
-  if (scope.kind === "all") return true;
-  if (scope.kind === "own") return false; // canTouchMeeting already covers "own"
+  const ms = await resolveMeetingScope(tx, session);
+  if (rmId && ms.delegatedIds.includes(rmId)) return true;
+  if (ms.scope.kind === "all") return true;
+  if (ms.scope.kind === "own") return false; // canTouchMeeting already covers "own"
   if (!rmId) return false;
   const [rm] = await tx.execute(sql`SELECT branch_id FROM users WHERE id = ${rmId}::uuid LIMIT 1`).then((r: any) => r.rows);
-  return !!rm?.branch_id && scope.branchIds.includes(rm.branch_id);
+  return !!rm?.branch_id && ms.scope.branchIds.includes(rm.branch_id);
 }
 
 /**
@@ -95,8 +97,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         // grant sees anyone's meeting in their branch (derived from the RM's
         // own branch — review_meetings has none of its own), everyone else
         // only their own.
-        const scope = await resolveDataScope(tx, session);
-        if (!isInScope(scope, { branchId: m.rm_branch_id ?? null, ownerId: m.rm_id })) {
+        const scope = await resolveMeetingScope(tx, session);
+        if (!isMeetingInScope(scope, { branchId: m.rm_branch_id ?? null, ownerId: m.rm_id })) {
           return { forbidden: true as const };
         }
 

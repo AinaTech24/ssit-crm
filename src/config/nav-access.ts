@@ -128,6 +128,12 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
       { key: "/dashboard/reports/cross-sell", label: "Cross-sell Radar" },
       { key: "/dashboard/commission-reconciliation", label: "Commission Reconciliation", module: "reports" },
       { key: "/dashboard/finances", label: "Practice Finances", module: "reports" },
+      // Listed separately from Practice Finances so the staff expense tracker
+      // can be handed to whoever keeps the office books WITHOUT also handing
+      // over the firm's P&L and team salaries. gatedNavKeyForPath() prefers the
+      // longest match, so this key gates /dashboard/finances/expenses while
+      // /dashboard/finances keeps gating the hub, P&L and progress pages.
+      { key: "/dashboard/finances/expenses", label: "Staff Expense Tracker" },
       { key: "/dashboard/ai-assistant", label: "AI Assistant", module: "ai_assistant" },
       { key: "/dashboard/audit-log", label: "Audit Log", module: "audit_log" },
     ],
@@ -181,16 +187,20 @@ export const ROLE_DEFAULT_NAV: Record<string, string[]> = {
     "/dashboard/leave-applications",
     "/dashboard/announcements",
   ],
-  // Gifting/HR runs the client engagement programme, so it gets Engagement and
-  // the client list it picks recipients from — but none of the money: no
-  // portfolio, business, transactions or reports.
+  // Gifting/HR is the office-administration desk: it runs the client
+  // engagement programme (and gets the client list it picks recipients from),
+  // the firm's HR administration — leave and attendance for everyone — the
+  // staff expense tracker, and the meeting calendar. Still none of the rest of
+  // the money: no portfolio, business, transactions, P&L or reports.
   gifting_hr: [
     "/dashboard/engagement",
     "/dashboard/investors",
     "/dashboard/tasks",
     "/dashboard/calendar",
+    "/dashboard/review-meetings",
     "/dashboard/attendance",
     "/dashboard/leave-applications",
+    "/dashboard/finances/expenses",
     "/dashboard/announcements",
   ],
   back_office: [

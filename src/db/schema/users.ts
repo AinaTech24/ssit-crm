@@ -157,6 +157,17 @@ export const users = pgTable(
      * src/lib/auth/data-scope.ts.
      */
     allowedBranches: jsonb("allowed_branches").$type<string[]>(),
+    /**
+     * Per-user CALENDAR DELEGATION (migration 0220). The colleagues whose
+     * meetings this user handles — an EA/front-desk who runs one partner's
+     * diary. NULL / empty = none. A list of user ids = this user additionally
+     * sees and may create, edit and cancel meetings owned by those people,
+     * WITHOUT being handed the firm's or a branch's whole book the way
+     * review_meeting.manage.all / allowedBranches would.
+     * Set by the firm admin in the employee form; enforced in
+     * src/lib/auth/data-scope.ts (loadDelegatedUserIds).
+     */
+    delegatesFor: jsonb("delegates_for").$type<string[]>(),
     customLeaveEntitlements: jsonb("custom_leave_entitlements").$type<Record<string, number>>(),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     /**

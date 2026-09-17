@@ -5,7 +5,7 @@ import { ChevronLeft, Calendar, Wallet, CalendarClock, LifeBuoy, Repeat, Target 
 import { withTenant } from "@/db/client";
 import { reviewMeetings, investors, leads, users } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
-import { resolveDataScope, isInScope } from "@/lib/auth/data-scope";
+import { resolveMeetingScope, isMeetingInScope } from "@/lib/auth/data-scope";
 import { formatINR, formatRelative } from "@/lib/utils";
 import { ReviewMeetingDetailEditor } from "@/components/review-meetings/ReviewMeetingDetailEditor";
 import { MeetingPrepButton } from "@/components/review-meetings/MeetingPrepButton";
@@ -39,8 +39,8 @@ export default async function ReviewMeetingDetailPage({
     // anyone in their branch — derived from the owning RM's own branch, since
     // review_meetings has no branch_id of its own. A guessed/pasted id must
     // not be a way around it.
-    const meetingScope = await resolveDataScope(tx, session);
-    if (!isInScope(meetingScope, { branchId: rm?.branchId ?? null, ownerId: m.rmId })) {
+    const meetingScope = await resolveMeetingScope(tx, session);
+    if (!isMeetingInScope(meetingScope, { branchId: rm?.branchId ?? null, ownerId: m.rmId })) {
       return null;
     }
 

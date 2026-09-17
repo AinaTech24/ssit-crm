@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { Plus, CalendarOff, Clock, CheckCircle2, CalendarDays, SlidersHorizontal } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
 import { LeaveTable } from "@/components/leave/LeaveTable";
@@ -28,7 +29,7 @@ export default async function LeaveApplicationsPage({
   const year = sp.year ? parseInt(sp.year) : now.getFullYear();
   const month = sp.month ? parseInt(sp.month) : (now.getMonth() + 1);
 
-  const canApprove = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const canApprove = can(session.roles, "leave.manage.all", session.permissions);
 
   const data = await withTenant(session.tenantId, async (tx) => {
     // NB: the `custom_leave_entitlements` column is part of the users schema

@@ -12,6 +12,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { leaveSettings } from "@/db/schema";
 import { loadLeavePolicy } from "@/lib/leave/settings";
@@ -45,7 +46,7 @@ export async function GET() {
 export async function PUT(req: NextRequest) {
   try {
     const session = await requireSession();
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = can(session.roles, "leave.manage.all", session.permissions);
     if (!isManager) {
       return NextResponse.json({ error: "only a manager can change leave settings" }, { status: 403 });
     }

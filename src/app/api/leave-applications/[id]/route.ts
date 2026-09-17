@@ -14,6 +14,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { leaveApplications, notifications, users } from "@/db/schema";
 
@@ -32,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!parse.success) return NextResponse.json({ error: "invalid body" }, { status: 400 });
     const { action, decisionNotes } = parse.data;
     const clientMeta = clientMetaFromHeaders(req.headers);
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = can(session.roles, "leave.manage.all", session.permissions);
     const isOwner = session.roles.includes("owner");
 
     const result = await withTenant(session.tenantId, async (tx) => {

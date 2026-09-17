@@ -12,7 +12,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { recurringExpenses, EXPENSE_CATEGORIES, PAID_FROM } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +30,7 @@ const PatchBody = z.object({
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const { id } = await params;
     const parsed = PatchBody.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) {
@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const { id } = await params;
     await withTenant(session.tenantId, (tx) =>
       tx.delete(recurringExpenses).where(and(eq(recurringExpenses.id, id), eq(recurringExpenses.tenantId, session.tenantId)))

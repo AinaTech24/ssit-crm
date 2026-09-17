@@ -18,6 +18,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { attendanceRegularizations, users, notifications, ATTENDANCE_STATUSES } from "@/db/schema";
 
@@ -44,7 +45,7 @@ function istTimestamp(attendanceDate: string, hhmm?: string): Date | null {
 export async function GET() {
   try {
     const session = await requireSession();
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = can(session.roles, "attendance.manage.all", session.permissions);
     const rows = await withTenant(session.tenantId, async (tx) => {
       const r = await tx.execute(sql`
         SELECT ar.id, ar.employee_user_id, ar.attendance_date, ar.requested_status,
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
     const body = parse.data;
     const clientMeta = clientMetaFromHeaders(req.headers);
 
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = can(session.roles, "attendance.manage.all", session.permissions);
     const employeeUserId = body.employeeUserId ?? session.userId;
     // Only managers may file on behalf of another employee.
     if (employeeUserId !== session.userId && !isManager) {

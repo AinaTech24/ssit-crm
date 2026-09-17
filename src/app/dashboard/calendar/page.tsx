@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { InteractiveCalendar } from "@/components/calendar/InteractiveCalendar";
 import { getCalendarItems } from "@/lib/calendar/items";
+import { loadDelegatedUserIds } from "@/lib/auth/data-scope";
 import crypto from "node:crypto";
 import { MyDayNav } from "@/components/layout/MyDayNav";
 
@@ -40,6 +41,9 @@ export default async function CalendarPage({
         tasksAll: can(session.roles, "task.view.all", session.permissions),
         leadsAll: can(session.roles, "lead.view.all", session.permissions),
         investorsAll: can(session.roles, "investor.view.all", session.permissions),
+        // Meetings this user runs for a colleague (users.delegates_for) show on
+        // their own calendar too — an EA books the partner's diary from here.
+        delegatedUserIds: await loadDelegatedUserIds(tx, session.tenantId, session.userId),
       },
     })
   );

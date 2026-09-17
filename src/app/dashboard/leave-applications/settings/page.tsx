@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft, CalendarCog } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { loadLeavePolicy } from "@/lib/leave/settings";
 import { LeaveSettingsForm } from "@/components/leave/LeaveSettingsForm";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LeavePolicyPage() {
   const session = await requireSession();
-  const canManage = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const canManage = can(session.roles, "leave.manage.all", session.permissions);
 
   const data = await withTenant(session.tenantId, async (tx) => loadLeavePolicy(tx, session.tenantId));
 

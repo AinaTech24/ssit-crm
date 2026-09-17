@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
     // Engagement is a management view of the whole firm's gifting.
-    requireAny(session.roles, ["investor.view.all"], session.permissions);
+    requireAny(session.roles, ["investor.view.all", "gifting.manage"], session.permissions);
 
     const monthParse = MonthStr.safeParse(req.nextUrl.searchParams.get("month") ?? "");
     const month = monthParse.success ? monthParse.data : new Date().toISOString().slice(0, 7);
@@ -207,7 +207,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
+    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned", "gifting.manage"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = AddBody.safeParse(await req.json().catch(() => ({})));

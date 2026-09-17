@@ -92,6 +92,7 @@ const PatchBody = z.object({
    * uuids here so a malformed value can never reach a ::uuid cast at query time.
    */
   allowedBranches: z.array(z.string().uuid()).nullable().optional(),
+  delegatesFor: z.array(z.string().uuid()).nullable().optional(),
   customLeaveEntitlements: z.record(z.number()).nullable().optional(),
 });
 
@@ -226,6 +227,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.permissions !== undefined) patch.permissions = body.permissions;
       if (body.enabledModules !== undefined) patch.enabledModules = body.enabledModules;
       if (body.allowedBranches !== undefined) patch.allowedBranches = body.allowedBranches;
+      if (body.delegatesFor !== undefined) patch.delegatesFor = body.delegatesFor;
       if (body.customLeaveEntitlements !== undefined) patch.customLeaveEntitlements = body.customLeaveEntitlements;
       // Access lives in the signed session token, so a permission / role /
       // sidebar change is invisible to whoever is already logged in until they
@@ -242,7 +244,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         (body.enabledModules !== undefined && !sameList(body.enabledModules, (existing as any).enabledModules)) ||
         // A branch grant widens what this person can SEE, so it belongs in the
         // same audit trail as a role or permission change.
-        (body.allowedBranches !== undefined && !sameList(body.allowedBranches, existing.allowedBranches));
+        (body.allowedBranches !== undefined && !sameList(body.allowedBranches, existing.allowedBranches)) ||
+        // Handing over (or taking back) a colleague's calendar widens/narrows
+        // what this person can see and do, so it revokes the session too.
+        (body.delegatesFor !== undefined && !sameList(body.delegatesFor, (existing as any).delegatesFor));
       // users.sessions_invalid_after is the revocation epoch the token check
       // actually reads — revoking the user_sessions rows alone only tidies the
       // device list and would leave the old token working.

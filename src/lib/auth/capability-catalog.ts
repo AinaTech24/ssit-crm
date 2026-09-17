@@ -23,6 +23,7 @@ export const CAPABILITY_GROUP_ORDER = [
   "Leads",
   "Transactions & Operations",
   "Tasks & Service",
+  "Team & Office",
   "Documents & Onboarding",
   "Advice & Products",
   "Workflows & Marketing",
@@ -89,6 +90,28 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "service_request.view.all": { group: "Tasks & Service", label: "View all service requests" },
   "service_request.view.assigned": { group: "Tasks & Service", label: "View assigned service requests" },
   "service_request.manage": { group: "Tasks & Service", label: "Manage service requests" },
+
+  // ── Team & Office ───────────────────────────────────────────────────────
+  "leave.manage.all": {
+    group: "Team & Office",
+    label: "Approve & manage everyone's leave",
+    hint: "See every employee's leave applications, decide them, and file leave on someone's behalf. Without this a person only sees their own and their direct reports'.",
+  },
+  "attendance.manage.all": {
+    group: "Team & Office",
+    label: "Manage everyone's attendance",
+    hint: "The firm-wide attendance register: mark/bulk-mark others, decide regularisation requests and export. Without this a person only marks their own.",
+  },
+  "expense.manage": {
+    group: "Team & Office",
+    label: "Staff expense tracker",
+    hint: "Record and manage staff expenses, budgets and recurring costs — without the firm P&L and salaries, which stay behind View firm finances.",
+  },
+  "gifting.manage": {
+    group: "Team & Office",
+    label: "Client gifting & engagement",
+    hint: "Run the gifting programme: log, schedule and mark gifts delivered for clients.",
+  },
   "complaint.manage": { group: "Tasks & Service", label: "Manage complaints" },
 
   // ── Documents & Onboarding ──────────────────────────────────────────────

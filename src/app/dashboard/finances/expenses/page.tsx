@@ -8,7 +8,7 @@ import { ChevronLeft } from "lucide-react";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { businessExpenses, recurringExpenses, expenseBudgets } from "@/db/schema";
 import { currentFyLabel, fyBounds, recentFyLabels } from "@/lib/finance/fiscal-year";
 import { ExpenseLedger } from "@/components/finances/ExpenseLedger";
@@ -23,7 +23,7 @@ export default async function ExpensesPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
-  requireCap(session.roles, "finances.view", session.permissions);
+  requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
   const sp = await searchParams;
   const fy = sp.fy && /^\d{4}-\d{2}$/.test(sp.fy) ? sp.fy : currentFyLabel();
   const bounds = fyBounds(fy);

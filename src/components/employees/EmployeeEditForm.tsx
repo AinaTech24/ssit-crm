@@ -102,6 +102,7 @@ export type EmployeeFormValues = {
   enabledModules: string[] | null;
   /** Per-user BRANCH data grant. null / [] = own records only. */
   allowedBranches: string[] | null;
+  delegatesFor: string[] | null;
   customLeaveEntitlements: Partial<Record<string, number>> | null;
 };
 
@@ -139,6 +140,7 @@ export function EmployeeEditForm({
   const [moduleAccessActive, setModuleAccessActive] = useState(!!employee.enabledModules);
   // Per-user branch DATA access. Empty = the default wall (own records only).
   const [branchAccess, setBranchAccess] = useState<string[]>(employee.allowedBranches ?? []);
+  const [delegatesFor, setDelegatesFor] = useState<string[]>(employee.delegatesFor ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -338,6 +340,7 @@ export function EmployeeEditForm({
           // Owners and back office already see every branch, so a grant on them
           // would be a stored no-op that looks meaningful on screen.
           allowedBranches: seesAllBranchesByRole ? null : branchAccess,
+          delegatesFor,
           department: v.department || null,
           joiningDate: v.joiningDate || null,
           reportingManagerId: v.reportingManagerId || null,
@@ -665,6 +668,58 @@ export function EmployeeEditForm({
                     : branchAccess.length === 0
                       ? "No branches granted — this person sees only their own records."
                       : `Sees every record in ${branchAccess.length} branch${branchAccess.length === 1 ? "" : "es"}.`}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ---- Calendar delegation ----
+              Narrower than a branch grant on purpose: this hands over ONE
+              named colleague's diary (see, book, move, cancel their meetings)
+              and nothing else — not their clients, leads, tasks or book. */}
+          <div className="border rounded-lg p-4 bg-secondary/10 space-y-3">
+            <div>
+              <div className="text-xs font-semibold">Handles Calendar For</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Tick a colleague to let this person run their meetings — see, book, reschedule and
+                cancel them. Nothing else of that colleague&apos;s is shared: no clients, leads or tasks.
+              </div>
+            </div>
+            {teammates.length === 0 ? (
+              <div className="text-[11px] text-muted-foreground bg-secondary/30 p-2.5 rounded border">
+                No other team members yet.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {teammates.map((t) => {
+                    const on = delegatesFor.includes(t.id);
+                    return (
+                      <label
+                        key={t.id}
+                        className={`flex items-center gap-1.5 text-xs border rounded-md px-2.5 py-1.5 cursor-pointer transition-colors ${
+                          on ? "bg-primary/10 border-primary/40 font-medium" : "bg-card hover:bg-accent/40"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) => {
+                            setDelegatesFor((prev) =>
+                              e.target.checked ? [...prev, t.id] : prev.filter((x) => x !== t.id)
+                            );
+                            setSaved(false);
+                          }}
+                        />
+                        <span>{t.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {delegatesFor.length === 0
+                    ? "Not handling anyone else's calendar."
+                    : `Runs the calendar of ${delegatesFor.length} colleague${delegatesFor.length === 1 ? "" : "s"}.`}
                 </div>
               </>
             )}

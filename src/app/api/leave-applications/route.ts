@@ -16,6 +16,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { leaveApplications, users, notifications, eventsOutbox, LEAVE_TYPES, LEAVE_DURATIONS } from "@/db/schema";
 import { leaveWorkingDays } from "@/lib/leave/working-days";
@@ -35,9 +36,9 @@ export async function GET() {
   try {
     const session = await requireSession();
     // Leave reasons are HR-sensitive (medical / bereavement / personal), so the
-    // list is scoped: owners + branch-heads see the whole firm; everyone else
-    // sees only their own applications plus those of their direct reports.
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    // list is scoped: whoever administers leave sees the whole firm; everyone
+    // else sees only their own applications plus those of their direct reports.
+    const isManager = can(session.roles, "leave.manage.all", session.permissions);
     const rows = await withTenant(session.tenantId, async (tx) => {
       const scope = isManager
         ? sql``
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
     const body = parse.data;
     const clientMeta = clientMetaFromHeaders(req.headers);
 
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = can(session.roles, "leave.manage.all", session.permissions);
     const employeeUserId = body.employeeUserId ?? session.userId;
     // Only managers may file on behalf of another employee.
     if (employeeUserId !== session.userId && !isManager) {

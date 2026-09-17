@@ -308,6 +308,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           permissions: (emp as any).permissions as string[] | null,
           enabledModules: ((emp as any).enabledModules as string[] | null) ?? null,
           allowedBranches: emp.allowedBranches ?? null,
+          delegatesFor: emp.delegatesFor ?? null,
           customLeaveEntitlements: (emp as any).customLeaveEntitlements as Record<string, number> | null,
         }}
         branches={branches}

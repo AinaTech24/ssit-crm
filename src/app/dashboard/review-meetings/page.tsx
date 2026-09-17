@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
+import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
 import { Avatar } from "@/components/ui/Avatar";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -92,10 +92,10 @@ export default async function ReviewMeetingsPage({
     // so branch scope is derived from the owning RM's own branch — this is
     // what makes a branch head's meetings list include every RM in their
     // branch's meetings, not just the ones they personally ran.
-    const meetingScope = await resolveDataScope(tx, session);
+    const meetingScope = await resolveMeetingScope(tx, session);
     const filters: any[] = [
       sql`m.tenant_id = ${session.tenantId}::uuid`,
-      dataScopeSqlViaOwnerBranch(meetingScope, "m.rm_id"),
+      meetingScopeSql(meetingScope, "m.rm_id"),
     ];
     if (q) {
       filters.push(
@@ -176,21 +176,36 @@ export default async function ReviewMeetingsPage({
           AND meeting_date < now())::int AS overdue
       FROM review_meetings
       WHERE tenant_id = ${session.tenantId}::uuid
-        AND ${dataScopeSqlViaOwnerBranch(meetingScope, "rm_id")}
+        AND ${meetingScopeSql(meetingScope, "rm_id")}
     `);
     const s = stats.rows[0] as any;
     // RM roster for the "RM" filter dropdown (so the MFD/branch head can see
     // meetings by RM). Pointless for an own-records-only viewer — every row is
     // already theirs.
+    // A delegate is "own-records" for everything else but still needs the
+    // colleague whose diary they run in this dropdown, so they can filter to it.
+    const delegatedSql = meetingScope.delegatedIds.length
+      ? sql`id IN (${sql.join(meetingScope.delegatedIds.map((u) => sql`${u}::uuid`), sql`, `)})`
+      : null;
+    const rmFilterSql =
+      meetingScope.scope.kind === "all"
+        ? sql`TRUE`
+        : meetingScope.scope.kind === "branches"
+          ? (() => {
+              const branches = sql`branch_id IN (${sql.join(
+                meetingScope.scope.branchIds.map((b) => sql`${b}::uuid`),
+                sql`, `
+              )})`;
+              return delegatedSql ? sql`(${branches} OR ${delegatedSql})` : branches;
+            })()
+          : delegatedSql;
     const rmRows =
-      meetingScope.kind === "own"
+      rmFilterSql === null
         ? { rows: [] }
         : await tx.execute(sql`
           SELECT id, name FROM users
           WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
-            ${meetingScope.kind === "branches"
-              ? sql`AND branch_id IN (${sql.join(meetingScope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`
-              : sql``}
+            AND ${rmFilterSql}
           ORDER BY name ASC
         `);
     return { rows: meetings.rows as any[], stats: s, rms: rmRows.rows as any[] };

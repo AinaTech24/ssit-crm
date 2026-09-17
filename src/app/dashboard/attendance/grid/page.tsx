@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { ChevronLeft, ChevronRight, Grid3x3, Download } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { ATTENDANCE_STATUS_SHORT, ATTENDANCE_STATUS_TONE, ATTENDANCE_STATUS_LABELS } from "@/lib/attendance/policy";
 import { DownloadButton } from "@/components/common/SecureLinkButtons";
 
@@ -50,7 +51,7 @@ export default async function AttendanceGridPage({
   }
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const todayDay = month === current ? now.getDate() : -1;
-  const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const isManager = can(session.roles, "attendance.manage.all", session.permissions);
 
   function totals(eid: string) {
     const row = grid[eid] ?? {};

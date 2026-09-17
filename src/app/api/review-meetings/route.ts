@@ -17,7 +17,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
-import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
+import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
@@ -95,10 +95,10 @@ export async function GET(req: NextRequest) {
         // branch_id of its own, so branch scope is derived from the RM's own
         // branch on `users` — this is what lets a branch head see every RM in
         // their branch's meetings, not only meetings they personally ran.
-        const meetingScope = await resolveDataScope(tx, session);
+        const meetingScope = await resolveMeetingScope(tx, session);
         const filters: any[] = [
           sql`m.tenant_id = ${session.tenantId}::uuid`,
-          dataScopeSqlViaOwnerBranch(meetingScope, "m.rm_id"),
+          meetingScopeSql(meetingScope, "m.rm_id"),
         ];
         if (leadId) filters.push(sql`m.lead_id = ${leadId}::uuid`);
         if (q) filters.push(sql`(i.name ILIKE ${`%${q}%`} OR l.name ILIKE ${`%${q}%`} OR u.name ILIKE ${`%${q}%`} OR m.discussion_points ILIKE ${`%${q}%`} OR m.meeting_notes ILIKE ${`%${q}%`})`);
@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
             COUNT(*) FILTER (WHERE status IN ('scheduled','confirmed','in_progress') AND meeting_date < now())::int AS overdue
           FROM review_meetings
           WHERE tenant_id = ${session.tenantId}::uuid
-            AND ${dataScopeSqlViaOwnerBranch(meetingScope, "rm_id")}
+            AND ${meetingScopeSql(meetingScope, "rm_id")}
         `);
 
         return { meetings: meetings.rows, stats: (statsRes.rows[0] ?? { upcoming: 0, this_week: 0, completed_mtd: 0, overdue: 0 }) };

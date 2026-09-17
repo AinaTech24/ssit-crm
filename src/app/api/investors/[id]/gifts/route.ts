@@ -62,7 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
+    requireAny(session.roles, ["investor.view.all", "investor.view.assigned", "gifting.manage"], session.permissions);
     const result = await withTenant(session.tenantId, async (tx) => {
       const invRes = await tx.execute(sql`
         SELECT dob, birthday_gift_budget AS budget, branch_id, rm_id, service_rm_id
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     const session = await requireSession();
     // Client-linked write — same bar as editing the client record itself.
-    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
+    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned", "gifting.manage"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const parse = AddBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {
@@ -184,7 +184,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const session = await requireSession();
     // Client-linked write — same bar as editing the client record itself.
-    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
+    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned", "gifting.manage"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const parse = BudgetBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {

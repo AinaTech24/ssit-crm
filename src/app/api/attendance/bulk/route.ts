@@ -11,6 +11,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { ATTENDANCE_STATUSES } from "@/db/schema";
 
@@ -24,7 +25,7 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    if (!session.roles.some((r) => ["owner", "branch_head"].includes(r))) {
+    if (!can(session.roles, "attendance.manage.all", session.permissions)) {
       return NextResponse.json({ error: "only a manager can mark attendance" }, { status: 403 });
     }
     const parse = Body.safeParse(await req.json().catch(() => ({})));

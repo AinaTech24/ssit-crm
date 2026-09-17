@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { fmtMinutes, ATTENDANCE_STATUS_LABELS } from "@/lib/attendance/policy";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ function istTime(ts: Date | string | null | undefined): string {
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
-    if (!session.roles.some((r) => ["owner", "branch_head"].includes(r))) {
+    if (!can(session.roles, "attendance.manage.all", session.permissions)) {
       return NextResponse.json({ error: "only a manager can export attendance" }, { status: 403 });
     }
 

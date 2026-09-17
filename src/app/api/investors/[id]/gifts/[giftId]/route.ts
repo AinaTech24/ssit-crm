@@ -29,7 +29,7 @@ export async function DELETE(
   try {
     const session = await requireSession();
     // Client-linked write — same bar as editing the client record itself.
-    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
+    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned", "gifting.manage"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     await withTenant(session.tenantId, async (tx) => {
       const invRes = await tx.execute(sql`
@@ -86,7 +86,7 @@ export async function PATCH(
   const { id, giftId } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
+    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned", "gifting.manage"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = PatchBody.safeParse(await req.json().catch(() => ({})));

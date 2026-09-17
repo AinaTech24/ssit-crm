@@ -12,7 +12,7 @@ import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { businessExpenses, EXPENSE_CATEGORIES, PAID_FROM } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { fyBounds } from "@/lib/finance/fiscal-year";
@@ -31,7 +31,7 @@ const PostBody = z.object({
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const fy = req.nextUrl.searchParams.get("fy") ?? undefined;
     const bounds = fy ? fyBounds(fy) : null;
 
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const parsed = PostBody.safeParse(await req.json().catch(() => ({})));
     if (!parsed.success) {
       return NextResponse.json(

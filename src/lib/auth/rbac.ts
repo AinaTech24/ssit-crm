@@ -120,6 +120,16 @@ export type Capability =
   // Review meetings
   | "review_meeting.manage.all"
   | "review_meeting.manage.assigned"
+  // Office administration — the desk that actually runs leave, attendance, the
+  // staff expense tracker and the client gifting programme. Leave and
+  // attendance used to be hardcoded to owner/branch_head inside their routes,
+  // so a firm could not hand that work to the person who does it without also
+  // making them a branch head (and handing them a branch's whole client book).
+  // As capabilities they are grantable per person on the employee record.
+  | "leave.manage.all"
+  | "attendance.manage.all"
+  | "expense.manage"
+  | "gifting.manage"
   // Tasks
   | "task.view.all"
   | "task.view.assigned"
@@ -240,8 +250,21 @@ const MATRIX: Record<Capability, Role[]> = {
   "complaint.manage": ["compliance", "back_office", "ops"],
 
   // Review meetings — back_office plans for all, RM runs assigned
-  "review_meeting.manage.all": ["back_office", "ops", "branch_head"],
+  "review_meeting.manage.all": ["back_office", "ops", "branch_head", "gifting_hr"],
   "review_meeting.manage.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
+
+  // Office administration. gifting_hr is the desk this describes — "Gifting /
+  // HR" already ran the client engagement programme; it now also carries the
+  // HR administration (leave + attendance decisions for the whole firm) and
+  // the staff expense tracker, which is what that job actually is. Owner and
+  // branch_head keep leave/attendance exactly as before (they were the two
+  // hardcoded roles), so nothing that worked stops working.
+  "leave.manage.all": ["branch_head", "gifting_hr"],
+  "attendance.manage.all": ["branch_head", "gifting_hr"],
+  // The staff expense ledger, WITHOUT firm P&L / salaries — that stays behind
+  // finances.view, which is deliberately owner-grade.
+  "expense.manage": ["back_office", "gifting_hr"],
+  "gifting.manage": ["back_office", "ops", "gifting_hr"],
 
   // Tasks — every working role, including the support desks that only ever
   // work what is handed to them.

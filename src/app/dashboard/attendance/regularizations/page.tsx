@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { ArrowLeft, ClipboardCheck, Clock } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { RegularizationForm } from "@/components/attendance/RegularizationForm";
 import { RegularizationTable } from "@/components/attendance/RegularizationTable";
 
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RegularizationsPage() {
   const session = await requireSession();
-  const canManage = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+  const canManage = can(session.roles, "attendance.manage.all", session.permissions);
 
   const data = await withTenant(session.tenantId, async (tx) => {
     const stats = await tx.execute(sql`

@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { businessExpenses } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "finances.view", session.permissions);
+    requireAny(session.roles, ["finances.view", "expense.manage"], session.permissions);
     const { id } = await params;
     const meta = clientMetaFromHeaders(req.headers);
 

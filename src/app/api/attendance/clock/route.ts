@@ -14,6 +14,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
     if (!parse.success) return NextResponse.json({ error: "invalid body" }, { status: 400 });
     const { action } = parse.data;
     const employeeUserId = parse.data.employeeUserId ?? session.userId;
-    const isManager = session.roles.some((r) => ["owner", "branch_head"].includes(r));
+    const isManager = can(session.roles, "attendance.manage.all", session.permissions);
     if (employeeUserId !== session.userId && !isManager) {
       return NextResponse.json({ error: "only a manager can punch for another employee" }, { status: 403 });
     }
