@@ -12,6 +12,7 @@ import { sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
+import { investorScopeSql } from "@/lib/investors/access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +30,13 @@ export async function GET(req: NextRequest) {
     const minTwo = req.nextUrl.searchParams.get("min") === "2";
 
     const data = await withTenant(session.tenantId, async (tx) => {
+      // The web /dashboard/referrals page only grants investor.view.all
+      // (firm-wide roles), so it never needed a wall — but this mobile feed
+      // also allows investor.view.assigned (plain RM/sub_broker/ria/…), and
+      // had NO rm_id/service_rm_id/branch filter anywhere: an RM using the
+      // mobile app saw every referrer, every advocate and firm-wide converted
+      // AUM. Scope every query to the same wall the web Clients list uses.
+      const scope = await investorScopeSql(tx, session, "i");
       const nameFilter = q ? sql` AND i.name ILIKE ${`%${q}%`}` : sql``;
       const havingFilter = minTwo ? sql`HAVING COUNT(l.id) >= 2` : sql``;
       const rows = await tx.execute(sql`
@@ -49,7 +57,7 @@ export async function GET(req: NextRequest) {
         FROM investors i
         JOIN leads l ON l.referred_by_investor_id = i.id
         LEFT JOIN investors inv ON inv.id = l.converted_investor_id
-        WHERE i.deleted_at IS NULL${nameFilter}
+        WHERE i.deleted_at IS NULL AND ${scope}${nameFilter}
         GROUP BY i.id, i.name, i.phone, i.email, i.segment_tag, i.service_tier
         ${havingFilter}
         ORDER BY leads_given DESC, converted DESC
@@ -67,7 +75,7 @@ export async function GET(req: NextRequest) {
         FROM investors i
         JOIN leads l ON l.referred_by_investor_id = i.id
         LEFT JOIN investors inv ON inv.id = l.converted_investor_id
-        WHERE i.deleted_at IS NULL
+        WHERE i.deleted_at IS NULL AND ${scope}
       `);
 
       const advocates = await tx.execute(sql`
@@ -77,6 +85,7 @@ export async function GET(req: NextRequest) {
         WHERE i.status = 'active'
           AND i.deleted_at IS NULL
           AND i.redemption_risk_flagged_at IS NULL
+          AND ${scope}
         GROUP BY i.id, i.name, i.phone, i.aum, i.service_tier, i.last_contact_at
         HAVING COUNT(l.id) = 0
         ORDER BY i.aum DESC NULLS LAST

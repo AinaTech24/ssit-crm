@@ -4,7 +4,8 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { investors, families } from "@/db/schema";
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
+import { investorScopeCondition } from "@/lib/investors/access";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,12 @@ export async function GET(req: NextRequest) {
     requireAny(session.roles, ["family.view", "investor.view.all", "investor.view.assigned"], session.permissions);
 
     const suggestions = await withTenant(session.tenantId, async (tx) => {
-      // 1. Fetch all investors for the tenant
+      // 1. Fetch investors WITHIN THIS SESSION'S DATA WALL — this route only
+      // requires investor.view.assigned (a plain RM/sub_broker), and used to
+      // fetch every investor in the tenant with no rm_id/service_rm_id/branch
+      // filter, so an RM opening the Families page got other RMs' clients
+      // (name, PAN, AUM) suggested back as "family matches".
+      const scope = await investorScopeCondition(tx, session);
       const allInvestorsRaw = await tx
         .select({
           id: investors.id,
@@ -42,7 +48,7 @@ export async function GET(req: NextRequest) {
           activeSipAmount: investors.activeSipAmount,
         })
         .from(investors)
-        .where(isNull(investors.deletedAt));
+        .where(and(isNull(investors.deletedAt), scope));
 
       const allFamilies = await tx.select().from(families);
 
