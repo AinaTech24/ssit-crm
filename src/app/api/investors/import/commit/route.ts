@@ -166,11 +166,18 @@ export async function POST(req: NextRequest) {
       // Assigned-RM resolution — a mapped "Assigned RM" cell may hold a user's
       // name, email, or id; resolve it to a real user in this tenant.
       const rmRows = (await tx.execute(
-        sql`SELECT id, name, email FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status <> 'offboarded'`
-      )).rows as Array<{ id: string; name: string | null; email: string | null }>;
+        sql`SELECT id, name, email, branch_id FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status <> 'offboarded'`
+      )).rows as Array<{ id: string; name: string | null; email: string | null; branch_id: string | null }>;
       const rmById = new Set(rmRows.map((u) => u.id));
       const rmByName = new Map<string, string>();
       const rmByEmail = new Map<string, string>();
+      // A client's branch is the assigned RM's own branch — NOT the importer's
+      // branch. This used to be `session.branchId`, which for an owner/back-
+      // office import (session.branchId unset) left every imported client with
+      // branch_id NULL regardless of which branch the row's RM actually
+      // belonged to — so the branch head could never see it (BranchCockpit and
+      // the data wall both filter on investors.branch_id).
+      const branchByRmId = new Map(rmRows.map((u) => [u.id, u.branch_id]));
       for (const u of rmRows) {
         if (u.name) rmByName.set(u.name.trim().toLowerCase(), u.id);
         if (u.email) rmByEmail.set(u.email.trim().toLowerCase(), u.id);
@@ -192,6 +199,10 @@ export async function POST(req: NextRequest) {
         const keyRaw = matchCol ? pick(row, matchCol) : "";
         const key = keyRaw ? normKey(matchBy, keyRaw) : "";
         const existing = key ? keyToExisting.get(key) : undefined;
+        // Resolved once per row and reused by both update paths below, plus
+        // the branch that comes along with it (see buildUpdateSet).
+        const resolvedRmForRow = reverse.rmId ? resolveRm(pick(row, reverse.rmId)) : undefined;
+        const resolvedRmForRowBranch = resolvedRmForRow ? branchByRmId.get(resolvedRmForRow) : undefined;
 
         // ---- Route the row to update / insert / skip per mode. ------------
         if (mode === "update") {
@@ -205,7 +216,7 @@ export async function POST(req: NextRequest) {
           }
           try {
             await tx.transaction(async (sp) => {
-              const set = buildUpdateSet(row, reverse, dontUpdateEmpty, existing.address, rowCustomFields(row), existing.customFields, reverse.rmId ? resolveRm(pick(row, reverse.rmId)) : undefined);
+              const set = buildUpdateSet(row, reverse, dontUpdateEmpty, existing.address, rowCustomFields(row), existing.customFields, resolvedRmForRow, resolvedRmForRowBranch);
               if (Object.keys(set).length > 1) {
                 // (>1 because updatedAt is always present)
                 await sp
@@ -228,7 +239,7 @@ export async function POST(req: NextRequest) {
           }
           try {
             await tx.transaction(async (sp) => {
-              const set = buildUpdateSet(row, reverse, dontUpdateEmpty, existing.address, rowCustomFields(row), existing.customFields, reverse.rmId ? resolveRm(pick(row, reverse.rmId)) : undefined);
+              const set = buildUpdateSet(row, reverse, dontUpdateEmpty, existing.address, rowCustomFields(row), existing.customFields, resolvedRmForRow, resolvedRmForRowBranch);
               if (Object.keys(set).length > 1) {
                 await sp
                   .update(investors)
@@ -370,17 +381,18 @@ export async function POST(req: NextRequest) {
           const newId = uuid();
           const cleanCf = rowCustomFields(row);
           const rowRisk = reverse.riskProfile ? normalizeRiskCategory(pick(row, reverse.riskProfile)) : null;
+          const resolvedRmId = resolvedRmForRow ?? session.userId;
           await tx.transaction(async (sp) => {
             await sp.insert(investors).values({
               id: newId,
               tenantId: session.tenantId,
-              branchId: session.branchId ?? null,
+              branchId: branchByRmId.get(resolvedRmId) ?? session.branchId ?? null,
               pan,
               dedupPan: false,
               ...core,
               customFields: Object.keys(cleanCf).length ? cleanCf : null,
               onboardedAt: parseTimestamp(pick(row, reverse.onboardedAt)) ?? new Date(),
-              rmId: (reverse.rmId ? resolveRm(pick(row, reverse.rmId)) : null) ?? session.userId,
+              rmId: resolvedRmId,
               status: enumize(pick(row, reverse.status), ["active", "dormant", "inactive", "redemption_risk", "closed"], "active") ?? "active",
               ...h,
             } as any);
@@ -393,7 +405,7 @@ export async function POST(req: NextRequest) {
           // Record this row's key so a later duplicate row in the same file is
           // skipped (add mode) or updated rather than re-inserted (both mode).
           if (matchBy !== "none" && key && !keyToExisting.has(key)) {
-            keyToExisting.set(key, { id: newId, rmId: session.userId, address: core.address, customFields: cleanCf, riskProfile: rowRisk });
+            keyToExisting.set(key, { id: newId, rmId: resolvedRmId, address: core.address, customFields: cleanCf, riskProfile: rowRisk });
           }
         } catch (err: any) {
           errors.push({ rowIndex: i, error: String(err.message ?? "insert failed"), pan, name });
@@ -440,13 +452,21 @@ function buildUpdateSet(
   existingAddress: any,
   cleanCustomFields: Record<string, any> = {},
   existingCustomFields: any = {},
-  rmResolved?: string | null
+  rmResolved?: string | null,
+  rmResolvedBranchId?: string | null
 ): Record<string, any> {
   const set: Record<string, any> = {};
 
   // Assigned RM — only when the file mapped it AND it resolved to a real user
-  // (never wipe the current RM on a blank/unknown cell).
-  if (rmResolved) set.rmId = rmResolved;
+  // (never wipe the current RM on a blank/unknown cell). Re-home the client's
+  // branch to the NEW RM's own branch too — otherwise a re-assignment via
+  // import leaves branch_id pointing at the old branch, and the new RM's
+  // branch head never sees the client (BranchCockpit + the data wall both
+  // filter on investors.branch_id).
+  if (rmResolved) {
+    set.rmId = rmResolved;
+    if (rmResolvedBranchId) set.branchId = rmResolvedBranchId;
+  }
 
   const put = (col: string, val: any) => {
     const empty = val === null || val === undefined || val === "";
