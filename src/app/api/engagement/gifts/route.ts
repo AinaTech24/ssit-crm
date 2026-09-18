@@ -24,7 +24,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
-import { notifyGiftDelivered } from "@/lib/gifts/notify";
+import { notifyGiftDelivered, notifyGiftLogged } from "@/lib/gifts/notify";
 import { GIFT_CATEGORIES, giftLabel, isValidGrade } from "@/lib/gifts/catalogue";
 
 export const dynamic = "force-dynamic";
@@ -256,6 +256,21 @@ export async function POST(req: NextRequest) {
         RETURNING id, category, grade, title, amount, given_on, delivered_on
       `);
       const g = ins.rows[0] as unknown as InsertedGiftSql;
+
+      // Tell the gifting desk there's a new row to price / mark delivered.
+      // No-ops when the logger filled both in already.
+      await notifyGiftLogged(tx, {
+        tenantId: session.tenantId,
+        giftId: g.id,
+        rmId: inv.rm_id,
+        investorId: b.investorId,
+        clientName: inv.name ?? "this client",
+        giftTitle: g.title,
+        amount: Number(g.amount ?? 0),
+        onDate: g.delivered_on ?? "",
+        loggedByUserId: session.userId,
+        loggedByName: session.name ?? null,
+      });
 
       if (g.delivered_on) {
         const sent = await notifyGiftDelivered(tx, {

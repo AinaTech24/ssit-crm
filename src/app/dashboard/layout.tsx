@@ -160,7 +160,7 @@ const NAV: NavSection[] = [
       // roles here match the capability the page requires — no "rm", same
       // reasoning as Referrals above.
       { href: "/dashboard/engagement", label: "Client Engagement", icon: Gift, module: "client_master",
-        roles: ["owner", "back_office", "ops", "compliance"] },
+        roles: ["owner", "back_office", "ops", "compliance", "gifting_hr", "assistant"] },
       { href: "/dashboard/risk-profiles", label: "Risk Profile", icon: Gauge, module: "risk_profile",
         roles: ["owner", "compliance", "back_office", "ops", "rm"] },
       { href: "/dashboard/discovery", label: "Client Discovery", icon: ClipboardList,

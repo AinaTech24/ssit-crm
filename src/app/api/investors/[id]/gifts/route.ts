@@ -18,7 +18,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
-import { notifyGiftDelivered } from "@/lib/gifts/notify";
+import { notifyGiftDelivered, notifyGiftLogged } from "@/lib/gifts/notify";
 import { GIFT_CATEGORIES, isValidGrade } from "@/lib/gifts/catalogue";
 import { assertInScope } from "@/lib/auth/data-scope";
 
@@ -150,6 +150,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         RETURNING id, occasion, category, grade, title, amount, given_on, delivered_on, notes, created_at
       `);
       const gift = mapGift(ins.rows[0]);
+
+      // Tell the gifting desk there's a new row to price / mark delivered.
+      // No-ops when the logger filled both in already.
+      await notifyGiftLogged(tx, {
+        tenantId: session.tenantId,
+        giftId: gift.id,
+        rmId: inv.rm_id,
+        investorId: id,
+        clientName: inv.name ?? "this client",
+        giftTitle: gift.title,
+        amount: gift.amount,
+        onDate: gift.deliveredOn ?? "",
+        loggedByUserId: session.userId,
+        loggedByName: session.name ?? null,
+      });
 
       // Logged as already delivered → tell the RM now. Whoever ships the gift
       // is often not the RM, and the RM is the one who speaks to the client.

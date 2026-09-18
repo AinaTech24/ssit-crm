@@ -264,7 +264,7 @@ const MATRIX: Record<Capability, Role[]> = {
   // The staff expense ledger, WITHOUT firm P&L / salaries — that stays behind
   // finances.view, which is deliberately owner-grade.
   "expense.manage": ["back_office", "gifting_hr"],
-  "gifting.manage": ["back_office", "ops", "gifting_hr"],
+  "gifting.manage": ["back_office", "ops", "gifting_hr", "assistant"],
 
   // Tasks — every working role, including the support desks that only ever
   // work what is handed to them.

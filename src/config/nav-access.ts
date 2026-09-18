@@ -181,6 +181,7 @@ export const ROLE_DEFAULT_NAV: Record<string, string[]> = {
   // no leads, no pipeline. Attendance/leave/announcements stay because every
   // employee needs their own HR self-service whatever desk they sit at.
   assistant: [
+    "/dashboard/engagement",
     "/dashboard/tasks",
     "/dashboard/calendar",
     "/dashboard/attendance",
