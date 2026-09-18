@@ -17,6 +17,16 @@ export const LEAVE_TYPE_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+/**
+ * The types an employee may CHOOSE when filing a request — the firm only
+ * grants these two.
+ *
+ * Deliberately separate from LEAVE_TYPE_LABELS, which has to keep every type
+ * so historical rows (and the entitlement settings) still render with a proper
+ * name instead of a raw key. Narrowing the picker must not rewrite the past.
+ */
+export const REQUESTABLE_LEAVE_TYPES = ["casual", "sick"] as const;
+
 export const LEAVE_DURATION_LABELS: Record<string, string> = {
   full_day: "Full day",
   half_day: "Half day",

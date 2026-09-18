@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save, CalendarDays, AlertTriangle, Clock } from "lucide-react";
 import {
-  LEAVE_TYPE_LABELS,
+  LEAVE_TYPE_LABELS, REQUESTABLE_LEAVE_TYPES,
   LEAVE_DURATION_LABELS,
   computeDays,
   isPooledLeaveType,
@@ -166,7 +166,7 @@ export function LeaveForm({
         </Field>
         <Field label="Leave type">
           <ThemeSelect value={leaveType} onChange={(val) => setLeaveType(val)}>
-            {Object.entries(LEAVE_TYPE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            {REQUESTABLE_LEAVE_TYPES.map((k) => <option key={k} value={k}>{LEAVE_TYPE_LABELS[k]}</option>)}
           </ThemeSelect>
         </Field>
 
