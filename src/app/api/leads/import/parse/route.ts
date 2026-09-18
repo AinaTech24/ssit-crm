@@ -9,7 +9,7 @@ import * as XLSX from "xlsx";
 import { and, asc, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { customFieldDefs } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -86,7 +86,11 @@ export async function POST(req: NextRequest) {
     const session = await requireSession();
     // Importing the firm's book is a manager action — gate parse with the same
     // capability as the commit step (was requireSession-only).
-    requireCap(session.roles, "lead.edit.all", session.permissions);
+    // An RM imports leads into their OWN pipeline — every row below is stamped
+    // owner_id = the importer, so "edit all" is the wrong bar. Requiring it
+    // blocked every RM, sub-broker, RA-sales, RIA and insurance user from bulk
+    // lead upload entirely, which is most of the people who do it.
+    requireAny(session.roles, ["lead.edit.all", "lead.edit.assigned"], session.permissions);
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return NextResponse.json({ error: "file required" }, { status: 400 });

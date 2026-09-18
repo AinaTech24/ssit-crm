@@ -9,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { scoreFields } from "@/lib/leads/score";
@@ -62,7 +62,11 @@ function dateOrNull(v: string): string | null {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "lead.edit.all", session.permissions);
+    // An RM imports leads into their OWN pipeline — every row below is stamped
+    // owner_id = the importer, so "edit all" is the wrong bar. Requiring it
+    // blocked every RM, sub-broker, RA-sales, RIA and insurance user from bulk
+    // lead upload entirely, which is most of the people who do it.
+    requireAny(session.roles, ["lead.edit.all", "lead.edit.assigned"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));
