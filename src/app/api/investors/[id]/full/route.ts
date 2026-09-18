@@ -58,8 +58,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           tx.select().from(tasks).where(and(eq(tasks.subjectId, id), eq(tasks.subjectType, "investor"), isNull(tasks.deletedAt))).limit(20),
           tx.select().from(serviceRequests).where(eq(serviceRequests.investorId, id)).limit(20),
           tx.select().from(consents).where(eq(consents.investorId, id)),
-          inv.rmId
-            ? tx.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.id, inv.rmId)).limit(1).then((r) => r[0] ?? null)
+          // Fall back to the SERVICING rm when there's no relationship rm.
+          // Reading rm_id alone made a client with only a servicing RM read
+          // "Unassigned" here while the full profile showed the RM — same
+          // record, two different answers on two screens.
+          inv.rmId || inv.serviceRmId
+            ? tx
+                .select({ id: users.id, name: users.name, email: users.email })
+                .from(users)
+                .where(eq(users.id, (inv.rmId ?? inv.serviceRmId) as string))
+                .limit(1)
+                .then((r) => r[0] ?? null)
             : Promise.resolve(null),
           inv.familyId
             ? tx.select().from(families).where(eq(families.id, inv.familyId)).limit(1).then((r) => r[0] ?? null)

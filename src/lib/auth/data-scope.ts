@@ -437,7 +437,20 @@ export async function assertInScope(
   what = "record"
 ): Promise<void> {
   const scope = await resolveDataScope(tx, session);
-  if (isInScope(scope, row)) return;
+  const owners = Array.isArray(row.ownerId) ? row.ownerId : [row.ownerId];
+  const hasOwner = owners.some(Boolean);
+  // For a BRANCH scope, "in my branch" means the record's OWNER is in my
+  // branch — the same rule the list queries use (dataScopeSqlViaOwnerBranch).
+  // Checking the record's own branch column instead is what let a detail page
+  // disagree with the list it was opened from: a record whose stored branch
+  // drifted (or was stamped from whoever imported it) opened fine while being
+  // absent from the list, or the reverse. Records with no owner at all keep
+  // the old column check — that's all there is to go on.
+  if (scope.kind === "branches" && hasOwner) {
+    if (await isInScopeViaOwnerBranch(tx, scope, owners)) return;
+  } else if (isInScope(scope, row)) {
+    return;
+  }
   throw Object.assign(
     new Error(`forbidden: this ${what} belongs to another branch or team member`),
     { status: 403 }
