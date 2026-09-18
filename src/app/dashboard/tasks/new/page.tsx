@@ -528,10 +528,13 @@ export default function NewTaskPage() {
                 · defaults to you
               </span>
             </div>
-            {/* Tasks are operational work owned by Back Office, so the picker is
-                scoped to that role rather than the whole team. */}
+            {/* Follows the Department chosen above: pick one and only that
+                department's people are offered. With no department chosen the
+                old default applies — tasks are operational work owned by Back
+                Office, so the picker starts scoped to those roles. */}
             <RmSelector
-              role={["back_office", "marketing", "ria", "ra_research", "ra_sales"]}
+              department={form.department || null}
+              role={form.department ? undefined : ["back_office", "marketing", "ria", "ra_research", "ra_sales"]}
               value={form.assigneeId || null}
               onChange={(id) => set("assigneeId", id ?? "")}
               placeholder="Assign to myself"

@@ -50,6 +50,7 @@ export function RmSelector({
   value,
   onChange,
   role,
+  department,
   placeholder = "— Choose team member —",
   allowClear = true,
   disabled,
@@ -60,8 +61,17 @@ export function RmSelector({
   value: string | null | undefined;
   onChange: (id: string | null) => void;
   /** Filter the list to a role, or several (e.g. ["back_office", "marketing"]).
-   *  Omit for all team members. */
+   *  Omit for all team members. IGNORED while `department` is set — a
+   *  department is the more specific answer, and ANDing the two silently
+   *  produces an empty picker (e.g. department "sales" against a back-office
+   *  role list). */
   role?: string | string[];
+  /**
+   * Restrict to one department (users.department). When set, only members of
+   * that department are offered — the picker follows the department chosen on
+   * the form above it.
+   */
+  department?: string | null;
   placeholder?: string;
   /** Adds an "— Unassigned —" option that emits null on select. */
   allowClear?: boolean;
@@ -107,6 +117,18 @@ export function RmSelector({
     };
   }, [cacheKey, role]);
 
+  // Department wins over the role filter when both are supplied — see the prop
+  // doc. Filtering here rather than in the request keeps one cached fetch
+  // serving every department as the user flips between them.
+  const visible = department ? (rows ?? []).filter((e) => e.department === department) : rows;
+
+  // A person picked before the department changed is no longer a valid answer;
+  // clearing it stops the form submitting someone outside the department.
+  useEffect(() => {
+    if (!department || !visible || !value) return;
+    if (!visible.some((e) => e.id === value)) onChange(null);
+  }, [department, visible, value]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (rows == null) {
     // Skeleton, not text — a quiet shimmer instead of "Loading…" flashing in a form.
     return (
@@ -120,6 +142,19 @@ export function RmSelector({
     return (
       <div className={`input-base text-destructive text-xs ${className}`}>
         Couldn't load team — {err}
+      </div>
+    );
+  }
+
+  if (department && visible && visible.length === 0) {
+    return (
+      <div className={`input-base flex items-center gap-2 text-muted-foreground text-xs ${className}`}>
+        <Users className="size-3.5" />
+        No one in this department yet —{" "}
+        <a href="/dashboard/employees" className="text-brand-cyan hover:underline">
+          assign someone
+        </a>
+        .
       </div>
     );
   }
@@ -154,7 +189,7 @@ export function RmSelector({
     >
       {allowClear && <option value="">{placeholder}</option>}
       {!allowClear && !value && <option value="" disabled>{placeholder}</option>}
-      {rows.map((e) => (
+      {(visible ?? []).map((e) => (
         <option key={e.id} value={e.id}>
           {e.name}
           {e.roles.length > 0 ? ` · ${primaryRole(e.roles)}` : ""}
