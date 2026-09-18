@@ -19,6 +19,9 @@ const STATUS_COLORS: Record<string, string> = {
   offboarded: "bg-gray-50 text-gray-700",
 };
 
+type EmployeeRow = Record<string, any>;
+type BranchSummaryRow = { branch: string; users: number; clients: number; heads: string };
+
 export const dynamic = "force-dynamic";
 
 export default async function EmployeesPage({
@@ -80,16 +83,36 @@ export default async function EmployeesPage({
       ${whereSql}
       ORDER BY u.created_at DESC
     `);
-    return employees.rows as any[];
+    // Per-branch roll-up. A branch head sees every client owned by a user in
+    // THEIR branch, so "who is in which branch" is the single thing that
+    // decides how wide their view is — and it was impossible to see. A firm
+    // where every employee sits in one branch looks identical to a properly
+    // split one until a branch head opens Clients and finds the whole book.
+    const branchSummary = await tx.execute(sql`
+      SELECT COALESCE(b.name, '— no branch —') AS branch,
+             COUNT(DISTINCT u.id)::int AS users,
+             COUNT(DISTINCT i.id)::int AS clients,
+             COALESCE(string_agg(DISTINCT u.name, ', ')
+               FILTER (WHERE 'branch_head' = ANY(u.roles)), '—') AS heads
+      FROM users u
+      LEFT JOIN branches b ON b.id = u.branch_id
+      LEFT JOIN investors i ON i.rm_id = u.id AND i.deleted_at IS NULL
+      WHERE u.tenant_id = ${session.tenantId}::uuid AND u.status <> 'offboarded'
+      GROUP BY b.name
+      ORDER BY clients DESC
+    `);
+    return { employees: employees.rows as EmployeeRow[], branchSummary: branchSummary.rows as unknown as BranchSummaryRow[] };
   });
+  const branchSummary = data.branchSummary;
+  const roster = data.employees;
 
   const stats = {
-    total: data.length,
-    active: data.filter((e) => e.status === "active").length,
-    nismExpiring: data.filter(
+    total: roster.length,
+    active: roster.filter((e) => e.status === "active").length,
+    nismExpiring: roster.filter(
       (e) => e.nism_expiry_at && new Date(e.nism_expiry_at).getTime() - Date.now() < 90 * 24 * 60 * 60 * 1000
     ).length,
-    targetedRms: data.filter((e) => Number(e.annual_target ?? 0) > 0).length,
+    targetedRms: roster.filter((e) => Number(e.annual_target ?? 0) > 0).length,
   };
 
   return (
@@ -101,7 +124,7 @@ export default async function EmployeesPage({
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <TeamPresence members={data.map((e) => ({ id: e.id, name: e.name }))} />
+          <TeamPresence members={roster.map((e) => ({ id: e.id, name: e.name }))} />
           <Link href="/dashboard/employees/org" className="rounded-md border px-3 py-1.5 text-sm font-medium flex items-center gap-1.5 hover:bg-secondary">
             <Network className="size-4" /> Org chart
           </Link>
@@ -121,7 +144,7 @@ export default async function EmployeesPage({
       </div>
 
       <CompactFilterBar
-        totalCount={data.length}
+        totalCount={roster.length}
         filters={[
           { type: "search", key: "q", placeholder: "Search by name, email, phone, EUIN…" },
           {
@@ -165,8 +188,40 @@ export default async function EmployeesPage({
         }
       />
 
+      {branchSummary.length > 0 && (
+        <div className="card-surface p-4">
+          <div className="text-xs font-semibold mb-1">Branches at a glance</div>
+          <div className="text-[11px] text-muted-foreground mb-3">
+            A branch head sees every client owned by a user in their branch. If everyone sits in one
+            branch, that branch&apos;s head sees the whole firm — this is where to check.
+          </div>
+          <div className="table-scroll">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-muted-foreground border-b">
+                <tr>
+                  <th className="text-left py-1.5 font-medium">Branch</th>
+                  <th className="text-left py-1.5 font-medium">Branch head</th>
+                  <th className="text-right py-1.5 font-medium">Users</th>
+                  <th className="text-right py-1.5 font-medium">Clients their head can see</th>
+                </tr>
+              </thead>
+              <tbody>
+                {branchSummary.map((b) => (
+                  <tr key={b.branch} className="border-b last:border-0">
+                    <td className={`py-2 ${b.branch.startsWith("—") ? "text-amber-700" : ""}`}>{b.branch}</td>
+                    <td className="py-2 text-xs text-muted-foreground">{b.heads}</td>
+                    <td className="py-2 text-right tabular-nums">{b.users}</td>
+                    <td className="py-2 text-right tabular-nums font-medium">{b.clients}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="card-surface overflow-hidden">
-        {data.length === 0 ? (
+        {roster.length === 0 ? (
           <div className="p-12 text-center text-sm text-muted-foreground">
             <UserCog className="size-8 mx-auto text-muted-foreground/50" />
             <div className="mt-2">No employees match these filters.</div>
@@ -191,7 +246,7 @@ export default async function EmployeesPage({
                 </tr>
               </thead>
               <tbody>
-                {data.map((e) => {
+                {roster.map((e) => {
                   const nismExpiry = e.nism_expiry_at ? new Date(e.nism_expiry_at) : null;
                   const nismDays = nismExpiry ? Math.floor((nismExpiry.getTime() - Date.now()) / (24 * 60 * 60 * 1000)) : null;
                   return (
