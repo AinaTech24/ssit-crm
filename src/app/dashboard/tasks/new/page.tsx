@@ -36,6 +36,7 @@ import {
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
+import { DEPARTMENTS } from "@/config/departments";
 import { AttachmentPicker, uploadAttachments } from "@/components/common/EntityAttachments";
 import { useToast } from "@/components/ui/Toast";
 import { readApiError, readThrownError } from "@/lib/api/client-error";
@@ -65,17 +66,6 @@ const KNOWN_TYPES = [
   "marketing_material",
 ];
 
-const DEPARTMENTS: [string, string][] = [
-  ["sales", "Sales"],
-  ["operations", "Operations"],
-  ["back_office", "Back Office"],
-  ["compliance", "Compliance"],
-  ["marketing", "Marketing"],
-  ["advisory", "Advisory"],
-  ["support", "Support"],
-  ["leadership", "Leadership"],
-  ["other", "Other"],
-];
 
 export default function NewTaskPage() {
   const router = useRouter();

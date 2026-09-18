@@ -32,6 +32,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, Users } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
+import { inDepartment } from "@/config/departments";
 
 export type Employee = {
   id: string;
@@ -67,9 +68,10 @@ export function RmSelector({
    *  role list). */
   role?: string | string[];
   /**
-   * Restrict to one department (users.department). When set, only members of
-   * that department are offered — the picker follows the department chosen on
-   * the form above it.
+   * Restrict to one department. Members are anyone whose ROLES belong to that
+   * department (see config/departments.ts) or whose department column names it
+   * — never narrowed by branch or desk. The picker follows the department
+   * chosen on the form above it.
    */
   department?: string | null;
   placeholder?: string;
@@ -120,7 +122,14 @@ export function RmSelector({
   // Department wins over the role filter when both are supplied — see the prop
   // doc. Filtering here rather than in the request keeps one cached fetch
   // serving every department as the user flips between them.
-  const visible = department ? (rows ?? []).filter((e) => e.department === department) : rows;
+  //
+  // Matched on the department's ROLE SET as well as the department column:
+  // users.department is optional and usually blank, so column-only matching
+  // offered nobody. "Sales" means every RM and sub broker in the FIRM — no
+  // branch or desk narrowing, since assigning work crosses sub-branches.
+  const visible = department
+    ? (rows ?? []).filter((e) => inDepartment(e, department))
+    : rows;
 
   // A person picked before the department changed is no longer a valid answer;
   // clearing it stops the form submitting someone outside the department.
