@@ -104,6 +104,7 @@ export type EmployeeFormValues = {
   allowedBranches: string[] | null;
   delegatesFor: string[] | null;
   restrictToOwnRecords: boolean;
+  dataScopeOverride: "branch" | "own" | null;
   customLeaveEntitlements: Partial<Record<string, number>> | null;
 };
 
@@ -182,19 +183,24 @@ export function EmployeeEditForm({
   // server would decide differently.
   const effectiveScope: { wide: boolean; text: string } = isOwnerRole
     ? { wide: true, text: "every record in the firm (Owner)." }
-    : v.restrictToOwnRecords
-      ? { wide: false, text: "only the records assigned to them — “Only their own records” is ticked." }
-      : seesAllBranchesByRole
-        ? { wide: true, text: "every record in the firm, because they hold Back Office / Operations." }
-        : isBranchHead || branchAccess.length > 0
-          ? {
-              wide: true,
-              text: `EVERY record in ${(isBranchHead ? 1 : 0) + branchAccess.length} branch${(isBranchHead ? 1 : 0) + branchAccess.length === 1 ? "" : "es"} — whoever owns it — because ${[
-                isBranchHead ? "they hold Branch Head, which always includes their own branch" : "",
-                branchAccess.length ? `${branchAccess.length} branch grant${branchAccess.length === 1 ? "" : "s"} below` : "",
-              ].filter(Boolean).join(" and ")}.`,
-            }
-          : { wide: false, text: "only the records assigned to them." };
+    : v.dataScopeOverride === "own"
+      ? { wide: false, text: "only the records assigned to them — set below." }
+      : v.dataScopeOverride === "branch"
+        ? {
+            wide: false,
+            text: "every record owned by someone in their branch — set below, so a firm-wide role does not widen it.",
+          }
+        : seesAllBranchesByRole
+          ? { wide: true, text: "EVERY record in the firm, because they hold Back Office / Operations. Set “Their branch only” below to limit them." }
+          : isBranchHead || branchAccess.length > 0
+            ? {
+                wide: true,
+                text: `every record owned by someone in ${(isBranchHead ? 1 : 0) + branchAccess.length} branch${(isBranchHead ? 1 : 0) + branchAccess.length === 1 ? "" : "es"}, because ${[
+                  isBranchHead ? "they hold Branch Head" : "",
+                  branchAccess.length ? `${branchAccess.length} branch grant${branchAccess.length === 1 ? "" : "s"} below` : "",
+                ].filter(Boolean).join(" and ")}.`,
+              }
+            : { wide: false, text: "only the records assigned to them." };
   // The firm's accessible sidebar items, grouped — the pool the owner grants from.
   const tenantNavSet = new Set(tenantNavKeys);
   const accessibleNavGroups = NAV_ACCESS_GROUPS.map((g) => ({
@@ -361,7 +367,8 @@ export function EmployeeEditForm({
           // would be a stored no-op that looks meaningful on screen.
           allowedBranches: seesAllBranchesByRole ? null : branchAccess,
           delegatesFor,
-          restrictToOwnRecords: v.restrictToOwnRecords,
+          restrictToOwnRecords: v.dataScopeOverride === "own",
+          dataScopeOverride: v.dataScopeOverride,
           department: v.department || null,
           joiningDate: v.joiningDate || null,
           reportingManagerId: v.reportingManagerId || null,
@@ -662,22 +669,26 @@ export function EmployeeEditForm({
             </div>
 
             {!isOwnerRole && (
-              <label className="flex items-start gap-2 text-xs cursor-pointer border rounded-md p-2.5 bg-card">
-                <input
-                  type="checkbox"
-                  className="mt-0.5"
-                  checked={v.restrictToOwnRecords}
-                  onChange={(e) => update("restrictToOwnRecords", e.target.checked)}
-                />
-                <span>
-                  <span className="font-medium">Only their own records</span>
-                  <span className="block text-[11px] text-muted-foreground mt-0.5">
-                    Overrides everything below and any widening role. Use this for someone who holds
-                    Branch Head (or Back Office) for administrative work — approvals, the office desk —
-                    but should still only see the clients, leads and meetings assigned to them.
-                  </span>
-                </span>
-              </label>
+              <div className="border rounded-md p-2.5 bg-card space-y-1.5">
+                <div className="text-xs font-medium">Data scope</div>
+                <SelectField
+                  value={v.dataScopeOverride ?? ""}
+                  onChange={(e) =>
+                    update("dataScopeOverride", (e.target.value || null) as "branch" | "own" | null)
+                  }
+                  size="sm"
+                  className="w-full"
+                >
+                  <option value="">Decide from their roles (default)</option>
+                  <option value="branch">Their branch only</option>
+                  <option value="own">Only their own records</option>
+                </SelectField>
+                <div className="text-[11px] text-muted-foreground">
+                  Overrides roles and grants. Use <strong>Their branch only</strong> for a branch head
+                  who also holds Back Office or Operations — those roles otherwise mean the whole firm,
+                  including clients with no RM assigned.
+                </div>
+              </div>
             )}
 
             {seesAllBranchesByRole ? (

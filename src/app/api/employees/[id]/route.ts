@@ -94,6 +94,7 @@ const PatchBody = z.object({
   allowedBranches: z.array(z.string().uuid()).nullable().optional(),
   delegatesFor: z.array(z.string().uuid()).nullable().optional(),
   restrictToOwnRecords: z.boolean().optional(),
+  dataScopeOverride: z.enum(["branch","own"]).nullable().optional(),
   customLeaveEntitlements: z.record(z.number()).nullable().optional(),
 });
 
@@ -230,6 +231,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.allowedBranches !== undefined) patch.allowedBranches = body.allowedBranches;
       if (body.delegatesFor !== undefined) patch.delegatesFor = body.delegatesFor;
       if (body.restrictToOwnRecords !== undefined) patch.restrictToOwnRecords = body.restrictToOwnRecords;
+      if (body.dataScopeOverride !== undefined) patch.dataScopeOverride = body.dataScopeOverride;
       if (body.customLeaveEntitlements !== undefined) patch.customLeaveEntitlements = body.customLeaveEntitlements;
       // Access lives in the signed session token, so a permission / role /
       // sidebar change is invisible to whoever is already logged in until they
@@ -253,7 +255,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         // Narrowing someone to their own records must bite immediately, not
         // whenever their current token happens to expire.
         (body.restrictToOwnRecords !== undefined &&
-          body.restrictToOwnRecords !== existing.restrictToOwnRecords);
+          body.restrictToOwnRecords !== existing.restrictToOwnRecords) ||
+        (body.dataScopeOverride !== undefined && body.dataScopeOverride !== existing.dataScopeOverride);
       // users.sessions_invalid_after is the revocation epoch the token check
       // actually reads — revoking the user_sessions rows alone only tidies the
       // device list and would leave the old token working.

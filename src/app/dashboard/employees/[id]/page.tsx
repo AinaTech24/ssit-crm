@@ -310,6 +310,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           allowedBranches: emp.allowedBranches ?? null,
           delegatesFor: emp.delegatesFor ?? null,
           restrictToOwnRecords: emp.restrictToOwnRecords ?? false,
+          dataScopeOverride: (emp.dataScopeOverride ?? null) as "branch" | "own" | null,
           customLeaveEntitlements: (emp as any).customLeaveEntitlements as Record<string, number> | null,
         }}
         branches={branches}

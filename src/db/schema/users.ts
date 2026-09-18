@@ -165,6 +165,13 @@ export const users = pgTable(
      */
     restrictToOwnRecords: boolean("restrict_to_own_records").notNull().default(false),
     /**
+     * Explicit per-user data scope (migration 0223), beating roles and grants:
+     * 'branch' = their own branch even if they hold a firm-wide role,
+     * 'own'    = only records assigned to them,
+     * null     = resolve from roles/grants as normal. Owner is unaffected.
+     */
+    dataScopeOverride: text("data_scope_override"),
+    /**
      * Per-user CALENDAR DELEGATION (migration 0220). The colleagues whose
      * meetings this user handles — an EA/front-desk who runs one partner's
      * diary. NULL / empty = none. A list of user ids = this user additionally

@@ -92,43 +92,53 @@ export async function loadAllowedBranches(
   return row.allowedBranches;
 }
 
+/** An admin's explicit answer for one person, overriding roles and grants. */
+export type ScopeOverride = "branch" | "own" | null;
+
 /**
- * The two per-user scope columns, read together (one query instead of two).
+ * The per-user scope columns, read together (one query instead of several).
  *
- * `restrictToOwnRecords` (migration 0222) is an explicit "this person sees only
- * their own records, full stop" switch that BEATS every widening below it
- * except owner. It exists because branch_head widens to a whole branch
- * implicitly — you hold the role, you get the branch — so a person who is an RM
- * with a book of their own AND a branch head for, say, leave approvals silently
- * saw the entire branch's clients, with nothing on screen explaining why. The
- * firm needed a way to say "no, just their own" without stripping the role.
+ * `dataScopeOverride` (migration 0223) is the firm's explicit answer for one
+ * person, and it beats everything except owner. It exists because the two
+ * widenings below it are both role-driven and therefore all-or-nothing:
+ * back_office / ops mean the WHOLE FIRM, and branch_head means a whole branch.
+ * A branch head who also holds an operational role got the firm, and the only
+ * fixes available were to strip the role they need for their job or leave them
+ * seeing everything.
  */
 export async function loadScopeRow(
   tx: any,
   tenantId: string,
   userId: string
-): Promise<{ allowedBranches: string[]; restrictToOwnRecords: boolean }> {
+): Promise<{ allowedBranches: string[]; override: ScopeOverride }> {
   try {
     const r = await tx.execute(sql`
-      SELECT allowed_branches, restrict_to_own_records FROM users
+      SELECT allowed_branches, restrict_to_own_records, data_scope_override FROM users
       WHERE id = ${userId}::uuid AND tenant_id = ${tenantId}::uuid
       LIMIT 1
     `);
     const row = r.rows[0] as
-      | { allowed_branches?: unknown; restrict_to_own_records?: unknown }
+      | { allowed_branches?: unknown; restrict_to_own_records?: unknown; data_scope_override?: unknown }
       | undefined;
     const raw = row?.allowed_branches;
+    const rawOverride = row?.data_scope_override;
     return {
       allowedBranches: Array.isArray(raw)
         ? raw.filter((v): v is string => typeof v === "string" && UUID_RE.test(v))
         : [],
-      restrictToOwnRecords: row?.restrict_to_own_records === true,
+      override:
+        rawOverride === "branch" || rawOverride === "own"
+          ? rawOverride
+          : // 0222's boolean, for a row the 0223 backfill hasn't touched.
+            row?.restrict_to_own_records === true
+            ? "own"
+            : null,
     };
   } catch {
     // A missing column (pre-0216 / pre-0222 database) must not take the page
     // down, and it must FAIL CLOSED — no grant, so the caller falls back to
     // own-records.
-    return { allowedBranches: [], restrictToOwnRecords: false };
+    return { allowedBranches: [], override: null };
   }
 }
 
@@ -235,20 +245,36 @@ export async function explainDataScope(
     return { scope: { kind: "all" }, reason: "Owner — sees every record in the firm." };
   }
 
-  const { allowedBranches, restrictToOwnRecords } = await loadScopeRow(
+  const { allowedBranches, override } = await loadScopeRow(
     tx,
     session.tenantId,
     session.userId
   );
 
-  // The explicit override, ticked on the employee record. Deliberately ABOVE
-  // the role check: the whole point is to hold an otherwise-widening role
-  // (branch_head for leave approvals, back office for ops work) without the
-  // client book that normally comes with it.
-  if (restrictToOwnRecords) {
+  // The firm's explicit answer for this person. Deliberately ABOVE the role
+  // checks: the whole point is to hold an otherwise-widening role (back office
+  // for operational work, branch_head for approvals) without the book that
+  // normally comes with it.
+  if (override === "own") {
     return {
       scope: { kind: "own", userId: session.userId },
-      reason: "Limited to their own records — “Only their own records” is ticked on their employee record.",
+      reason: "Limited to their own records — set on their employee record.",
+    };
+  }
+  if (override === "branch") {
+    const branchIds = new Set(allowedBranches);
+    if (session.branchId) branchIds.add(session.branchId);
+    if (branchIds.size === 0) {
+      // Set to "their branch" but they have none — fail CLOSED rather than
+      // silently falling back to a firm-wide role.
+      return {
+        scope: { kind: "own", userId: session.userId },
+        reason: "Set to their branch only, but they are not assigned to a branch — showing their own records until one is set.",
+      };
+    }
+    return {
+      scope: { kind: "branches", branchIds: [...branchIds] },
+      reason: `Limited to their branch — every record owned by someone in ${branchIds.size === 1 ? "their branch" : `${branchIds.size} branches`}, set on their employee record.`,
     };
   }
 

@@ -397,6 +397,12 @@ export async function POST(req: NextRequest) {
           const newId = uuid();
           const cleanCf = rowCustomFields(row);
           const rowRisk = reverse.riskProfile ? normalizeRiskCategory(pick(row, reverse.riskProfile)) : null;
+          // No "Assigned RM" column mapped → the person doing the import owns
+          // the row. That is what makes the wall behave the way the firm
+          // expects straight after an import: a branch user's upload is visible
+          // to them alone, a branch head's is visible to them and (via the
+          // branch) to nobody else's branch. An unowned client is visible to
+          // no branch at all, which is how a whole book ends up stranded.
           const resolvedRmId = resolvedRmForRow ?? session.userId;
           await tx.transaction(async (sp) => {
             await sp.insert(investors).values({
