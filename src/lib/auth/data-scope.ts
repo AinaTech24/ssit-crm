@@ -68,6 +68,13 @@ export type DataScope =
   | { kind: "all" }
   /** Every record in these branches, whoever owns it. */
   | { kind: "branches"; branchIds: string[] }
+  /**
+   * Every record owned by someone on these DESKS (sub-branches). Firms run
+   * their real structure at desk level — "Surat Branch", "Vadodara Branch",
+   * "Wealth Branch" are all desks under one registered office — so for a
+   * branch head with a desk, the desk IS their branch.
+   */
+  | { kind: "desks"; deskIds: string[] }
   /** Only records this user owns. The default for everyone else. */
   | { kind: "own"; userId: string };
 
@@ -110,15 +117,20 @@ export async function loadScopeRow(
   tx: any,
   tenantId: string,
   userId: string
-): Promise<{ allowedBranches: string[]; override: ScopeOverride }> {
+): Promise<{ allowedBranches: string[]; override: ScopeOverride; deskId: string | null }> {
   try {
     const r = await tx.execute(sql`
-      SELECT allowed_branches, restrict_to_own_records, data_scope_override FROM users
+      SELECT allowed_branches, restrict_to_own_records, data_scope_override, desk_id FROM users
       WHERE id = ${userId}::uuid AND tenant_id = ${tenantId}::uuid
       LIMIT 1
     `);
     const row = r.rows[0] as
-      | { allowed_branches?: unknown; restrict_to_own_records?: unknown; data_scope_override?: unknown }
+      | {
+          allowed_branches?: unknown;
+          restrict_to_own_records?: unknown;
+          data_scope_override?: unknown;
+          desk_id?: unknown;
+        }
       | undefined;
     const raw = row?.allowed_branches;
     const rawOverride = row?.data_scope_override;
@@ -133,12 +145,13 @@ export async function loadScopeRow(
             row?.restrict_to_own_records === true
             ? "own"
             : null,
+      deskId: typeof row?.desk_id === "string" && UUID_RE.test(row.desk_id) ? row.desk_id : null,
     };
   } catch {
     // A missing column (pre-0216 / pre-0222 database) must not take the page
     // down, and it must FAIL CLOSED — no grant, so the caller falls back to
     // own-records.
-    return { allowedBranches: [], override: null };
+    return { allowedBranches: [], override: null, deskId: null };
   }
 }
 
@@ -245,7 +258,7 @@ export async function explainDataScope(
     return { scope: { kind: "all" }, reason: "Owner — sees every record in the firm." };
   }
 
-  const { allowedBranches, override } = await loadScopeRow(
+  const { allowedBranches, override, deskId } = await loadScopeRow(
     tx,
     session.tenantId,
     session.userId
@@ -262,6 +275,16 @@ export async function explainDataScope(
     };
   }
   if (override === "branch") {
+    // A desk IS the branch for firms that run their structure at desk level
+    // ("Surat Branch", "Vadodara Branch" are desks under one registered
+    // office). Scoping to the top-level branch there puts the whole firm in
+    // one bucket and every desk head sees everyone.
+    if (deskId && allowedBranches.length === 0) {
+      return {
+        scope: { kind: "desks", deskIds: [deskId] },
+        reason: "Limited to their desk — every record owned by someone on the same desk (sub-branch), set on their employee record.",
+      };
+    }
     const branchIds = new Set(allowedBranches);
     if (session.branchId) branchIds.add(session.branchId);
     if (branchIds.size === 0) {
@@ -289,8 +312,16 @@ export async function explainDataScope(
   // A branch head's own branch is implicit; explicit grants ADD to it, so one
   // covering a second branch sees both. Deduped because the two overlap the
   // moment an admin also ticks the branch they already run.
-  const branchIds = new Set(allowedBranches);
   const ownBranch = managesOwnBranch(session);
+  // Same rule for the implicit branch_head widening: if this firm runs desks,
+  // a branch head's world is their desk, not every desk in the office.
+  if (ownBranch && deskId && allowedBranches.length === 0) {
+    return {
+      scope: { kind: "desks", deskIds: [deskId] },
+      reason: "Sees every record owned by someone on their desk (sub-branch), because they hold Branch Head.",
+    };
+  }
+  const branchIds = new Set(allowedBranches);
   if (ownBranch) branchIds.add(session.branchId!);
 
   if (branchIds.size > 0) {
@@ -330,6 +361,9 @@ export type ScopeColumns = {
  */
 export function dataScopeSql(scope: DataScope, cols: ScopeColumns): SQL {
   if (scope.kind === "all") return sql`TRUE`;
+  // A desk scope has no column of its own on these tables — it is always
+  // derived from who owns the record, so hand it to the owner-based builder.
+  if (scope.kind === "desks") return dataScopeSqlViaOwnerBranch(scope, cols.owner);
   if (scope.kind === "branches") {
     return sql`${sql.raw(cols.branch)} IN (${sql.join(
       scope.branchIds.map((b) => sql`${b}::uuid`),
@@ -356,17 +390,18 @@ export function dataScopeSqlViaOwnerBranch(
 ): SQL {
   if (scope.kind === "all") return sql`TRUE`;
   const cols = Array.isArray(ownerCol) ? ownerCol : [ownerCol];
-  if (scope.kind === "branches") {
-    // "Every record owned by someone in my branch." A record can have more than
-    // one legitimate owner (a client's relationship RM and its separate
-    // servicing RM), and ANY of them being in the branch is enough.
+  if (scope.kind === "branches" || scope.kind === "desks") {
+    // "Every record owned by someone in my branch/desk." A record can have more
+    // than one legitimate owner (a client's relationship RM and its separate
+    // servicing RM), and ANY of them being in scope is enough.
+    const memberOf =
+      scope.kind === "desks"
+        ? sql`su.desk_id IN (${sql.join(scope.deskIds.map((d) => sql`${d}::uuid`), sql`, `)})`
+        : sql`su.branch_id IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`;
     return sql`EXISTS (
       SELECT 1 FROM users su
       WHERE su.id IN (${sql.join(cols.map((c) => sql`${sql.raw(c)}`), sql`, `)})
-        AND su.branch_id IN (${sql.join(
-          scope.branchIds.map((b) => sql`${b}::uuid`),
-          sql`, `
-        )})
+        AND ${memberOf}
     )`;
   }
   return sql`(${sql.join(
@@ -396,6 +431,10 @@ export function isInScope(
   row: { branchId?: string | null; ownerId?: string | null | (string | null | undefined)[] }
 ): boolean {
   if (scope.kind === "all") return true;
+  // Desk membership lives on the OWNER's user row, so it cannot be decided
+  // from the record alone. Callers that can await use assertInScope /
+  // isInScopeViaOwnerBranch; this sync path fails closed rather than guessing.
+  if (scope.kind === "desks") return false;
   if (scope.kind === "branches") {
     return !!row.branchId && scope.branchIds.includes(row.branchId);
   }
@@ -420,10 +459,14 @@ export async function isInScopeViaOwnerBranch(
   const owners = ownerIds.filter((o): o is string => !!o);
   if (!owners.length) return false;
   if (scope.kind === "own") return owners.includes(scope.userId);
+  const memberOf =
+    scope.kind === "desks"
+      ? sql`su.desk_id IN (${sql.join(scope.deskIds.map((d) => sql`${d}::uuid`), sql`, `)})`
+      : sql`su.branch_id IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`;
   const r = await tx.execute(sql`
     SELECT 1 FROM users su
     WHERE su.id IN (${sql.join(owners.map((o) => sql`${o}::uuid`), sql`, `)})
-      AND su.branch_id IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})
+      AND ${memberOf}
     LIMIT 1
   `);
   return r.rows.length > 0;
@@ -446,7 +489,7 @@ export async function assertInScope(
   // drifted (or was stamped from whoever imported it) opened fine while being
   // absent from the list, or the reverse. Records with no owner at all keep
   // the old column check — that's all there is to go on.
-  if (scope.kind === "branches" && hasOwner) {
+  if ((scope.kind === "branches" || scope.kind === "desks") && hasOwner) {
     if (await isInScopeViaOwnerBranch(tx, scope, owners)) return;
   } else if (isInScope(scope, row)) {
     return;

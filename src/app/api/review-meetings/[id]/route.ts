@@ -19,7 +19,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession, type SessionUser } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
-import { resolveMeetingScope, isMeetingInScope } from "@/lib/auth/data-scope";
+import { resolveMeetingScope, isMeetingInScope, isInScopeViaOwnerBranch } from "@/lib/auth/data-scope";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
@@ -61,8 +61,10 @@ async function meetingInBranchScope(tx: any, session: SessionUser, rmId: string 
   if (ms.scope.kind === "all") return true;
   if (ms.scope.kind === "own") return false; // canTouchMeeting already covers "own"
   if (!rmId) return false;
-  const [rm] = await tx.execute(sql`SELECT branch_id FROM users WHERE id = ${rmId}::uuid LIMIT 1`).then((r: any) => r.rows);
-  return !!rm?.branch_id && ms.scope.branchIds.includes(rm.branch_id);
+  // Branch OR desk membership, resolved from the meeting owner's user row —
+  // the same rule the meetings list uses, so a meeting can't open here and be
+  // missing from the list (or the reverse).
+  return isInScopeViaOwnerBranch(tx, ms.scope, [rmId]);
 }
 
 /**
