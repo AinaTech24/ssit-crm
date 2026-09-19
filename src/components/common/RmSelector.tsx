@@ -52,6 +52,7 @@ export function RmSelector({
   onChange,
   role,
   department,
+  requireDepartment = false,
   placeholder = "— Choose team member —",
   allowClear = true,
   disabled,
@@ -74,6 +75,16 @@ export function RmSelector({
    * chosen on the form above it.
    */
   department?: string | null;
+  /**
+   * Offer nobody until a department is chosen. The picker still renders, so
+   * the clear option (e.g. "Assign to myself") stays selectable — it just has
+   * no team members under it.
+   *
+   * Without this, a form that has a Department field above it contradicts
+   * itself: the department narrows the list, but leaving it blank widens it
+   * back to a roster the person hasn't asked for.
+   */
+  requireDepartment?: boolean;
   placeholder?: string;
   /** Adds an "— Unassigned —" option that emits null on select. */
   allowClear?: boolean;
@@ -127,16 +138,47 @@ export function RmSelector({
   // users.department is optional and usually blank, so column-only matching
   // offered nobody. "Sales" means every RM and sub broker in the FIRM — no
   // branch or desk narrowing, since assigning work crosses sub-branches.
-  const visible = department
-    ? (rows ?? []).filter((e) => inDepartment(e, department))
-    : rows;
+  // No department chosen, and the form says one is required first → offer
+  // nobody. Not the whole roster: that is the question the department field
+  // is there to ask.
+  const gated = requireDepartment && !department;
+  const visible = gated
+    ? []
+    : department
+      ? (rows ?? []).filter((e) => inDepartment(e, department))
+      : rows;
 
-  // A person picked before the department changed is no longer a valid answer;
-  // clearing it stops the form submitting someone outside the department.
+  // A person picked before the department changed — or before it was cleared
+  // — is no longer a valid answer; dropping it stops the form submitting
+  // someone the picker no longer offers.
   useEffect(() => {
-    if (!department || !visible || !value) return;
+    if (!value) return;
+    if (gated) {
+      onChange(null);
+      return;
+    }
+    if (!department || !visible) return;
     if (!visible.some((e) => e.id === value)) onChange(null);
-  }, [department, visible, value]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [gated, department, visible, value]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Render before the fetch resolves — there is nothing to wait for, and a
+  // shimmer where a usable field belongs just looks broken.
+  if (gated) {
+    return (
+      <SelectField
+        id={id}
+        value=""
+        onChange={() => onChange(null)}
+        disabled={disabled}
+        required={required}
+        placeholder={placeholder}
+        className={className}
+        title="Choose a department to pick a team member"
+      >
+        <option value="">{placeholder}</option>
+      </SelectField>
+    );
+  }
 
   if (rows == null) {
     // Skeleton, not text — a quiet shimmer instead of "Loading…" flashing in a form.

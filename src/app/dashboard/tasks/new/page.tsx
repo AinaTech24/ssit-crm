@@ -515,16 +515,16 @@ export default function NewTaskPage() {
             <div className="text-xs font-medium mb-1">
               Assign to
               <span className="ml-1 text-[10px] text-muted-foreground font-normal">
-                · defaults to you
+                {form.department ? "· defaults to you" : "· pick a department to assign someone else"}
               </span>
             </div>
             {/* Follows the Department chosen above: pick one and only that
                 department's people are offered. With no department chosen the
-                old default applies — tasks are operational work owned by Back
-                Office, so the picker starts scoped to those roles. */}
+                only option is yourself — offering a roster there would answer
+                a question the Department field hasn't been asked yet. */}
             <RmSelector
               department={form.department || null}
-              role={form.department ? undefined : ["back_office", "marketing", "ria", "ra_research", "ra_sales"]}
+              requireDepartment
               value={form.assigneeId || null}
               onChange={(id) => set("assigneeId", id ?? "")}
               placeholder="Assign to myself"
