@@ -6,7 +6,7 @@ import { withPlatformAdmin } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requirePlatform } from "@/lib/auth/rbac";
 import { subscriptions, subscriptionEvents } from "@/db/schema";
-import { areKnownNavKeys } from "@/config/nav-access";
+import { areKnownNavKeys, ALL_NAV_KEYS } from "@/config/nav-access";
 import { areKnownWidgetKeys } from "@/config/dashboard-widgets";
 import { sanitizeFeatureFlagOverride } from "@/config/feature-flags";
 
@@ -50,7 +50,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const patch: any = { updatedAt: new Date() };
       if (modulesOverride !== undefined) patch.modulesOverride = modulesOverride;
       if (allowedFields !== undefined) patch.allowedFields = allowedFields;
-      if (allowedNav !== undefined) patch.allowedNav = allowedNav;
+      if (allowedNav !== undefined) {
+        patch.allowedNav = allowedNav;
+        // Stamp what was actually on offer. Without this the grant is a frozen
+        // list and every sidebar item we ship later is invisible to this firm
+        // forever (migration 0224). Clearing the grant clears the stamp too.
+        patch.navGrantCatalog = allowedNav === null ? null : ALL_NAV_KEYS;
+      }
       if (allowedDashboardWidgets !== undefined) patch.allowedDashboardWidgets = allowedDashboardWidgets;
       // Per-tenant feature-flag override — sanitize to known flags; null clears it.
       if (featureFlags !== undefined) patch.featureFlagsOverride = featureFlags === null ? null : sanitizeFeatureFlagOverride(featureFlags);

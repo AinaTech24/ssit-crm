@@ -43,6 +43,7 @@ export async function RaDashboard({ session }: { session: SessionUser }) {
   const navKeys = new Set(
     tenantAccessibleNavKeys({
       allowedNav: license.allowedNav,
+      navGrantCatalog: license.navGrantCatalog,
       enabledModules: license.enabledModules,
       enabledFeatures: license.enabledFeatures,
     })

@@ -140,6 +140,13 @@ export const subscriptions = pgTable(
      */
     allowedNav: jsonb("allowed_nav").$type<string[]>(),
     /**
+     * The catalogue `allowedNav` was chosen from, stamped at save time
+     * (migration 0224). Without it the grant is a frozen list and every
+     * sidebar item shipped afterwards is invisible to the firm forever.
+     * NULL = a grant written before 0224, of unknown vintage.
+     */
+    navGrantCatalog: jsonb("nav_grant_catalog").$type<string[]>(),
+    /**
      * Admin → MFD dashboard-widget access. The exact set of dashboard home
      * cards/sections this firm can see (see src/config/dashboard-widgets.ts).
      * NULL = all widgets visible (default). An array = exactly these widget

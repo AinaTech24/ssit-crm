@@ -241,6 +241,13 @@ export const CORE_HREFS = new Set<string>([
 export const ALL_NAV_ITEMS: NavAccessItem[] = NAV_ACCESS_GROUPS.flatMap((g) => g.items);
 const NAV_KEY_SET = new Set<string>(ALL_NAV_ITEMS.map((i) => i.key));
 
+/**
+ * Every sidebar item the product currently ships. Stamped into
+ * `subscriptions.nav_grant_catalog` whenever a firm's grant is saved, so a
+ * later release can tell which items were on offer at the time.
+ */
+export const ALL_NAV_KEYS: string[] = ALL_NAV_ITEMS.map((i) => i.key);
+
 /** Is this href a catalog (gatable) sidebar item? */
 export function isGatableNav(href: string): boolean {
   return NAV_KEY_SET.has(href);
@@ -254,7 +261,8 @@ export function areKnownNavKeys(keys: string[] | null | undefined): boolean {
 
 /**
  * The sidebar hrefs a TENANT can access. Resolution order (first that applies):
- *   1. explicit admin grant — subscriptions.allowed_nav
+ *   1. explicit admin grant — subscriptions.allowed_nav, PLUS any item that
+ *      postdates the grant (see subscriptions.nav_grant_catalog)
  *   2. package GRANULAR feature set — packages.enabled_features (per-feature
  *      Off/Included chosen in the Equitywala package editor)
  *   3. package COARSE module default (legacy) — items with no module, or whose
@@ -268,8 +276,24 @@ export function tenantAccessibleNavKeys(opts: {
   allowedNav: string[] | null;
   enabledModules: string[];
   enabledFeatures?: string[] | null;
+  /**
+   * The catalogue `allowedNav` was chosen from, stamped when it was saved
+   * (migration 0224). NULL/absent = a grant of unknown vintage.
+   */
+  navGrantCatalog?: string[] | null;
 }): string[] {
-  if (opts.allowedNav) return opts.allowedNav.filter((k) => NAV_KEY_SET.has(k));
+  if (opts.allowedNav) {
+    const granted = opts.allowedNav.filter((k) => NAV_KEY_SET.has(k));
+    // A grant records what the admin EXCLUDED, out of what they could see. An
+    // item that did not exist then was never excluded — it just hadn't shipped
+    // — so it falls back to the package-module default rather than staying
+    // invisible forever. Unknown vintage (pre-0224) means nothing was on offer
+    // as far as we can prove, so the package default applies in full; the next
+    // save in the Access Center stamps the catalogue and exclusions stick.
+    const offered = new Set(opts.navGrantCatalog ?? []);
+    const neverOffered = defaultFeaturesForModules(opts.enabledModules).filter((k) => !offered.has(k));
+    return [...new Set([...granted, ...neverOffered])];
+  }
   if (opts.enabledFeatures && opts.enabledFeatures.length > 0) {
     return opts.enabledFeatures.filter((k) => NAV_KEY_SET.has(k));
   }

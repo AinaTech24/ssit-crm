@@ -43,6 +43,12 @@ export type LicenseState = {
   allowedFields: string[] | null;
   /** Admin → MFD sidebar grant (nav hrefs). null = everything. */
   allowedNav: string[] | null;
+  /**
+   * The catalogue `allowedNav` was chosen from, stamped at save time
+   * (migration 0224). null = a grant of unknown vintage, which therefore
+   * holds back nothing the firm's package enables.
+   */
+  navGrantCatalog: string[] | null;
   /** Admin → MFD dashboard-widget grant (keys). null = all widgets visible. */
   allowedDashboardWidgets: string[] | null;
   featureFlags: Record<string, any>;
@@ -62,6 +68,7 @@ function unrestricted(status = "active"): LicenseState {
     enabledFeatures: null,
     allowedFields: null,
     allowedNav: null,
+    navGrantCatalog: null,
     allowedDashboardWidgets: null,
     featureFlags: {},
     isRestricted: false,
@@ -91,6 +98,7 @@ async function loadTenantLicenseImpl(tenantId: string, roles?: string[]): Promis
         modulesOverride: subscriptions.modulesOverride,
         allowedFields: subscriptions.allowedFields,
         allowedNav: subscriptions.allowedNav,
+        navGrantCatalog: subscriptions.navGrantCatalog,
         allowedDashboardWidgets: subscriptions.allowedDashboardWidgets,
         featureFlagsOverride: subscriptions.featureFlagsOverride,
         suspendedReason: subscriptions.suspendedReason,
@@ -118,6 +126,7 @@ async function loadTenantLicenseImpl(tenantId: string, roles?: string[]): Promis
     enabledFeatures: null,
     allowedFields: (row.sub.allowedFields as string[] | null) ?? null,
     allowedNav: (row.sub.allowedNav as string[] | null) ?? null,
+    navGrantCatalog: (row.sub.navGrantCatalog as string[] | null) ?? null,
     allowedDashboardWidgets: (row.sub.allowedDashboardWidgets as string[] | null) ?? null,
     featureFlags: (row.sub.featureFlagsOverride as Record<string, any> | null) ?? {},
     isRestricted,

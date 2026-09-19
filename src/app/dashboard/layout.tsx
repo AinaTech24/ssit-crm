@@ -319,6 +319,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const tenantAllowedSet = new Set(
     tenantAccessibleNavKeys({
       allowedNav: license.allowedNav,
+      navGrantCatalog: license.navGrantCatalog,
       enabledModules: license.enabledModules,
       enabledFeatures: license.enabledFeatures,
     })

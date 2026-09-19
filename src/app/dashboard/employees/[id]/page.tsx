@@ -316,6 +316,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         branches={branches}
         tenantNavKeys={tenantAccessibleNavKeys({
           allowedNav: license.allowedNav,
+          navGrantCatalog: license.navGrantCatalog,
           enabledModules: license.enabledModules,
           enabledFeatures: license.enabledFeatures,
         })}
