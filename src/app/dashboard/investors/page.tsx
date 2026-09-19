@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus, FileDown, LayoutGrid, List, FileUp } from "lucide-react";
+import { Plus, FileDown, LayoutGrid, List, FileUp, Cake } from "lucide-react";
 import { and, asc, desc, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { investors } from "@/db/schema";
@@ -128,6 +128,13 @@ export default async function InvestorsPage({
   const dir: "asc" | "desc" =
     sp.dir === "asc" || sp.dir === "desc" ? sp.dir : DEFAULT_DIR[sortKey] ?? "desc";
 
+  // Opened from the header birthday widget's "View all <Month> birthdays".
+  // The page otherwise looks like the ordinary client list with rows missing,
+  // so this turns on a Birthday column, date ordering and a banner that says
+  // what is being shown.
+  const birthdayView = sp.birthday_month === "1";
+  const monthLabel = new Date().toLocaleDateString("en-IN", { month: "long" });
+
   // Table pagination — 50/page. Kanban shows a larger single window (it's a
   // pipeline board, not a paged list). `page` is 1-based.
   const PAGE_SIZE = 50;
@@ -182,7 +189,14 @@ export default async function InvestorsPage({
       .from(investors)
       .where(where as any)
       .orderBy(
-        sortKey === "name"
+        // The birthday view reads by DATE — 1st of the month first — so the
+        // ones already past sit at the top and the rest are a plan for the
+        // month. Ordered in SQL, not after the fetch: page 1 of a 200-client
+        // month has to be the 1st–Nth, not an arbitrary 50 sorted among
+        // themselves. An explicit column click still wins.
+        birthdayView && !sp.sort
+          ? sql`EXTRACT(DAY FROM ${investors.dob}) ASC`
+          : sortKey === "name"
           ? (dir === "asc" ? asc(investors.name) : desc(investors.name))
           : sortKey === "sip"
             ? (dir === "asc" ? asc(investors.activeSipAmount) : desc(investors.activeSipAmount))
@@ -297,6 +311,7 @@ export default async function InvestorsPage({
     healthBand: (i.healthBand as HealthBand) ?? "green",
     dormDays: dormancyDays(i as any),
     completeness: clientCompleteness(i as any).score,
+    dob: birthdayView ? (i.dob as any) ?? null : null,
   }));
 
   return (
@@ -351,6 +366,23 @@ export default async function InvestorsPage({
           </Link>
         </div>
       </div>
+
+      {/* Says what the list is, and how to get out of it. Landing on a silently
+          filtered client table reads as "the filter didn't work". */}
+      {birthdayView && (
+        <div className="card-surface p-3 flex items-center gap-3 flex-wrap border-l-4 border-l-rose-400">
+          <Cake className="size-5 text-rose-500 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold">Birthdays in {monthLabel}</div>
+            <div className="text-xs text-muted-foreground">
+              {total} client{total === 1 ? "" : "s"} with a birthday this month, earliest first.
+            </div>
+          </div>
+          <Link href="/dashboard/investors" className="btn-secondary text-xs shrink-0">
+            Show all clients
+          </Link>
+        </div>
+      )}
 
       {/* Possible-duplicate nudge — managers can merge from the duplicates tool.
           Especially relevant now the importer allows duplicate PANs on purpose. */}
@@ -527,7 +559,7 @@ export default async function InvestorsPage({
             dir={dir}
             allIds={allIds}
             total={total}
-            flags={{ showPan, showCategory: true, showTier, showSegment, showAum, showSip, showKyc, showStatus }}
+            flags={{ showPan, showCategory: true, showTier, showSegment, showAum, showSip, showKyc, showStatus, showBirthday: birthdayView }}
           />
           <Pager
             page={page}

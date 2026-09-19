@@ -46,6 +46,8 @@ export type InvestorTableRow = {
   healthBand: HealthBand;
   dormDays: number | null;
   completeness: number;
+  /** Only carried when the birthday view is on — see InvestorTableFlags. */
+  dob?: string | null;
 };
 
 export type InvestorTableFlags = {
@@ -57,6 +59,12 @@ export type InvestorTableFlags = {
   showSip: boolean;
   showKyc: boolean;
   showStatus: boolean;
+  /**
+   * The list is filtered to one month's birthdays (birthday_month=1), so show
+   * the date. Without it the birthday view is the ordinary client table with
+   * some rows missing, and nothing on screen says why.
+   */
+  showBirthday?: boolean;
 };
 
 const segmentColors: Record<string, string> = {
@@ -227,6 +235,7 @@ export function InvestorsTable({
                   {arrow("name")}
                 </button>
               </th>
+              {flags.showBirthday && <th data-col="birthday" className={`text-left ${isCompact ? "py-1.5" : "py-2.5"} font-medium`}>Birthday</th>}
               {flags.showPan && <th data-col="pan" className={`text-left ${isCompact ? "py-1.5" : "py-2.5"} font-medium`}>PAN</th>}
               {flags.showCategory && <th data-col="category" className={`text-left ${isCompact ? "py-1.5" : "py-2.5"} font-medium`}>Category</th>}
               {flags.showTier && <th data-col="tier" className={`text-left ${isCompact ? "py-1.5" : "py-2.5"} font-medium`}>Tier</th>}
@@ -294,6 +303,11 @@ export function InvestorsTable({
                       <span className="hover:text-brand-navy hover:underline">{i.name}</span>
                     </div>
                   </td>
+                  {flags.showBirthday && (
+                    <td data-col="birthday" className={`${isCompact ? "py-1.5" : "py-2.5"} ${isCompact ? "text-[11px]" : "text-xs"} whitespace-nowrap`}>
+                      {birthdayCell(i.dob)}
+                    </td>
+                  )}
                   {flags.showPan && (
                     <td data-col="pan" className={`${isCompact ? "py-1.5" : "py-2.5"} font-mono text-muted-foreground ${isCompact ? "text-[11px]" : "text-xs"}`}>
                       {i.pan}
@@ -441,5 +455,26 @@ export function InvestorsTable({
       {/* Split-Screen Side-Peek Drawer */}
       <InvestorSidePeek investor={sidePeekInvestor} onClose={() => setSidePeekInvestor(null)} />
     </div>
+  );
+}
+
+/**
+ * "19 Sep · turns 38" — the birthday view's date cell. Today is called out,
+ * because the whole point of opening the month is to catch the ones that have
+ * already arrived.
+ */
+function birthdayCell(dob: string | null | undefined) {
+  if (!dob) return <span className="text-muted-foreground">—</span>;
+  const d = new Date(dob);
+  if (isNaN(d.getTime())) return <span className="text-muted-foreground">—</span>;
+  const now = new Date();
+  const isToday = d.getDate() === now.getDate() && d.getMonth() === now.getMonth();
+  const age = now.getFullYear() - d.getFullYear();
+  const turning = age > 0 && age < 130 ? age : null;
+  return (
+    <span className={isToday ? "font-semibold text-rose-600" : ""}>
+      {d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+      {isToday ? " · today 🎉" : turning ? ` · turns ${turning}` : ""}
+    </span>
   );
 }
