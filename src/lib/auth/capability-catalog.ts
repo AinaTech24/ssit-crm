@@ -102,6 +102,11 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
     label: "Manage everyone's attendance",
     hint: "The firm-wide attendance register: mark/bulk-mark others, decide regularisation requests and export. Without this a person only marks their own.",
   },
+  "attendance.grid.view": {
+    group: "Team & Office",
+    label: "See the firm-wide Monthly Grid",
+    hint: "Attendance → Monthly grid: every employee in the firm, a month at a time, on one page. Owner-only by default — grant it to whoever runs HR. Marking and managing attendance is a separate permission.",
+  },
   "expense.manage": {
     group: "Team & Office",
     label: "Staff expense tracker",

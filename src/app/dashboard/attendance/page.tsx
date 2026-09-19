@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { CalendarCheck, CheckCircle2, XCircle, CalendarOff, Grid3x3, CalendarDays, Settings, ClipboardCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { ClockWidget } from "@/components/attendance/ClockWidget";
 import { AttendanceTable } from "@/components/attendance/AttendanceTable";
@@ -25,6 +26,8 @@ export default async function AttendancePage({
   const statusFilter = (sp.status ?? "").split(",").filter(Boolean);
   const todayOnly = sp.today === "1";
   const canManage = session.roles.includes("owner");
+  // The whole firm's month on one page — owner-only unless explicitly granted.
+  const canSeeGrid = can(session.roles, "attendance.grid.view", session.permissions);
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -114,9 +117,11 @@ export default async function AttendancePage({
               <Settings className="size-3.5" /> Settings
             </Link>
           )}
-          <Link href="/dashboard/attendance/grid" className="btn-secondary text-xs">
-            <Grid3x3 className="size-3.5" /> Monthly grid
-          </Link>
+          {canSeeGrid && (
+            <Link href="/dashboard/attendance/grid" className="btn-secondary text-xs">
+              <Grid3x3 className="size-3.5" /> Monthly grid
+            </Link>
+          )}
           {/* One person across a month on a real date grid — the team-wide
               version of the same data is the Monthly grid above. */}
           <Link href="/dashboard/attendance/calendar" className="btn-secondary text-xs">

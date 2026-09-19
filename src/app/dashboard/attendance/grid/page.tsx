@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { ChevronLeft, ChevronRight, Grid3x3, Download } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { ATTENDANCE_STATUS_SHORT, ATTENDANCE_STATUS_TONE, ATTENDANCE_STATUS_LABELS } from "@/lib/attendance/policy";
@@ -21,6 +22,12 @@ export default async function AttendanceGridPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
+  // Every employee in the firm, a month at a time. Hiding the link would not
+  // be enough — the URL is guessable, and this page never had a guard at all,
+  // so anyone who reached it read the whole firm's attendance.
+  if (!can(session.roles, "attendance.grid.view", session.permissions)) {
+    redirect("/dashboard/attendance");
+  }
   const sp = await searchParams;
   const now = new Date();
   const current = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -51,7 +58,8 @@ export default async function AttendanceGridPage({
   }
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
   const todayDay = month === current ? now.getDate() : -1;
-  const isManager = can(session.roles, "attendance.manage.all", session.permissions);
+  // Reaching this page already means holding attendance.grid.view, and the CSV
+  // is this same table — so the export needs no second, different permission.
 
   function totals(eid: string) {
     const row = grid[eid] ?? {};
@@ -79,9 +87,7 @@ export default async function AttendanceGridPage({
           <Link href={`/dashboard/attendance/grid?month=${shiftMonth(month, -1)}`} className="btn-ghost text-sm inline-flex items-center gap-1"><ChevronLeft className="size-4" /> {shiftMonth(month, -1)}</Link>
           <span className="font-bold tabular-nums">{label}</span>
           <Link href={`/dashboard/attendance/grid?month=${shiftMonth(month, 1)}`} className="btn-ghost text-sm inline-flex items-center gap-1">{shiftMonth(month, 1)} <ChevronRight className="size-4" /></Link>
-          {isManager && (
-            <DownloadButton url={`/api/attendance/export?month=${month}`} className="btn-ghost text-sm inline-flex items-center gap-1"><Download className="size-4" /> Export CSV</DownloadButton>
-          )}
+          <DownloadButton url={`/api/attendance/export?month=${month}`} className="btn-ghost text-sm inline-flex items-center gap-1"><Download className="size-4" /> Export CSV</DownloadButton>
         </div>
       </div>
 

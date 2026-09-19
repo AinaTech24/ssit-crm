@@ -74,6 +74,9 @@ export default async function AttendanceCalendarPage({
   // Only managers may look at another employee's month; everyone else is pinned
   // to their own row regardless of what ?employee= says.
   const isManager = can(session.roles, "attendance.manage.all", session.permissions);
+  // Managing attendance (even a whole branch's) is not a reason to see the
+  // firm-wide grid — that is its own, owner-grade permission.
+  const canSeeGrid = can(session.roles, "attendance.grid.view", session.permissions);
   const requested = sp.employee && /^[0-9a-f-]{36}$/i.test(sp.employee) ? sp.employee : null;
   const employeeId = isManager && requested ? requested : session.userId;
 
@@ -179,9 +182,11 @@ export default async function AttendanceCalendarPage({
           <Link href={monthHref(shiftMonth(month, 1))} className="rounded-md border px-2.5 py-1.5 text-sm hover:bg-accent">
             {new Date(y, m, 1).toLocaleDateString("en-IN", { month: "short" })} →
           </Link>
-          <Link href="/dashboard/attendance/grid" className="btn-secondary text-xs">
-            <Grid3x3 className="size-3.5" /> Monthly grid
-          </Link>
+          {canSeeGrid && (
+            <Link href="/dashboard/attendance/grid" className="btn-secondary text-xs">
+              <Grid3x3 className="size-3.5" /> Monthly grid
+            </Link>
+          )}
         </div>
       </div>
 

@@ -128,6 +128,7 @@ export type Capability =
   // As capabilities they are grantable per person on the employee record.
   | "leave.manage.all"
   | "attendance.manage.all"
+  | "attendance.grid.view"
   | "expense.manage"
   | "gifting.manage"
   // Tasks
@@ -261,6 +262,13 @@ const MATRIX: Record<Capability, Role[]> = {
   // hardcoded roles), so nothing that worked stops working.
   "leave.manage.all": ["branch_head", "gifting_hr"],
   "attendance.manage.all": ["branch_head", "gifting_hr"],
+  // The Monthly Grid is every employee in the firm on one page, a month at a
+  // time — a whole-firm HR view, not a working tool. OWNER ONLY (an empty role
+  // list; `can()` always passes the owner), grantable per person on the
+  // employee record for whoever actually runs HR. Deliberately NOT tied to
+  // attendance.manage.all: a branch head manages their own branch's
+  // attendance, which is not a reason to hand them the whole firm's.
+  "attendance.grid.view": [],
   // The staff expense ledger, WITHOUT firm P&L / salaries — that stays behind
   // finances.view, which is deliberately owner-grade.
   "expense.manage": ["back_office", "gifting_hr"],

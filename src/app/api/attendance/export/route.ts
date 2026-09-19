@@ -45,8 +45,12 @@ function istTime(ts: Date | string | null | undefined): string {
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
-    if (!can(session.roles, "attendance.manage.all", session.permissions)) {
-      return NextResponse.json({ error: "only a manager can export attendance" }, { status: 403 });
+    // This is the Monthly Grid as a CSV — the whole firm, unscoped by branch —
+    // so it answers to the same permission as the grid itself. Gating it on
+    // attendance.manage.all would have let a branch head export every employee
+    // in the firm while the page they got it from was closed to them.
+    if (!can(session.roles, "attendance.grid.view", session.permissions)) {
+      return NextResponse.json({ error: "only an admin can export the firm's attendance" }, { status: 403 });
     }
 
     const now = new Date();
