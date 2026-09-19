@@ -1,7 +1,12 @@
 import { handleApiError } from "@/lib/api/error-handler";
 /**
- * GET /api/birthdays — client birthdays bucketed into Past (last 7 days),
- * Today, and Tomorrow. Powers the header birthday widget (cake icon).
+ * GET /api/birthdays — client birthdays for Today and Tomorrow. Powers the
+ * header birthday widget (cake icon).
+ *
+ * There used to be a third bucket, Past (the last 30 days). The widget dropped
+ * that tab — a wish you already missed is not work anyone can do — so the
+ * query no longer walks a 30-day window on every poll either. The whole month
+ * is one click away on the client list (?birthday_month=1).
  *
  * Year-agnostic match on MM-DD, computed entirely in SQL against current_date
  * (consistent with the other birthday surfaces). Firm-wide for owners/branch
@@ -36,28 +41,18 @@ export async function GET() {
         const r = await tx.execute(sql`
           WITH w AS (
             SELECT to_char(current_date, 'MM-DD') AS today_md,
-                   to_char(current_date + 1, 'MM-DD') AS tom_md,
-                   array(SELECT to_char(current_date - g, 'MM-DD')
-                         FROM generate_series(1, 30) g) AS past_md
+                   to_char(current_date + 1, 'MM-DD') AS tom_md
           )
           SELECT i.id, i.name, i.dob,
-            CASE
-              WHEN to_char(i.dob, 'MM-DD') = w.today_md THEN 'today'
-              WHEN to_char(i.dob, 'MM-DD') = w.tom_md THEN 'tomorrow'
-              ELSE 'past'
-            END AS bucket
+            CASE WHEN to_char(i.dob, 'MM-DD') = w.today_md THEN 'today' ELSE 'tomorrow' END AS bucket
           FROM investors i, w
           WHERE i.status <> 'closed'
             AND i.merged_into_id IS NULL
             AND i.deleted_at IS NULL
             AND i.dob IS NOT NULL
-            AND (
-              to_char(i.dob, 'MM-DD') = w.today_md
-              OR to_char(i.dob, 'MM-DD') = w.tom_md
-              OR to_char(i.dob, 'MM-DD') = ANY(w.past_md)
-            )
+            AND to_char(i.dob, 'MM-DD') IN (w.today_md, w.tom_md)
             ${firmWide ? sql`` : sql` AND i.rm_id = ${session.userId}`}
-          ORDER BY to_char(i.dob, 'MM-DD') DESC
+          ORDER BY i.name
         `);
         return r.rows as Array<{ id: string; name: string; dob: string; bucket: string }>;
       },
@@ -66,19 +61,15 @@ export async function GET() {
 
     const today: Item[] = [];
     const tomorrow: Item[] = [];
-    const past: Item[] = [];
     for (const row of rows) {
       const item: Item = { id: row.id, name: row.name, dob: row.dob, turning: turning(row.dob) };
-      if (row.bucket === "today") today.push(item);
-      else if (row.bucket === "tomorrow") tomorrow.push(item);
-      else past.push(item);
+      (row.bucket === "today" ? today : tomorrow).push(item);
     }
 
     return NextResponse.json({
       today,
       tomorrow,
-      past,
-      counts: { today: today.length, tomorrow: tomorrow.length, past: past.length },
+      counts: { today: today.length, tomorrow: tomorrow.length },
     });
   } catch (err: any) {
     return handleApiError(err);

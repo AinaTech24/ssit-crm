@@ -56,6 +56,7 @@ export function buildInvestorConditions(
     birthday_today: sp.birthday_today === "1",
     birthday_tomorrow: sp.birthday_tomorrow === "1",
     birthday_past: sp.birthday_past === "1",
+    birthday_month: sp.birthday_month === "1",
     cross_sell_opp: sp.cross_sell_opp === "1",
   };
 
@@ -126,6 +127,14 @@ export function buildInvestorConditions(
   if (qf.birthday_tomorrow) {
     conditions.push(
       sql`(${investors.dob} IS NOT NULL AND to_char(${investors.dob}, 'MM-DD') = to_char(current_date + interval '1 day', 'MM-DD'))`
+    );
+  }
+  if (qf.birthday_month) {
+    // Everyone whose birthday falls in the CURRENT calendar month, whatever the
+    // year — what the birthday bell's "View all" opens, so the month can be
+    // planned in one go rather than a day at a time.
+    conditions.push(
+      sql`(${investors.dob} IS NOT NULL AND EXTRACT(MONTH FROM ${investors.dob})::int = EXTRACT(MONTH FROM current_date)::int)`
     );
   }
   if (qf.birthday_past) {

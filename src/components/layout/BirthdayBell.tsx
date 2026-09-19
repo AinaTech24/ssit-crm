@@ -2,8 +2,13 @@
 
 /**
  * Header birthday widget (cake icon) — adopted from the Sanchay birthday
- * popup. Shows client birthdays bucketed Past / Today / Tomorrow with a
- * count badge, and a "View all" link to the filtered client list.
+ * popup. Shows client birthdays bucketed Today / Tomorrow with a count badge,
+ * and a "View all" link that opens the whole current month on the client list.
+ *
+ * There used to be a third "Past" tab (birthdays in the last 30 days). It was
+ * the biggest number in the widget and the least actionable — a wish you
+ * already missed is not work you can do — so it is gone. The API still returns
+ * the bucket; nothing here reads it.
  *
  * Data: GET /api/birthdays (role-scoped — firm-wide for owners, own-book for
  * RMs). Polls every 5 min and refreshes when opened.
@@ -14,13 +19,12 @@ import Link from "next/link";
 import { Cake, ArrowRight } from "lucide-react";
 
 type Item = { id: string; name: string; dob: string; turning: number | null };
-type Bucket = "past" | "today" | "tomorrow";
+type Bucket = "today" | "tomorrow";
 
 export function BirthdayBell() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Bucket>("today");
-  const [data, setData] = useState<{ past: Item[]; today: Item[]; tomorrow: Item[] }>({
-    past: [],
+  const [data, setData] = useState<{ today: Item[]; tomorrow: Item[] }>({
     today: [],
     tomorrow: [],
   });
@@ -31,7 +35,7 @@ export function BirthdayBell() {
       const res = await fetch("/api/birthdays");
       if (!res.ok) return;
       const j = await res.json();
-      setData({ past: j.past ?? [], today: j.today ?? [], tomorrow: j.tomorrow ?? [] });
+      setData({ today: j.today ?? [], tomorrow: j.tomorrow ?? [] });
     } catch {}
   }
 
@@ -41,11 +45,10 @@ export function BirthdayBell() {
     return () => clearInterval(i);
   }, []);
 
-  // Default to whichever bucket has people, preferring Today → Tomorrow → Past.
+  // Default to whichever bucket has people, preferring Today.
   useEffect(() => {
     if (data.today.length) setTab("today");
     else if (data.tomorrow.length) setTab("tomorrow");
-    else if (data.past.length) setTab("past");
   }, [data]);
 
   useEffect(() => {
@@ -60,7 +63,6 @@ export function BirthdayBell() {
   const items = data[tab];
 
   const TABS: { key: Bucket; label: string }[] = [
-    { key: "past", label: "Past" },
     { key: "today", label: "Today" },
     { key: "tomorrow", label: "Tomorrow" },
   ];
@@ -84,7 +86,7 @@ export function BirthdayBell() {
       {open && (
         <div className="absolute right-0 top-full mt-2 border bg-card rounded-lg shadow-lg w-80 z-40 overflow-hidden">
           {/* Tabs */}
-          <div className="grid grid-cols-3 border-b">
+          <div className="grid grid-cols-2 border-b">
             {TABS.map((t) => (
               <button
                 key={t.key}
@@ -110,7 +112,7 @@ export function BirthdayBell() {
             <div className="px-4 py-10 text-center">
               <Cake className="size-9 text-muted-foreground/40 mx-auto mb-2" />
               <div className="text-sm text-muted-foreground">
-                No birthdays {tab === "today" ? "today" : tab === "tomorrow" ? "tomorrow" : "in the last 30 days"}.
+                No birthdays {tab === "today" ? "today" : "tomorrow"}.
               </div>
             </div>
           ) : (
@@ -130,9 +132,7 @@ export function BirthdayBell() {
                       <div className="text-[11px] text-muted-foreground">
                         {tab === "today"
                           ? it.turning ? `Turns ${it.turning} today 🎉` : "Birthday today 🎉"
-                          : tab === "tomorrow"
-                          ? it.turning ? `Turns ${it.turning} tomorrow` : "Birthday tomorrow"
-                          : `Birthday ${fmtDM(it.dob)}`}
+                          : it.turning ? `Turns ${it.turning} tomorrow` : "Birthday tomorrow"}
                       </div>
                     </div>
                     <ArrowRight className="size-3.5 text-muted-foreground" />
@@ -142,32 +142,24 @@ export function BirthdayBell() {
             </ul>
           )}
 
-          {/* View all — respects the selected tab (today / tomorrow / past). */}
-          {(() => {
-            const va =
-              tab === "tomorrow"
-                ? { href: "/dashboard/investors?birthday_tomorrow=1", label: "View all tomorrow's birthdays" }
-                : tab === "past"
-                ? { href: "/dashboard/investors?birthday_past=1", label: "View all recent birthdays" }
-                : { href: "/dashboard/investors?birthday_today=1", label: "View all today's birthdays" };
-            return (
-              <Link
-                href={va.href}
-                onClick={() => setOpen(false)}
-                className="block text-center px-4 py-2.5 text-xs font-medium text-brand-cyan-deep hover:underline border-t bg-card"
-              >
-                {va.label} →
-              </Link>
-            );
-          })()}
+          {/* View all opens the WHOLE month, not just the day being shown —
+              the popup already lists today and tomorrow in full, so repeating
+              them on the client list adds nothing. The month is the thing you
+              can actually plan around. */}
+          <Link
+            href="/dashboard/investors?birthday_month=1"
+            onClick={() => setOpen(false)}
+            className="block text-center px-4 py-2.5 text-xs font-medium text-brand-cyan-deep hover:underline border-t bg-card"
+          >
+            View all {monthName()} birthdays →
+          </Link>
         </div>
       )}
     </div>
   );
 }
 
-function fmtDM(dob: string): string {
-  const d = new Date(dob);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
+/** "September" — names the month the "View all" link opens. */
+function monthName(): string {
+  return new Date().toLocaleDateString("en-IN", { month: "long" });
 }

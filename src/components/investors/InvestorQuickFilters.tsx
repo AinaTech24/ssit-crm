@@ -71,6 +71,10 @@ export async function InvestorQuickFilters({
               AND to_char(dob, 'MM-DD') = to_char(current_date, 'MM-DD')
           )::int AS birthday_today,
           COUNT(*) FILTER (
+            WHERE status = 'active' AND dob IS NOT NULL
+              AND EXTRACT(MONTH FROM dob)::int = EXTRACT(MONTH FROM current_date)::int
+          )::int AS birthday_month,
+          COUNT(*) FILTER (
             WHERE status = 'active' AND segment_tag = 'HNI'
           )::int AS hni,
           COUNT(*) FILTER (
@@ -98,6 +102,9 @@ export async function InvestorQuickFilters({
     { key: "rp_stale", label: "Risk profile stale", count: Number(counts.rp_stale), tone: "amber" },
     { key: "dormant", label: "Dormant", count: Number(counts.dormant), tone: "amber" },
     { key: "birthday_week", label: "🎂 Birthday week", count: Number(counts.birthday_week), tone: "emerald" },
+    // Where the birthday bell's "View all" lands — the chip makes the filter
+    // visible (and clearable) instead of the list looking mysteriously short.
+    { key: "birthday_month", label: "🎂 Birthdays this month", count: Number(counts.birthday_month), tone: "emerald" },
     { key: "cross_sell_opp", label: "↗ Cross-sell opportunity", count: Number(counts.cross_sell_opp), tone: "violet" },
   ];
 
