@@ -55,16 +55,24 @@ function canTouchMeeting(m: { createdById?: string | null; collaboratorIds?: unk
  * from the RM's own branch, since review_meetings has no branch_id of its
  * own), or a calendar delegation (this user runs that RM's diary).
  */
-async function meetingInBranchScope(tx: any, session: SessionUser, rmId: string | null): Promise<boolean> {
+async function meetingInBranchScope(
+  tx: any,
+  session: SessionUser,
+  rmId: string | null,
+  createdById?: string | null
+): Promise<boolean> {
   const ms = await resolveMeetingScope(tx, session);
-  if (rmId && ms.delegatedIds.includes(rmId)) return true;
+  // rm_id is legacy and NULL on anything booked recently, so the person who
+  // BOOKED the meeting is the owner that matters (see meetingScopeSql).
+  const owners = [rmId, createdById ?? null].filter((v): v is string => !!v);
+  if (owners.some((o) => ms.delegatedIds.includes(o))) return true;
   if (ms.scope.kind === "all") return true;
   if (ms.scope.kind === "own") return false; // canTouchMeeting already covers "own"
-  if (!rmId) return false;
+  if (!owners.length) return false;
   // Branch OR desk membership, resolved from the meeting owner's user row —
   // the same rule the meetings list uses, so a meeting can't open here and be
   // missing from the list (or the reverse).
-  return isInScopeViaOwnerBranch(tx, ms.scope, [rmId]);
+  return isInScopeViaOwnerBranch(tx, ms.scope, owners);
 }
 
 /**
@@ -100,7 +108,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         // own branch — review_meetings has none of its own), everyone else
         // only their own.
         const scope = await resolveMeetingScope(tx, session);
-        if (!isMeetingInScope(scope, { branchId: m.rm_branch_id ?? null, ownerId: m.rm_id })) {
+        if (
+          !isMeetingInScope(scope, {
+            branchId: m.rm_branch_id ?? null,
+            ownerId: m.rm_id,
+            createdById: m.created_by_id,
+            collaboratorIds: m.collaborator_ids,
+          })
+        ) {
           return { forbidden: true as const };
         }
 
@@ -208,7 +223,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // the data wall (branch head, or a branch grant) additionally covers
       // anyone else's meeting run by someone in their branch — derived from the
       // RM's own branch, since review_meetings has none of its own.
-      if (!canTouchMeeting(before, session.userId) && !(await meetingInBranchScope(tx, session, before.rmId))) {
+      if (!canTouchMeeting(before, session.userId) && !(await meetingInBranchScope(tx, session, before.rmId, before.createdById))) {
         return { forbidden: true as const };
       }
 
@@ -523,7 +538,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return "not_found" as const;
-      if (!canTouchMeeting(before, session.userId) && !(await meetingInBranchScope(tx, session, before.rmId))) return "forbidden" as const;
+      if (!canTouchMeeting(before, session.userId) && !(await meetingInBranchScope(tx, session, before.rmId, before.createdById))) return "forbidden" as const;
       await tx
         .update(reviewMeetings)
         .set({ status: "cancelled", updatedAt: new Date() } as any)

@@ -46,7 +46,13 @@ export async function GET(req: NextRequest) {
         const rows = async (q: any): Promise<any[]> => {
           try { return (await tx.execute(q)).rows as any[]; } catch { return []; }
         };
-        const rmScope = seesAll ? sql`` : sql` AND m.rm_id = ${uid}::uuid`;
+        // rm_id is legacy and NULL on anything booked recently (see
+        // lib/auth/data-scope.ts) — matching it alone emptied My Day of every
+        // meeting the user had booked or been assigned.
+        const rmScope = seesAll
+          ? sql``
+          : sql` AND (m.rm_id = ${uid}::uuid OR m.created_by_id = ${uid}::uuid
+                      OR jsonb_exists(COALESCE(m.collaborator_ids, '[]'::jsonb), ${uid}))`;
         const ownerScope = seesAll ? sql`` : sql` AND l.owner_id = ${uid}::uuid`;
         const invScope = (a: string) => seesAll ? sql`` : sql` AND ${sql.raw(a)}.rm_id = ${uid}::uuid`;
 

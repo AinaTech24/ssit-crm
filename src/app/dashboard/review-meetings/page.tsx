@@ -124,7 +124,7 @@ export default async function ReviewMeetingsPage({
     }
     if (rmFilter.length) {
       filters.push(
-        sql`m.rm_id IN (${sql.join(rmFilter.map((v) => sql`${v}::uuid`), sql`, `)})`
+        sql`COALESCE(m.rm_id, m.created_by_id) IN (${sql.join(rmFilter.map((v) => sql`${v}::uuid`), sql`, `)})`
       );
     }
     const dr = dateRangeCond(sp, "meeting", "m.meeting_date");
@@ -153,11 +153,16 @@ export default async function ReviewMeetingsPage({
              CASE WHEN i.id IS NOT NULL THEN 'investor'
                   WHEN l.id IS NOT NULL THEN 'lead' END AS party_kind,
              i.pan AS investor_pan, i.segment_tag,
-             u.name AS rm_name
+             u.name AS rm_name,
+             -- Who it was booked FOR. Collaborators are how an assignment is
+             -- recorded now that rm_id is legacy, so without this the list could
+             -- not answer "who did I give this meeting to?".
+             (SELECT string_agg(cu.name, ', ' ORDER BY cu.name) FROM users cu
+               WHERE cu.id::text IN (SELECT jsonb_array_elements_text(COALESCE(m.collaborator_ids, '[]'::jsonb)))) AS assigned_to
       FROM review_meetings m
       LEFT JOIN investors i ON i.id = m.investor_id
       LEFT JOIN leads l ON l.id = m.lead_id
-      LEFT JOIN users u ON u.id = m.rm_id
+      LEFT JOIN users u ON u.id = COALESCE(m.rm_id, m.created_by_id)
       ${whereSql}
       ORDER BY ${sortKey === "meeting_asc" ? sql`m.meeting_date ASC` : sql`m.meeting_date DESC`}
       LIMIT 200

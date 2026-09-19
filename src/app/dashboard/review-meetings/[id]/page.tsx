@@ -40,7 +40,14 @@ export default async function ReviewMeetingDetailPage({
     // review_meetings has no branch_id of its own. A guessed/pasted id must
     // not be a way around it.
     const meetingScope = await resolveMeetingScope(tx, session);
-    if (!isMeetingInScope(meetingScope, { branchId: rm?.branchId ?? null, ownerId: m.rmId })) {
+    if (
+      !isMeetingInScope(meetingScope, {
+        branchId: rm?.branchId ?? null,
+        ownerId: m.rmId,
+        createdById: m.createdById,
+        collaboratorIds: m.collaboratorIds,
+      })
+    ) {
       return null;
     }
 

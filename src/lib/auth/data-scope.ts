@@ -190,7 +190,7 @@ export async function loadDelegatedUserIds(
 }
 
 /** The meetings wall, resolved once and reused across a page's queries. */
-export type MeetingScope = { scope: DataScope; delegatedIds: string[] };
+export type MeetingScope = { scope: DataScope; delegatedIds: string[]; userId: string };
 
 /**
  * Resolve the meetings wall: the normal data wall, plus whoever's diary this
@@ -202,30 +202,63 @@ export async function resolveMeetingScope(tx: any, session: SessionUser): Promis
     resolveDataScope(tx, session),
     loadDelegatedUserIds(tx, session.tenantId, session.userId),
   ]);
-  return { scope, delegatedIds };
+  return { scope, delegatedIds, userId: session.userId };
 }
 
 /**
- * The meetings wall as SQL. The branch/own predicate OR'd with the delegated
- * diaries — a delegate sees their own meetings AND the ones they run for
- * someone else, and nothing further.
+ * The meetings wall as SQL.
+ *
+ * A meeting has THREE kinds of participant, and all three must see it:
+ *
+ *   created_by_id    who booked it
+ *   collaborator_ids who it was booked for / with (migration 0203)
+ *   rm_id            LEGACY. Superseded by created_by_id and left NULL on
+ *                    everything booked since; see lib/calendar/items.ts, which
+ *                    hit this first. Still matched so old rows stay visible.
+ *
+ * Walling on rm_id alone — which this did — meant an RM who scheduled a meeting
+ * for a colleague could not see it afterwards, and neither could the colleague:
+ * rm_id was NULL on the row, so it matched nobody and the module looked empty.
+ *
+ * On top of that, the branch/desk predicate derives from whoever owns the
+ * meeting, so a branch head still gets their whole branch's diary.
  */
 export function meetingScopeSql(ms: MeetingScope, ownerCol: string): SQL {
-  const base = dataScopeSqlViaOwnerBranch(ms.scope, ownerCol);
-  if (!ms.delegatedIds.length) return base;
-  return sql`(${base} OR ${sql.raw(ownerCol)} IN (${sql.join(
-    ms.delegatedIds.map((u) => sql`${u}::uuid`),
-    sql`, `
-  )}))`;
+  const alias = ownerCol.includes(".") ? `${ownerCol.split(".")[0]}.` : "";
+  const createdCol = `${alias}created_by_id`;
+  const collabCol = `${alias}collaborator_ids`;
+
+  const base = dataScopeSqlViaOwnerBranch(ms.scope, [createdCol, ownerCol]);
+  const mine: SQL[] = [
+    sql`${sql.raw(createdCol)} = ${ms.userId}::uuid`,
+    sql`${sql.raw(ownerCol)} = ${ms.userId}::uuid`,
+    sql`jsonb_exists(COALESCE(${sql.raw(collabCol)}, '[]'::jsonb), ${ms.userId})`,
+  ];
+  // A delegate runs someone else's diary: their bookings and their invitations.
+  if (ms.delegatedIds.length) {
+    const ids = sql.join(ms.delegatedIds.map((u) => sql`${u}::uuid`), sql`, `);
+    mine.push(sql`${sql.raw(createdCol)} IN (${ids})`);
+    mine.push(sql`${sql.raw(ownerCol)} IN (${ids})`);
+  }
+  return sql`(${base} OR ${sql.join(mine, sql` OR `)})`;
 }
 
 /** Single-row counterpart, for routes that load one meeting by id. */
 export function isMeetingInScope(
   ms: MeetingScope,
-  row: { branchId?: string | null; ownerId?: string | null }
+  row: {
+    branchId?: string | null;
+    ownerId?: string | null;
+    createdById?: string | null;
+    collaboratorIds?: unknown;
+  }
 ): boolean {
+  // Booked it, or named on it — visible whoever it was assigned to.
+  if (row.createdById && row.createdById === ms.userId) return true;
+  if (Array.isArray(row.collaboratorIds) && row.collaboratorIds.includes(ms.userId)) return true;
   if (row.ownerId && ms.delegatedIds.includes(row.ownerId)) return true;
-  return isInScope(ms.scope, row);
+  if (row.createdById && ms.delegatedIds.includes(row.createdById)) return true;
+  return isInScope(ms.scope, { branchId: row.branchId, ownerId: row.ownerId ?? row.createdById });
 }
 
 /** Resolve the wall for this session. Call inside the tenant transaction. */

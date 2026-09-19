@@ -189,7 +189,21 @@ export function MeetingsBulkTable({
         ),
     },
     { key: "mode", header: "Mode", tdClass: "py-3", render: (m) => <span className={`chip ${MODE_TONE[m.meeting_mode] ?? ""}`}>{MODE_LABEL[m.meeting_mode] ?? m.meeting_mode}</span> },
-    { key: "rm", header: "RM", tdClass: "py-3 text-xs", render: (m) => m.rm_name ?? "" },
+    {
+      key: "rm",
+      header: "RM",
+      tdClass: "py-3 text-xs",
+      // Who booked it, and who it was handed to. Without the second line an RM
+      // who schedules meetings for their team can't tell them apart.
+      render: (m) => (
+        <>
+          <div>{m.rm_name ?? ""}</div>
+          {m.assigned_to && (
+            <div className="text-[11px] text-muted-foreground">→ {m.assigned_to}</div>
+          )}
+        </>
+      ),
+    },
     { key: "status", header: "Status", thClass: "text-left py-2 font-medium", tdClass: "py-3", render: (m) => <span className={`chip capitalize ${STATUS_TONE[m.status] ?? ""}`}>{String(m.status).replace(/_/g, " ")}</span> },
     cancelColumn,
   ];

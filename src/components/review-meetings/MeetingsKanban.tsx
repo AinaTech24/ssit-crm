@@ -27,6 +27,8 @@ type Row = {
   party_avatar_url: string | null;
   party_kind: "investor" | "lead" | null;
   rm_name: string | null;
+  /** Names of the users this meeting was assigned to (collaborators). */
+  assigned_to?: string | null;
 };
 
 const COLUMNS: { key: string; label: string; tone: string }[] = [
@@ -173,7 +175,7 @@ export function MeetingsKanban({ meetings }: { meetings: Row[] }) {
                       </span>
                       <span className="chip bg-secondary text-[10px]">{MODE_LABEL[m.meeting_mode] ?? m.meeting_mode}</span>
                     </div>
-                    {m.rm_name && <div className="mt-1 text-[10px] text-muted-foreground truncate">RM: {m.rm_name}</div>}
+                    {m.rm_name && <div className="mt-1 text-[10px] text-muted-foreground truncate">RM: {m.rm_name}{m.assigned_to ? ` → ${m.assigned_to}` : ""}</div>}
                   </Link>
                 </div>
               ))}

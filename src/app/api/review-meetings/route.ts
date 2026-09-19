@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
         if (statusFilter.length) filters.push(sql`m.status IN (${sql.join(statusFilter.map((v) => sql`${v}`), sql`, `)})`);
         if (modeFilter.length) filters.push(sql`m.meeting_mode IN (${sql.join(modeFilter.map((v) => sql`${v}`), sql`, `)})`);
         if (typeFilter.length) filters.push(sql`m.meeting_type IN (${sql.join(typeFilter.map((v) => sql`${v}`), sql`, `)})`);
-        if (rmFilter.length) filters.push(sql`m.rm_id IN (${sql.join(rmFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
+        if (rmFilter.length) filters.push(sql`COALESCE(m.rm_id, m.created_by_id) IN (${sql.join(rmFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
         if (isDate(mFrom)) filters.push(sql`m.meeting_date >= ${mFrom}::date`);
         if (isDate(mTo)) filters.push(sql`m.meeting_date < (${mTo}::date + interval '1 day')`);
         const whereSql = sql.join(filters, sql` AND `);
@@ -114,11 +114,16 @@ export async function GET(req: NextRequest) {
         const meetings = await tx.execute(sql`
           SELECT m.*, COALESCE(i.name, l.name) AS investor_name,
                  i.segment_tag, i.pan AS investor_pan,
-                 u.name AS rm_name
+                 u.name AS rm_name,
+                 -- Who it was booked FOR. Collaborators are how an assignment is
+                 -- recorded now that rm_id is legacy, so without this the list could
+                 -- not answer "who did I give this meeting to?".
+                 (SELECT string_agg(cu.name, ', ' ORDER BY cu.name) FROM users cu
+                   WHERE cu.id::text IN (SELECT jsonb_array_elements_text(COALESCE(m.collaborator_ids, '[]'::jsonb)))) AS assigned_to
           FROM review_meetings m
           LEFT JOIN investors i ON i.id = m.investor_id
           LEFT JOIN leads l ON l.id = m.lead_id
-          LEFT JOIN users u ON u.id = m.rm_id
+          LEFT JOIN users u ON u.id = COALESCE(m.rm_id, m.created_by_id)
           WHERE ${whereSql}
           ORDER BY ${sortAsc ? sql`m.meeting_date ASC` : sql`m.meeting_date DESC`}
           LIMIT 500
