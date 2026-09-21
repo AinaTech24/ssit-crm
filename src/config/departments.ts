@@ -33,8 +33,11 @@ export const DEPARTMENTS: [string, string][] = [
 export const DEPARTMENT_ROLES: Record<string, string[]> = {
   // Everyone who carries a book and sells.
   sales: ["rm", "sub_broker", "ra_sales", "insurance"],
-  operations: ["ops", "back_office"],
-  back_office: ["back_office", "ops"],
+  // Operations and Back Office are two entries in the dropdown, so they must
+  // not resolve to the same people. They used to list both roles each, which
+  // made the two options identical and looked like neither was filtering.
+  operations: ["ops"],
+  back_office: ["back_office"],
   compliance: ["compliance"],
   marketing: ["marketing"],
   // Fee-based advice and the research that feeds it.
@@ -45,12 +48,24 @@ export const DEPARTMENT_ROLES: Record<string, string[]> = {
   other: [],
 };
 
-/** Does this person belong to `department`, by explicit column or by role? */
+/**
+ * Does this person belong to `department`?
+ *
+ * An explicit department on the employee record WINS OUTRIGHT — it is the
+ * firm's own answer, and it excludes as well as includes. This used to be an
+ * OR: a person whose record said Operations still showed up under Sales
+ * because they happened to carry the `rm` role, so "Sales" listed most of the
+ * firm and the filter looked broken.
+ *
+ * Roles are only an inference for people whose department is blank, which is
+ * the common case out of the box. Set the column on an employee and the picker
+ * obeys it exactly.
+ */
 export function inDepartment(
   user: { roles?: string[] | null; department?: string | null },
   department: string
 ): boolean {
-  if (user.department === department) return true;
+  if (user.department) return user.department === department;
   const roles = DEPARTMENT_ROLES[department] ?? [];
   return (user.roles ?? []).some((r) => roles.includes(r));
 }
