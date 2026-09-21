@@ -113,10 +113,10 @@ export default function NewTaskPage() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [titleTouched, setTitleTouched] = useState(false);
 
-  // Assigning a task to someone ELSE needs task.edit.all — the POST enforces
-  // it. The form used to offer the whole department anyway and only fail on
-  // submit ("you can only assign tasks to yourself") after everything had been
-  // filled in. Read the capability up front and offer what will actually work.
+  // Assigning a task to someone ELSE needs task.assign.others — the POST
+  // enforces it. Read it up front and offer what will actually work, rather
+  // than offering the department and failing on submit once everything has
+  // been filled in.
   // Null = not loaded yet; assume allowed so the picker doesn't flicker shut.
   const [canAssignOthers, setCanAssignOthers] = useState<boolean | null>(null);
   useEffect(() => {
@@ -126,7 +126,7 @@ export default function NewTaskPage() {
       .then((j) => {
         if (!alive) return;
         const caps: string[] = j?.capabilities ?? [];
-        setCanAssignOthers(caps.includes("task.edit.all"));
+        setCanAssignOthers(caps.includes("task.assign.others"));
       })
       .catch(() => { if (alive) setCanAssignOthers(null); });
     return () => { alive = false; };
@@ -551,7 +551,7 @@ export default function NewTaskPage() {
               selfOnly={canAssignOthers === false}
               emptyHint={
                 canAssignOthers === false
-                  ? "Assigning work to someone else needs the “Assign tasks to other people” permission — an owner can switch it on for you on your employee record."
+                  ? "Assigning work to someone else needs the “Assign tasks to other people” permission — an owner can switch it back on for you on your employee record."
                   : undefined
               }
               value={form.assigneeId || null}

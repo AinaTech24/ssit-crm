@@ -136,6 +136,7 @@ export type Capability =
   | "task.view.assigned"
   | "task.edit.all"
   | "task.edit.assigned"
+  | "task.assign.others"
   // Documents
   | "document.view"
   | "document.upload"
@@ -280,6 +281,21 @@ const MATRIX: Record<Capability, Role[]> = {
   "task.view.assigned": ["rm", "assistant", "gifting_hr", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
   "task.edit.all": ["back_office", "ops", "marketing"],
   "task.edit.assigned": ["rm", "assistant", "gifting_hr", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
+  // HANDING someone work is not the same as EDITING their work, and conflating
+  // the two is why a sub-branch head could not give a task to their own team:
+  // assigning was gated on task.edit.all, which exists so back office can edit
+  // anyone's task. A branch head doesn't hold it, so the picker offered them
+  // nobody and the Department dropdown looked broken.
+  //
+  // Delegation is what the Department field on the task form is FOR — an RM
+  // raising "please rectify this SIP" for Back Office is the normal path. So
+  // every role that may create a task may choose who it goes to. Kept as its
+  // own capability, not hardcoded, so an owner can take it off one person
+  // without touching what else they can do.
+  "task.assign.others": [
+    "back_office", "ops", "marketing", "branch_head", "rm", "sub_broker",
+    "assistant", "gifting_hr", "compliance", "ra_sales", "ria", "insurance", "ra_research",
+  ],
 
   // Documents
   "document.view": ["compliance", "back_office", "ops", "rm", "branch_head", "marketing", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
