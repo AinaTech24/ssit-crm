@@ -13,6 +13,7 @@ import { EmployeeEditForm } from "@/components/employees/EmployeeEditForm";
 import { RecordProvenance } from "@/components/common/RecordProvenance";
 import { accruedPoolDays, pooledUsed, POOLED_LEAVE_TYPES, currentFyStart } from "@/lib/leave/policy";
 import { loadLeavePolicy } from "@/lib/leave/settings";
+import { explainDataScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -146,8 +147,25 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       manager = m ?? null;
     }
     const policy = await loadLeavePolicy(tx, session.tenantId);
+    // WHY this person sees what they see. The rule has several tiers (own /
+    // desk / branch / firm) and lands on one of them from a mix of role, desk
+    // and grants — so an admin looking at the record could not tell whether a
+    // branch head was walled to their sub-branch or seeing the whole office.
+    // That ambiguity is exactly how a head with no sub-branch set ends up
+    // reading another sub-branch's leads and clients with nothing on screen
+    // saying so.
+    const dataScope = await explainDataScope(tx, {
+      userId: emp.id,
+      tenantId: session.tenantId,
+      roles: emp.roles ?? [],
+      branchId: emp.branchId ?? undefined,
+      permissions: emp.permissions ?? undefined,
+      email: emp.email,
+      name: emp.name,
+    });
     return {
       emp,
+      dataScope,
       policy,
       teammates,
       branches: branchRows.rows as unknown as { id: string; name: string }[],
@@ -272,6 +290,28 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           label="Monthly SIP target"
           value={(emp as any).sipMonthlyTarget ? formatINR(Number((emp as any).sipMonthlyTarget)) : "—"}
         />
+      </div>
+
+      {/* What this person can SEE — stated plainly, because the rule is layered
+          and the record otherwise gives an admin no way to tell. */}
+      <div
+        className={`mb-4 rounded-lg border p-3 text-sm ${
+          data.dataScope.scope.kind === "desks"
+            ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+            : data.dataScope.scope.kind === "own"
+              ? "border-slate-200 bg-slate-50 text-slate-700"
+              : "border-amber-200 bg-amber-50 text-amber-900"
+        }`}
+      >
+        <div className="font-medium">Data access</div>
+        <div className="mt-0.5">{data.dataScope.reason}</div>
+        {data.dataScope.scope.kind === "branches" && (emp.roles ?? []).includes("branch_head") && !emp.deskId && (
+          <div className="mt-1.5 text-xs">
+            This covers the whole branch, including other sub-branches. To wall them to one
+            sub-branch, set <strong>Sub-branch</strong> below — a branch head with a sub-branch sees
+            only the clients, leads and tasks of the people on it.
+          </div>
+        )}
       </div>
 
       {/* Edit form */}
