@@ -53,6 +53,8 @@ export function RmSelector({
   role,
   department,
   requireDepartment = false,
+  selfOnly = false,
+  emptyHint,
   placeholder = "— Choose team member —",
   allowClear = true,
   disabled,
@@ -85,6 +87,14 @@ export function RmSelector({
    * back to a roster the person hasn't asked for.
    */
   requireDepartment?: boolean;
+  /**
+   * The viewer isn't allowed to pick anyone but themselves, so offer nobody.
+   * Set from a capability the API also enforces — the point is that the form
+   * stops leading people into a submit the server will refuse.
+   */
+  selfOnly?: boolean;
+  /** Shown under the picker when it is offering nobody, to say why. */
+  emptyHint?: string;
   placeholder?: string;
   /** Adds an "— Unassigned —" option that emits null on select. */
   allowClear?: boolean;
@@ -141,7 +151,7 @@ export function RmSelector({
   // No department chosen, and the form says one is required first → offer
   // nobody. Not the whole roster: that is the question the department field
   // is there to ask.
-  const gated = requireDepartment && !department;
+  const gated = selfOnly || (requireDepartment && !department);
   const visible = gated
     ? []
     : department
@@ -165,18 +175,21 @@ export function RmSelector({
   // shimmer where a usable field belongs just looks broken.
   if (gated) {
     return (
-      <SelectField
-        id={id}
-        value=""
-        onChange={() => onChange(null)}
-        disabled={disabled}
-        required={required}
-        placeholder={placeholder}
-        className={className}
-        title="Choose a department to pick a team member"
-      >
-        <option value="">{placeholder}</option>
-      </SelectField>
+      <div className={className}>
+        <SelectField
+          id={id}
+          value=""
+          onChange={() => onChange(null)}
+          disabled={disabled}
+          required={required}
+          placeholder={placeholder}
+          className="w-full"
+          title={emptyHint ?? "Choose a department to pick a team member"}
+        >
+          <option value="">{placeholder}</option>
+        </SelectField>
+        {emptyHint && <div className="mt-1 text-[11px] text-muted-foreground">{emptyHint}</div>}
+      </div>
     );
   }
 

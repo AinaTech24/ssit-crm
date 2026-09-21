@@ -85,8 +85,16 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   // ── Tasks & Service ─────────────────────────────────────────────────────
   "task.view.all": { group: "Tasks & Service", label: "View all tasks" },
   "task.view.assigned": { group: "Tasks & Service", label: "View assigned tasks only" },
-  "task.edit.all": { group: "Tasks & Service", label: "Edit all tasks" },
-  "task.edit.assigned": { group: "Tasks & Service", label: "Edit assigned tasks only" },
+  "task.edit.all": {
+    group: "Tasks & Service",
+    label: "Assign tasks to other people",
+    hint: "Also allows editing anyone's task. Without this a person can create and work tasks, but only ones assigned to themselves — the Assign to picker offers nobody else.",
+  },
+  "task.edit.assigned": {
+    group: "Tasks & Service",
+    label: "Edit assigned tasks only",
+    hint: "Work the tasks handed to them. Creating a task for someone else needs “Assign tasks to other people”.",
+  },
   "service_request.view.all": { group: "Tasks & Service", label: "View all service requests" },
   "service_request.view.assigned": { group: "Tasks & Service", label: "View assigned service requests" },
   "service_request.manage": { group: "Tasks & Service", label: "Manage service requests" },

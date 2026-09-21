@@ -113,6 +113,25 @@ export default function NewTaskPage() {
   const [attachments, setAttachments] = useState<File[]>([]);
   const [titleTouched, setTitleTouched] = useState(false);
 
+  // Assigning a task to someone ELSE needs task.edit.all — the POST enforces
+  // it. The form used to offer the whole department anyway and only fail on
+  // submit ("you can only assign tasks to yourself") after everything had been
+  // filled in. Read the capability up front and offer what will actually work.
+  // Null = not loaded yet; assume allowed so the picker doesn't flicker shut.
+  const [canAssignOthers, setCanAssignOthers] = useState<boolean | null>(null);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/me")
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive) return;
+        const caps: string[] = j?.capabilities ?? [];
+        setCanAssignOthers(caps.includes("task.edit.all"));
+      })
+      .catch(() => { if (alive) setCanAssignOthers(null); });
+    return () => { alive = false; };
+  }, []);
+
   // Templates are optional, but SILENTLY optional was the bug: when this call
   // failed the picker just rendered empty, indistinguishable from a firm that
   // has no templates. Say so, and let the rest of the form carry on.
@@ -515,7 +534,11 @@ export default function NewTaskPage() {
             <div className="text-xs font-medium mb-1">
               Assign to
               <span className="ml-1 text-[10px] text-muted-foreground font-normal">
-                {form.department ? "· defaults to you" : "· pick a department to assign someone else"}
+                {canAssignOthers === false
+                  ? "· you can only assign tasks to yourself"
+                  : form.department
+                    ? "· defaults to you"
+                    : "· pick a department to assign someone else"}
               </span>
             </div>
             {/* Follows the Department chosen above: pick one and only that
@@ -525,6 +548,12 @@ export default function NewTaskPage() {
             <RmSelector
               department={form.department || null}
               requireDepartment
+              selfOnly={canAssignOthers === false}
+              emptyHint={
+                canAssignOthers === false
+                  ? "Assigning work to someone else needs the “Assign tasks to other people” permission — an owner can switch it on for you on your employee record."
+                  : undefined
+              }
               value={form.assigneeId || null}
               onChange={(id) => set("assigneeId", id ?? "")}
               placeholder="Assign to myself"
