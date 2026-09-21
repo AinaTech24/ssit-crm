@@ -510,6 +510,12 @@ export function can(userRoles: string[] | undefined, cap: Capability, userPermis
   // locked out everyone holding an existing token. The form fills the list from
   // the role’s defaults the moment Customize is ticked, so a real list is
   // always complete rather than a single stray grant.
+  // CAREFUL: a capability added to the union AFTER a user's list was saved can
+  // never appear in that list, so it reads as "unticked" and is denied forever
+  // — whatever the role matrix says. Adding a capability therefore needs a
+  // backfill migration for existing custom lists, shipped in the same change.
+  // See drizzle/migrations/0225_backfill_task_assign_others.sql for the
+  // pattern; skipping it is what broke the Assign to picker for customised RMs.
   if (userPermissions && userPermissions.length > 0) {
     return userPermissions.includes(cap);
   }
