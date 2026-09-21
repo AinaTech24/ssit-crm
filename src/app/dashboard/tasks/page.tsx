@@ -6,7 +6,6 @@ import { withTenant } from "@/db/client";
 import { tasks, users, investors, leads } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
-import { taskScopeSql } from "@/lib/tasks/access";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { Pager } from "@/components/common/Pager";
 import { dateRangeCond } from "@/lib/filters/date-range";
@@ -72,10 +71,9 @@ export default async function TasksPage({
     // Tenant predicate is mandatory under the superuser/RLS-bypass model.
     // Trashed (soft-deleted) tasks never appear in any list — only in Trash.
     const conds: any[] = [eq(tasks.tenantId, session.tenantId), isNull(tasks.deletedAt)];
-    // The data wall — same helper the API list uses, so the page and the JSON
-    // can't drift. Replaces "task.view.all ⇒ the whole firm", which handed
-    // every sub-branch head the other sub-branches' tasks.
-    conds.push(await taskScopeSql(tx, session));
+    if (!canViewAll) {
+      conds.push(or(eq(tasks.assigneeId, session.userId), eq(tasks.createdById, session.userId))!);
+    }
 
     // View-tab scope: tasks assigned TO me, or tasks I assigned (created).
     if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
