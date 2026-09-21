@@ -6,6 +6,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
+import { taskScopeSql } from "@/lib/tasks/access";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications/create";
@@ -110,7 +111,10 @@ export async function GET(req: NextRequest) {
       session.tenantId,
       async (tx) => {
         const conds: any[] = [eq(tasks.tenantId, session.tenantId), isNull(tasks.deletedAt)];
-        if (!canViewAll) conds.push(or(eq(tasks.assigneeId, session.userId), eq(tasks.createdById, session.userId))!);
+        // The data wall, not the capability. task.view.all is held by
+        // branch_head, so trusting it alone showed every sub-branch head the
+        // whole firm's tasks — including the other sub-branches'.
+        conds.push(await taskScopeSql(tx, session));
         if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
         else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
         // Kanban shows every status; the list defaults to open when no status
