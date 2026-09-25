@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Save, CalendarDays, AlertTriangle, Clock } from "lucide-react";
 import {
-  LEAVE_TYPE_LABELS, REQUESTABLE_LEAVE_TYPES,
+  LEAVE_TYPE_LABELS,
   LEAVE_DURATION_LABELS,
   computeDays,
   isPooledLeaveType,
@@ -46,7 +46,14 @@ export function LeaveForm({
 }) {
   const router = useRouter();
   const [employeeId, setEmployeeId] = useState(currentUserId);
-  const [leaveType, setLeaveType] = useState("casual");
+  // The picker is gone from the form, but the column and the API still take a
+  // type — every historical row has one, and the settings screen still sets
+  // entitlements per type. "casual" is what it always defaulted to.
+  //
+  // Nothing about the balance changes by fixing it: the only two types this
+  // form ever offered, casual and sick, are both POOLED, so they drew down the
+  // same pool of days and differed by label alone.
+  const leaveType = "casual";
   const [duration, setDuration] = useState<"full_day" | "half_day">("full_day");
   const [fromDate, setFromDate] = useState(todayStr());
   const [toDate, setToDate] = useState(todayStr());
@@ -164,12 +171,6 @@ export function LeaveForm({
           </ThemeSelect>
           {!isManager && <p className="text-[11px] text-muted-foreground mt-1">You can only file leave for yourself.</p>}
         </Field>
-        <Field label="Leave type">
-          <ThemeSelect value={leaveType} onChange={(val) => setLeaveType(val)}>
-            {REQUESTABLE_LEAVE_TYPES.map((k) => <option key={k} value={k}>{LEAVE_TYPE_LABELS[k]}</option>)}
-          </ThemeSelect>
-        </Field>
-
         <Field label="Duration">
           <ThemeSelect value={duration} onChange={(val) => setDuration(val as any)}>
             {Object.entries(LEAVE_DURATION_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
