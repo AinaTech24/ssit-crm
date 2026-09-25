@@ -2,7 +2,8 @@ import { handleApiError } from "@/lib/api/error-handler";
 /**
  * Per-client gifts — single-gift endpoint.
  *
- *   PATCH  /api/investors/[id]/gifts/[giftId]   — mark delivered / undo
+ *   PATCH  /api/investors/[id]/gifts/[giftId]   — edit a gift, and/or mark
+ *                                                 delivered / undo
  *   DELETE /api/investors/[id]/gifts/[giftId]   — remove a gift
  *
  * Raw SQL inside withTenant(); RLS scopes by app.tenant_id and we filter by
@@ -62,13 +63,31 @@ export async function DELETE(
   }
 }
 
-const PatchBody = z.object({
-  /** yyyy-mm-dd to mark delivered; null to undo. */
-  deliveredOn: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd")
-    .nullable(),
-});
+/**
+ * Every field is OPTIONAL and only what is sent gets written.
+ *
+ * This used to accept `deliveredOn` alone, which made the route "mark
+ * delivered" rather than "edit": a gift logged with the wrong amount, date or
+ * title could only be deleted and re-added, losing its delivery state and its
+ * place in the log. Partial updates also matter for correctness here — a PATCH
+ * that edits the title must not blank `delivered_on` just because it didn't
+ * mention it, which a fixed UPDATE would do.
+ */
+const PatchBody = z
+  .object({
+    occasion: z.enum(["birthday", "anniversary", "festival", "other"]).optional(),
+    title: z.string().min(1).max(120).optional(),
+    amount: z.number().int().min(0).optional(),
+    givenOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd").optional(),
+    notes: z.string().max(500).nullish(),
+    /** yyyy-mm-dd to mark delivered; null to undo. */
+    deliveredOn: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd")
+      .nullable()
+      .optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: "nothing to update" });
 
 /**
  * PATCH /api/investors/[id]/gifts/[giftId] — mark a gift delivered (or undo).
@@ -93,7 +112,8 @@ export async function PATCH(
     if (!parse.success) {
       return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
     }
-    const { deliveredOn } = parse.data;
+    const body = parse.data;
+    const { deliveredOn } = body;
 
     const result = await withTenant(session.tenantId, async (tx) => {
       const invRes = await tx.execute(sql`
@@ -105,10 +125,19 @@ export async function PATCH(
       if (!inv) return null;
       await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
 
+      // Only the fields actually sent are written, so editing a title cannot
+      // silently clear a delivery date (or the reverse).
+      const sets = [sql`updated_at = now()`];
+      if (body.occasion !== undefined) sets.push(sql`occasion = ${body.occasion}`);
+      if (body.title !== undefined) sets.push(sql`title = ${body.title}`);
+      if (body.amount !== undefined) sets.push(sql`amount = ${body.amount}`);
+      if (body.givenOn !== undefined) sets.push(sql`given_on = ${body.givenOn}::date`);
+      if (body.notes !== undefined) sets.push(sql`notes = ${body.notes ?? null}`);
+      if (body.deliveredOn !== undefined) sets.push(sql`delivered_on = ${deliveredOn}::date`);
+
       const upd = await tx.execute(sql`
         UPDATE client_gifts
-           SET delivered_on = ${deliveredOn}::date,
-               updated_at = now()
+           SET ${sql.join(sets, sql`, `)}
          WHERE id = ${giftId}::uuid
            AND investor_id = ${id}::uuid
            AND tenant_id = ${session.tenantId}::uuid

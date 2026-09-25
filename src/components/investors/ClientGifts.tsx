@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Cake, Gift, Trash2, Plus, Loader2, Check, Truck, RefreshCw } from "lucide-react";
+import { Cake, Gift, Trash2, Pencil, Plus, Loader2, Check, Truck, RefreshCw } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
 import { useToast } from "@/components/ui/Toast";
 import { readApiError, readThrownError } from "@/lib/api/client-error";
@@ -86,6 +86,27 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
   const [deliveredOn, setDeliveredOn] = useState(() => new Date().toISOString().slice(0, 10));
   const [deliveringId, setDeliveringId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+
+  // Edit-gift form. Separate state from the add form so opening one does not
+  // clobber a half-typed other. A logged gift previously could only be deleted
+  // and re-added to fix a typo, which lost its delivery state.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [eOccasion, setEOccasion] = useState("birthday");
+  const [eTitle, setETitle] = useState("");
+  const [eAmount, setEAmount] = useState("");
+  const [eGivenOn, setEGivenOn] = useState("");
+  const [eNotes, setENotes] = useState("");
+
+  function startEdit(g: { id: string; occasion: string; title: string; amount: number | string; givenOn: string; notes?: string | null }) {
+    setEditingId(g.id);
+    setEOccasion(g.occasion || "birthday");
+    setETitle(g.title ?? "");
+    setEAmount(String(g.amount ?? ""));
+    setEGivenOn((g.givenOn ?? "").slice(0, 10));
+    setENotes(g.notes ?? "");
+    setError(null);
+  }
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     setError(null);
@@ -201,7 +222,48 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
     }
   }
 
+  /** Saves an edited gift. Delivery state is left alone — that has its own button. */
+  async function saveEdit(giftId: string) {
+    if (!eTitle.trim()) {
+      setError("A gift needs a title.");
+      return;
+    }
+    setError(null);
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/investors/${investorId}/gifts/${giftId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          occasion: eOccasion,
+          title: eTitle.trim(),
+          amount: Number(eAmount || 0),
+          givenOn: eGivenOn,
+          notes: eNotes.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const f = await readApiError(res, "save the gift");
+        setError(f.message);
+        toast.error(f.message);
+        return;
+      }
+      setEditingId(null);
+      await load({ silent: true });
+      toast.success("Gift updated");
+    } catch (e: any) {
+      const f = readThrownError(e, "save the gift");
+      setError(f.message);
+      toast.error(f.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function removeGift(giftId: string) {
+    // Deleting a logged gift also takes its spend out of the budget and cannot
+    // be undone, and the button sits one row from Edit — worth a confirm.
+    if (!confirm("Delete this gift from the log? This cannot be undone.")) return;
     setError(null);
     try {
       const res = await fetch(`/api/investors/${investorId}/gifts/${giftId}`, { method: "DELETE" });
@@ -463,6 +525,76 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
                   <div className="size-7 rounded-lg bg-pink-50 grid place-items-center flex-shrink-0 mt-0.5">
                     <Gift className="size-3.5 text-pink-600" />
                   </div>
+                  {editingId === g.id ? (
+                    <div className="min-w-0 flex-1">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Occasion</label>
+                          <SelectField value={eOccasion} onChange={(e) => setEOccasion(e.target.value)}>
+                            <option value="birthday">Birthday</option>
+                            <option value="anniversary">Anniversary</option>
+                            <option value="festival">Festival</option>
+                            <option value="other">Other</option>
+                          </SelectField>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Given on</label>
+                          <DateField value={eGivenOn} onChange={(e) => setEGivenOn(e.target.value)} />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Title</label>
+                          <input
+                            value={eTitle}
+                            onChange={(e) => setETitle(e.target.value)}
+                            maxLength={120}
+                            className="input-base w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Amount (₹)</label>
+                          <input
+                            type="number"
+                            min={0}
+                            inputMode="numeric"
+                            value={eAmount}
+                            onChange={(e) => setEAmount(e.target.value)}
+                            className="input-base w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-muted-foreground mb-1">Notes</label>
+                          <input
+                            value={eNotes}
+                            onChange={(e) => setENotes(e.target.value)}
+                            maxLength={500}
+                            placeholder="Optional"
+                            className="input-base w-full"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => saveEdit(g.id)}
+                          disabled={savingEdit || !eTitle.trim()}
+                          className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                        >
+                          {savingEdit && <Loader2 className="size-3 animate-spin" />}
+                          Save changes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="text-xs text-muted-foreground hover:underline"
+                        >
+                          Cancel
+                        </button>
+                        <span className="text-[11px] text-muted-foreground ml-auto">
+                          Delivery is unchanged — use the row button for that.
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="inline-flex text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold">
@@ -496,14 +628,29 @@ export function ClientGifts({ investorId, clientName }: { investorId: string; cl
                       {g.notes ? <span className="italic">{g.notes}</span> : null}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeGift(g.id)}
-                    aria-label="Delete gift"
-                    className="text-muted-foreground hover:text-rose-600 transition-colors flex-shrink-0 mt-0.5"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  )}
+                  {editingId === g.id ? null : (
+                    <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(g)}
+                        aria-label="Edit gift"
+                        title="Edit this gift"
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Pencil className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeGift(g.id)}
+                        aria-label="Delete gift"
+                        title="Delete this gift"
+                        className="text-muted-foreground hover:text-rose-600 transition-colors"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
