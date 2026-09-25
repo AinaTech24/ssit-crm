@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Gift, ChevronLeft, ChevronRight, Loader2, UserCircle2 } from "lucide-react";
+import { Gift, ChevronLeft, ChevronRight, Loader2, UserCircle2, Pencil, Trash2 } from "lucide-react";
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { readApiError, readThrownError } from "@/lib/api/client-error";
 import {
@@ -37,6 +37,8 @@ type GiftRow = {
   givenOn: string;
   deliveredOn: string | null;
   notes: string | null;
+  occasion?: string | null;
+  title?: string | null;
 };
 
 type Payload = {
@@ -85,6 +87,74 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
 
+  // Row editor. Separate state from the log-a-gift form above so opening one
+  // never clobbers a half-filled other. Edits go to the per-client gift
+  // endpoint — the row carries investorId, which is the only thing that route
+  // needs beyond the gift id.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [eCategory, setECategory] = useState<GiftCategory>("hamper");
+  const [eGrade, setEGrade] = useState("A");
+  const [eGivenOn, setEGivenOn] = useState("");
+  const [eDeliveredOn, setEDeliveredOn] = useState("");
+  const [eAmount, setEAmount] = useState("");
+  const [eNotes, setENotes] = useState("");
+
+  function startEdit(g: GiftRow) {
+    setEditId(g.id);
+    setECategory((g.category as GiftCategory) ?? "hamper");
+    setEGrade(g.grade ?? "A");
+    setEGivenOn((g.givenOn ?? "").slice(0, 10));
+    setEDeliveredOn((g.deliveredOn ?? "").slice(0, 10));
+    setEAmount(g.amount ? String(g.amount) : "");
+    setENotes(g.notes ?? "");
+    setError(null);
+  }
+
+  async function saveRow(g: GiftRow) {
+    setRowBusy(g.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/investors/${g.investorId}/gifts/${g.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: eCategory,
+          grade: eGrade,
+          givenOn: eGivenOn,
+          // Sent explicitly so clearing the box undoes delivery, exactly as it
+          // does on the client record.
+          deliveredOn: eDeliveredOn || null,
+          amount: eAmount ? Number(eAmount) : 0,
+          notes: eNotes.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error((await readApiError(res, "save the gift")).message);
+      setEditId(null);
+      await load(month);
+    } catch (err) {
+      setError(readThrownError(err, "save the gift").message);
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  async function deleteRow(g: GiftRow) {
+    // Irreversible, and it takes the spend back out of the month's totals.
+    if (!confirm(`Delete this gift for ${g.clientName ?? "this client"}? This cannot be undone.`)) return;
+    setRowBusy(g.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/investors/${g.investorId}/gifts/${g.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await readApiError(res, "delete the gift")).message);
+      await load(month);
+    } catch (err) {
+      setError(readThrownError(err, "delete the gift").message);
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
   const load = useCallback(async (m: string) => {
     setLoading(true);
     setError(null);
@@ -109,6 +179,12 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
     const allowed = GIFT_GRADES_BY_CATEGORY[category];
     if (!allowed.includes(grade)) setGrade(allowed[0]);
   }, [category, grade]);
+
+  // Same rule for the row editor.
+  useEffect(() => {
+    const allowed = GIFT_GRADES_BY_CATEGORY[eCategory];
+    if (!allowed.includes(eGrade)) setEGrade(allowed[0]);
+  }, [eCategory, eGrade]);
 
   async function pickClient(id: string, name: string) {
     setInvestorId(id);
@@ -452,25 +528,157 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
                   <th className="text-left font-medium px-3 py-2">Given</th>
                   <th className="text-left font-medium px-3 py-2">Delivered</th>
                   <th className="text-right font-medium px-4 py-2">Cost</th>
+                  {canLog ? <th className="text-right font-medium px-3 py-2 w-20">Actions</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {data!.gifts.map((g) => (
-                  <tr key={g.id} className="hover:bg-accent/30">
-                    <td className="px-4 py-2 font-medium">{g.clientName ?? "—"}</td>
-                    <td className="px-3 py-2">{g.label}</td>
-                    <td className="px-3 py-2">{g.rmName ?? "—"}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{formatDate(g.givenOn)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {g.deliveredOn ? (
-                        formatDate(g.deliveredOn)
-                      ) : (
-                        <span className="text-muted-foreground">Pending</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums">{g.amount ? formatINR(g.amount) : "—"}</td>
-                  </tr>
-                ))}
+                {data!.gifts.map((g) =>
+                  editId === g.id ? (
+                    // Edit expands the row in place, so the client and RM it
+                    // belongs to stay on screen while it is being changed.
+                    <tr key={g.id} className="bg-accent/20">
+                      <td colSpan={canLog ? 7 : 6} className="px-4 py-3">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div>
+                            <label className="text-xs font-medium block mb-1">Category</label>
+                            <select
+                              value={eCategory}
+                              onChange={(e) => setECategory(e.target.value as GiftCategory)}
+                              className="input-base w-full"
+                            >
+                              {GIFT_CATEGORIES.map((c) => (
+                                <option key={c} value={c}>
+                                  {GIFT_CATEGORY_LABEL[c]}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium block mb-1">Grade</label>
+                            <select
+                              value={eGrade}
+                              onChange={(e) => setEGrade(e.target.value)}
+                              className="input-base w-full"
+                            >
+                              {GIFT_GRADES_BY_CATEGORY[eCategory].map((gr) => (
+                                <option key={gr} value={gr}>
+                                  {gr}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium block mb-1">Cost (₹)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              inputMode="numeric"
+                              value={eAmount}
+                              onChange={(e) => setEAmount(e.target.value)}
+                              className="input-base w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium block mb-1">Given on</label>
+                            <input
+                              type="date"
+                              value={eGivenOn}
+                              onChange={(e) => setEGivenOn(e.target.value)}
+                              className="input-base w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium block mb-1">
+                              Delivered on <span className="font-normal text-muted-foreground">(clear to undo)</span>
+                            </label>
+                            <input
+                              type="date"
+                              value={eDeliveredOn}
+                              onChange={(e) => setEDeliveredOn(e.target.value)}
+                              className="input-base w-full"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium block mb-1">Notes</label>
+                            <input
+                              value={eNotes}
+                              onChange={(e) => setENotes(e.target.value)}
+                              maxLength={500}
+                              placeholder="Optional"
+                              className="input-base w-full"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-3">
+                          <button
+                            type="button"
+                            onClick={() => saveRow(g)}
+                            disabled={rowBusy === g.id}
+                            className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+                          >
+                            {rowBusy === g.id && <Loader2 className="size-3 animate-spin" />}
+                            Save changes
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditId(null)}
+                            className="text-xs text-muted-foreground hover:underline"
+                          >
+                            Cancel
+                          </button>
+                          <span className="text-[11px] text-muted-foreground ml-auto">
+                            Setting a delivery date notifies {g.rmName ?? "the client's RM"} once.
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={g.id} className="hover:bg-accent/30">
+                      <td className="px-4 py-2 font-medium">{g.clientName ?? "—"}</td>
+                      <td className="px-3 py-2">{g.label}</td>
+                      <td className="px-3 py-2">{g.rmName ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatDate(g.givenOn)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {g.deliveredOn ? (
+                          formatDate(g.deliveredOn)
+                        ) : (
+                          <span className="text-muted-foreground">Pending</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">{g.amount ? formatINR(g.amount) : "—"}</td>
+                      {canLog ? (
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              onClick={() => startEdit(g)}
+                              aria-label="Edit gift"
+                              title="Edit this gift"
+                              disabled={rowBusy === g.id}
+                              className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                            >
+                              <Pencil className="size-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteRow(g)}
+                              aria-label="Delete gift"
+                              title="Delete this gift"
+                              disabled={rowBusy === g.id}
+                              className="text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-50"
+                            >
+                              {rowBusy === g.id ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="size-4" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      ) : null}
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>

@@ -18,6 +18,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { notifyGiftDelivered } from "@/lib/gifts/notify";
+import { GIFT_CATEGORIES } from "@/lib/gifts/catalogue";
 import { assertInScope } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,12 @@ const PatchBody = z
     amount: z.number().int().min(0).optional(),
     givenOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "expected yyyy-mm-dd").optional(),
     notes: z.string().max(500).nullish(),
+    // The engagement board logs and displays gifts as category + grade
+    // ("Hamper · A"), so an edit started from there has to be able to change
+    // them — otherwise the only editable fields would be ones that screen
+    // doesn't show.
+    category: z.enum(GIFT_CATEGORIES).nullish(),
+    grade: z.string().max(4).nullish(),
     /** yyyy-mm-dd to mark delivered; null to undo. */
     deliveredOn: z
       .string()
@@ -133,6 +140,8 @@ export async function PATCH(
       if (body.amount !== undefined) sets.push(sql`amount = ${body.amount}`);
       if (body.givenOn !== undefined) sets.push(sql`given_on = ${body.givenOn}::date`);
       if (body.notes !== undefined) sets.push(sql`notes = ${body.notes ?? null}`);
+      if (body.category !== undefined) sets.push(sql`category = ${body.category ?? null}`);
+      if (body.grade !== undefined) sets.push(sql`grade = ${body.grade ?? null}`);
       if (body.deliveredOn !== undefined) sets.push(sql`delivered_on = ${deliveredOn}::date`);
 
       const upd = await tx.execute(sql`
