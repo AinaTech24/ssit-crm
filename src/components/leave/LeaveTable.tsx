@@ -26,6 +26,13 @@ export type LeaveRow = {
   approver_name: string | null;
   reason: string | null;
   created_at: string;
+  /**
+   * Whether THIS viewer may decide THIS request — computed server-side with
+   * the same rule the API enforces (lib/leave/access.ts). Per row, because a
+   * branch head may act on their desk's requests but not on another branch
+   * head's. Absent = fall back to the blanket flag.
+   */
+  canDecide?: boolean;
 };
 
 export function LeaveTable({
@@ -88,6 +95,9 @@ export function LeaveTable({
           {rows.map((r) => {
             const isOwnRow = r.employee_user_id === currentUserId;
             const pending = r.status === "requested";
+            // Per-row right, falling back to the blanket flag for callers that
+            // do not compute one.
+            const mayDecide = r.canDecide ?? canApprove;
             return (
               <tr key={r.id} className="border-b last:border-0 hover:bg-secondary/40">
                 <td className="px-4 py-3 font-medium whitespace-nowrap">{r.employee_name ?? "—"}</td>
@@ -106,13 +116,13 @@ export function LeaveTable({
                     <Loader2 className="size-4 animate-spin inline" />
                   ) : (
                     <div className="inline-flex items-center gap-1">
-                      {pending && canApprove && (
+                      {pending && mayDecide && (
                         <>
                           <button onClick={() => act(r.id, "approve")} className="btn-ghost text-xs text-emerald-700 inline-flex items-center gap-1"><Check className="size-3.5" /> Approve</button>
                           <button onClick={() => act(r.id, "reject")} className="btn-ghost text-xs text-rose-600 inline-flex items-center gap-1"><X className="size-3.5" /> Reject</button>
                         </>
                       )}
-                      {pending && (isOwnRow || canApprove) && (
+                      {pending && (isOwnRow || mayDecide) && (
                         <button onClick={() => act(r.id, "cancel")} className="btn-ghost text-xs text-muted-foreground inline-flex items-center gap-1"><Ban className="size-3.5" /> Cancel</button>
                       )}
                       {!pending && <span className="text-xs text-muted-foreground">—</span>}

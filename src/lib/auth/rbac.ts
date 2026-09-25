@@ -128,6 +128,7 @@ export type Capability =
   // making them a branch head (and handing them a branch's whole client book).
   // As capabilities they are grantable per person on the employee record.
   | "leave.manage.all"
+  | "leave.manage.branch"
   | "attendance.manage.all"
   | "attendance.grid.view"
   | "expense.manage"
@@ -277,7 +278,14 @@ const MATRIX: Record<Capability, Role[]> = {
   // the staff expense tracker, which is what that job actually is. Owner and
   // branch_head keep leave/attendance exactly as before (they were the two
   // hardcoded roles), so nothing that worked stops working.
-  "leave.manage.all": ["branch_head", "gifting_hr"],
+  // Firm-wide leave administration, which crucially includes deciding a BRANCH
+  // HEAD's own request — a head cannot approve themselves, so those have to
+  // land above the branch. Assistant joins for exactly that reason.
+  "leave.manage.all": ["gifting_hr", "assistant"],
+  // A branch head runs their OWN sub-branch's leave: the people on their desk,
+  // not the firm. They held leave.manage.all before, which gave them every
+  // employee's requests and reasons across every branch.
+  "leave.manage.branch": ["branch_head"],
   "attendance.manage.all": ["branch_head", "gifting_hr"],
   // The Monthly Grid is every employee in the firm on one page, a month at a
   // time — a whole-firm HR view, not a working tool. OWNER ONLY (an empty role

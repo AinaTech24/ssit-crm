@@ -7,6 +7,7 @@ import { can } from "@/lib/auth/rbac";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
 import { LeaveTable } from "@/components/leave/LeaveTable";
+import { resolveLeaveScope, leaveScopeSql, decideLeaveCheck } from "@/lib/leave/access";
 import { LeaveTimeline } from "@/components/leave/LeaveTimeline";
 import { LEAVE_TYPE_LABELS } from "@/lib/leave/policy";
 
@@ -29,6 +30,9 @@ export default async function LeaveApplicationsPage({
   const year = sp.year ? parseInt(sp.year) : now.getFullYear();
   const month = sp.month ? parseInt(sp.month) : (now.getMonth() + 1);
 
+  // Firm-wide leave administration — gates the Leave policy settings link.
+  // Deciding individual requests is a PER-ROW right (see data.rows.canDecide),
+  // because a branch head may act on their desk without administering the firm.
   const canApprove = can(session.roles, "leave.manage.all", session.permissions);
 
   const data = await withTenant(session.tenantId, async (tx) => {
@@ -75,7 +79,14 @@ export default async function LeaveApplicationsPage({
         leaves: leavesRows.rows as any[],
       };
     } else {
-      const conds: any[] = [sql`la.tenant_id = ${session.tenantId}::uuid`];
+      // Leave reasons are HR-sensitive, and this query had NO scoping at all —
+      // anyone opening the page saw every employee's leave and their stated
+      // reason. Same wall as the list API and the decide route now.
+      const leaveScope = await resolveLeaveScope(tx, session);
+      const conds: any[] = [
+        sql`la.tenant_id = ${session.tenantId}::uuid`,
+        leaveScopeSql(leaveScope, session.tenantId, "la"),
+      ];
       if (q) conds.push(sql`u.name ILIKE ${`%${q}%`}`);
       if (statusFilter.length) conds.push(sql`la.status IN (${sql.join(statusFilter.map((v) => sql`${v}`), sql`, `)})`);
       if (typeFilter.length) conds.push(sql`la.leave_type IN (${sql.join(typeFilter.map((v) => sql`${v}`), sql`, `)})`);
@@ -85,7 +96,9 @@ export default async function LeaveApplicationsPage({
       const rows = await tx.execute(sql`
         SELECT la.id, la.employee_user_id, la.leave_type, la.duration, la.from_date, la.to_date,
                la.no_of_days, la.status, la.reason, la.created_at,
-               u.name AS employee_name, a.name AS approver_name
+               u.name AS employee_name, a.name AS approver_name,
+               u.desk_id AS employee_desk_id, u.roles AS employee_roles,
+               u.reporting_manager_id AS employee_manager_id
         FROM leave_applications la
         LEFT JOIN users u ON u.id = la.employee_user_id
         LEFT JOIN users a ON a.id = la.approver_user_id
@@ -96,7 +109,19 @@ export default async function LeaveApplicationsPage({
 
       return {
         stats: stats.rows[0] as any,
-        rows: rows.rows as any[],
+        // Decide rights are PER ROW, not per user: a branch head may act on
+        // their desk's requests but not on another branch head's. Computed
+        // here with the same rule the API enforces, so the table never offers
+        // a button that would 403.
+        rows: (rows.rows as any[]).map((r) => ({
+          ...r,
+          canDecide: decideLeaveCheck(session, leaveScope, {
+            userId: r.employee_user_id,
+            deskId: r.employee_desk_id ?? null,
+            roles: Array.isArray(r.employee_roles) ? r.employee_roles : [],
+            reportingManagerId: r.employee_manager_id ?? null,
+          }).ok,
+        })),
       };
     }
   });

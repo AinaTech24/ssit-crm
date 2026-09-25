@@ -143,7 +143,7 @@ export function LeaveForm({
           duration,
           fromDate,
           toDate: duration === "half_day" ? fromDate : toDate,
-          reason: reason || undefined,
+          reason: reason.trim(),
         }),
       });
       const j = await res.json().catch(() => ({}));
@@ -154,7 +154,15 @@ export function LeaveForm({
     }
   }
 
-  const canSave = !!employeeId && !!fromDate && days > 0 && (duration === "half_day" || toDate >= fromDate);
+  // Reason is compulsory — the approver decides on it, so an empty one just
+  // means they have to go and ask. Blocked here rather than only at the API,
+  // so the button says so before the form is submitted.
+  const canSave =
+    !!employeeId &&
+    !!fromDate &&
+    days > 0 &&
+    reason.trim().length >= 3 &&
+    (duration === "half_day" || toDate >= fromDate);
 
   return (
     <div className="card-surface p-5 space-y-4 max-w-3xl">
@@ -257,8 +265,15 @@ export function LeaveForm({
       )}
 
 
-      <Field label="Reason">
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Reason for leave…" className="input-base" />
+      <Field label="Reason *">
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          rows={3}
+          required
+          placeholder="Why you need the leave — the approver sees this"
+          className="input-base"
+        />
       </Field>
 
       {err && <div className="border border-destructive/30 bg-destructive/5 text-destructive rounded-lg px-3 py-2 text-sm">{err}</div>}

@@ -15,6 +15,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
+import { resolveLeaveScope, loadLeaveApplicant, decideLeaveCheck, cancelLeaveCheck } from "@/lib/leave/access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { leaveApplications, notifications, users } from "@/db/schema";
 
@@ -33,33 +34,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!parse.success) return NextResponse.json({ error: "invalid body" }, { status: 400 });
     const { action, decisionNotes } = parse.data;
     const clientMeta = clientMetaFromHeaders(req.headers);
-    const isManager = can(session.roles, "leave.manage.all", session.permissions);
-    const isOwner = session.roles.includes("owner");
 
     const result = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(leaveApplications).where(and(eq(leaveApplications.id, id), eq(leaveApplications.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return { notFound: true as const };
 
+      // One rule for who may act, shared with the list page and the list API —
+      // see lib/leave/access.ts. It covers self-approval, the branch head's
+      // sub-branch, a branch head's own request routing above the branch, and
+      // delegated approval by a reporting manager.
+      const scope = await resolveLeaveScope(tx, session);
+      const applicant = await loadLeaveApplicant(tx, session.tenantId, before.employeeUserId);
+      if (!applicant) return { notFound: true as const };
+
       if (action === "approve" || action === "reject") {
-        // Segregation of duties: you can't approve/reject your OWN leave. A solo
-        // owner is legitimately both maker and checker (mirrors the templates
-        // maker-checker), so owners are exempt; a branch_head must route their
-        // own request to an owner.
-        if (before.employeeUserId === session.userId && !isOwner) {
-          return { forbidden: "You can't approve your own leave — an owner must decide it." };
-        }
-        // Owner/branch_head can always decide; otherwise the applicant's own
-        // reporting manager may decide (delegated approval).
-        let canDecide = isManager;
-        if (!canDecide) {
-          const [applicant] = await tx
-            .select({ mgr: users.reportingManagerId })
-            .from(users)
-            .where(and(eq(users.id, before.employeeUserId), eq(users.tenantId, session.tenantId)))
-            .limit(1);
-          canDecide = !!applicant?.mgr && applicant.mgr === session.userId;
-        }
-        if (!canDecide) return { forbidden: "Only a manager or the employee's reporting manager can approve or reject leave." };
+        const allowed = decideLeaveCheck(session, scope, applicant);
+        if (!allowed.ok) return { forbidden: allowed.reason };
         if (before.status !== "requested") return { badState: `Cannot ${action} a ${before.status} request.` };
         const next = action === "approve" ? "approved" : "rejected";
         await tx
@@ -79,10 +69,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           meta: { leave_id: id } as any,
         } as any);
       } else {
-        // cancel — applicant or manager; only while not already decided-final.
-        if (before.employeeUserId !== session.userId && !isManager) {
-          return { forbidden: "You can only cancel your own leave." };
-        }
+        // cancel — the applicant's own right, or anyone who could have decided
+        // it; only while not already decided-final.
+        const allowed = cancelLeaveCheck(session, scope, applicant);
+        if (!allowed.ok) return { forbidden: allowed.reason };
         if (before.status === "rejected" || before.status === "cancelled") {
           return { badState: `Request is already ${before.status}.` };
         }

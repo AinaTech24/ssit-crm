@@ -117,7 +117,12 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "leave.manage.all": {
     group: "Team & Office",
     label: "Approve & manage everyone's leave",
-    hint: "See every employee's leave applications, decide them, and file leave on someone's behalf. Without this a person only sees their own and their direct reports'.",
+    hint: "See every employee's leave applications and decide them — including a branch head's own request, which nobody inside their branch can approve.",
+  },
+  "leave.manage.branch": {
+    group: "Team & Office",
+    label: "Approve leave for their sub-branch",
+    hint: "See and decide the leave of everyone on the same sub-branch. Another branch head's request is out of scope — those go to an admin, assistant or gifting/HR.",
   },
   "attendance.manage.all": {
     group: "Team & Office",

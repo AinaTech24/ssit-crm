@@ -17,6 +17,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
+import { resolveLeaveScope, leaveScopeSql } from "@/lib/leave/access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { leaveApplications, users, notifications, eventsOutbox, LEAVE_TYPES, LEAVE_DURATIONS } from "@/db/schema";
 import { leaveWorkingDays } from "@/lib/leave/working-days";
@@ -29,7 +30,9 @@ const Body = z.object({
   duration: z.enum(LEAVE_DURATIONS).default("full_day"),
   fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "fromDate must be YYYY-MM-DD"),
   toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "toDate must be YYYY-MM-DD"),
-  reason: z.string().max(2000).optional(),
+  // Compulsory: a request with no reason cannot be judged, and the approver
+  // then has to chase the applicant before they can act on it.
+  reason: z.string().trim().min(3, "a reason is required").max(2000),
 });
 
 export async function GET() {
@@ -38,17 +41,9 @@ export async function GET() {
     // Leave reasons are HR-sensitive (medical / bereavement / personal), so the
     // list is scoped: whoever administers leave sees the whole firm; everyone
     // else sees only their own applications plus those of their direct reports.
-    const isManager = can(session.roles, "leave.manage.all", session.permissions);
     const rows = await withTenant(session.tenantId, async (tx) => {
-      const scope = isManager
-        ? sql``
-        : sql` AND (
-            la.employee_user_id = ${session.userId}::uuid
-            OR la.employee_user_id IN (
-              SELECT id FROM users
-              WHERE tenant_id = ${session.tenantId}::uuid AND reporting_manager_id = ${session.userId}::uuid
-            )
-          )`;
+      // Shared with the list page and the decide route — see lib/leave/access.ts.
+      const scope = sql` AND ${leaveScopeSql(await resolveLeaveScope(tx, session), session.tenantId, "la")}`;
       const r = await tx.execute(sql`
         SELECT la.*, u.name AS employee_name, a.name AS approver_name
         FROM leave_applications la

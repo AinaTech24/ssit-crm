@@ -81,6 +81,16 @@ const SKIP_FILES = new Set([
   "ai/chats/[id]/route.ts",
   "ai/chats/[id]/messages/route.ts",
   "announcements/[id]/read/route.ts",          // own read receipt
+
+  // Leave decisions are ROW-level, not capability-level: who may approve,
+  // reject or cancel one request depends on the applicant (their sub-branch,
+  // whether they are themselves a branch head, who they report to) as much as
+  // on the caller. A blanket requireCap here would be wrong in both
+  // directions — it would lock out the reporting manager and the applicant
+  // cancelling their own, while implying the holder may decide anything. The
+  // real gate is decideLeaveCheck / cancelLeaveCheck in lib/leave/access.ts,
+  // which every caller passes through before any write.
+  "leave-applications/[id]/route.ts",
   "command-center/snooze/route.ts",            // own snooze
   "command-center/digest/route.ts",            // own digest
   "daily-tracker/route.ts",                    // own daily tracker
