@@ -403,22 +403,34 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // UI-only gating that check exists to close.
   const effectiveUserModules = userModules ?? roleDefaultNavKeys(session.roles);
 
-  // The FIRM ADMIN sees every module the product has, full stop.
+  // The platform admin's grant binds EVERYONE in the firm, owner included.
   //
-  // The per-firm sidebar grant (subscriptions.allowed_nav, set in Equitywala
-  // Admin -> Module & Field Access Center) is a FROZEN LIST: it stores the exact
-  // hrefs that existed when an admin last saved it. Every sidebar item shipped
-  // AFTER that save is therefore missing from the list and invisible to the firm
-  // forever — which is why Referrals disappeared for firms whose grant predates
-  // it, and why Opportunities would have gone the same way. An owner losing a
-  // module because of when their firm's row was last touched is never what
-  // anyone intends.
+  // This used to be `isOwnerUser`, exempting the firm admin from
+  // subscriptions.allowed_nav entirely — so switching a module off in
+  // Equitywala Admin → Module & Field Access Center changed nothing for the one
+  // person most likely to be looking. That grant is how the platform sells
+  // packages; an owner who can ignore it makes the switch decorative.
   //
-  // Suspension is unaffected: tenants.status is a separate gate (license
-  // .isRestricted) and still locks a suspended firm down to support + logout.
-  // The grant also still applies in full to every NON-owner role, so an owner
-  // can keep scoping their own team.
-  const navUnrestricted = isOwnerUser;
+  // It was exempted because the grant used to be a FROZEN LIST — it stored the
+  // hrefs that existed when an admin last saved, so anything shipped later was
+  // invisible to that firm forever (Referrals vanished for firms whose grant
+  // predated it). That is fixed at the source now: the grant is stamped with
+  // the catalogue it was chosen from (subscriptions.nav_grant_catalog, 0224)
+  // and tenantAccessibleNavKeys restores any item that was never on offer. An
+  // item is hidden only when an admin actually excluded it.
+  //
+  // An owner still cannot be locked out of the essentials. Only items in the
+  // nav catalogue are gatable (isGatableNav), and CORE_HREFS — dashboard,
+  // settings, firm profile, help — are deliberately excluded from it. Billing
+  // is not a sidebar item at all (it lives in the profile dropdown), so no
+  // grant can reach it either.
+  // The MFD → team grant is likewise still owner-exempt — each check below
+  // guards it with !isOwnerUser — so an owner scoping their own team never
+  // scopes themselves.
+  //
+  // Suspension is unaffected: tenants.status is a separate gate
+  // (license.isRestricted) and still locks a suspended firm to support + logout.
+  const navUnrestricted = false;
 
   // Enforce nav/module access SERVER-SIDE, not just by hiding the sidebar item:
   // if the requested page belongs to a module the firm (or this team member)
