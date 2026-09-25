@@ -102,7 +102,16 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   },
   "service_request.view.all": { group: "Tasks & Service", label: "View all service requests" },
   "service_request.view.assigned": { group: "Tasks & Service", label: "View assigned service requests" },
-  "service_request.manage": { group: "Tasks & Service", label: "Manage service requests" },
+  "service_request.manage": {
+    group: "Tasks & Service",
+    label: "Work the service request queue",
+    hint: "Edit, reassign, resolve and close any ticket in the firm. Simply logging one needs only “Raise a service request”.",
+  },
+  "service_request.create": {
+    group: "Tasks & Service",
+    label: "Raise a service request",
+    hint: "Log a ticket for back office to pick up, and follow it. Does not allow working or closing other people's tickets.",
+  },
 
   // ── Team & Office ───────────────────────────────────────────────────────
   "leave.manage.all": {

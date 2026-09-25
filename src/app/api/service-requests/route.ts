@@ -14,7 +14,7 @@ import { desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { serviceRequests, eventsOutbox } from "@/db/schema";
 import { acknowledgeServiceRequest } from "@/lib/service/acknowledge";
@@ -97,7 +97,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "service_request.manage", session.permissions);
+    // Raising a ticket, not working the queue — see service_request.create.
+    // Back office keeps .manage, which also covers creating.
+    requireAny(session.roles, ["service_request.create", "service_request.manage"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const parse = CreateBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });

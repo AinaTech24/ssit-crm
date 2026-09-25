@@ -116,6 +116,7 @@ export type Capability =
   | "service_request.view.all"
   | "service_request.view.assigned"
   | "service_request.manage"
+  | "service_request.create"
   | "complaint.manage"
   // Review meetings
   | "review_meeting.manage.all"
@@ -249,6 +250,21 @@ const MATRIX: Record<Capability, Role[]> = {
   "service_request.view.all": ["back_office", "ops", "compliance"],
   "service_request.view.assigned": ["rm", "sub_broker", "ria", "insurance"],
   "service_request.manage": ["back_office", "ops"],
+  // RAISING a ticket is not the same as WORKING the queue. Creating one was
+  // gated on service_request.manage — the capability that lets back office
+  // edit, reassign and close ANY ticket — so an RM who needed a folio
+  // corrected got "forbidden: missing service_request.manage" on submit, with
+  // no way to log it. The create route itself already had a branch for "an RM
+  // logging a ticket", so the gate contradicted the code it guarded.
+  //
+  // Client-servicing roles can now raise a ticket and follow it; they still
+  // cannot work anyone else's, because that stays on .manage. Research,
+  // marketing and gifting/HR are left out as they don't service client
+  // requests — grant it on the individual's record if that changes.
+  "service_request.create": [
+    "back_office", "ops", "rm", "sub_broker", "branch_head",
+    "assistant", "ria", "insurance", "compliance",
+  ],
   "complaint.manage": ["compliance", "back_office", "ops"],
 
   // Review meetings — back_office plans for all, RM runs assigned
