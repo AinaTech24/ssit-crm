@@ -88,6 +88,7 @@ export * from "./tenant_ui_layouts";
 export * from "./custom_field_defs";
 export * from "./activities";
 export * from "./announcements";
+export * from "./announcement_attachments";
 export * from "./assignment_rules";
 export * from "./macros";
 export * from "./validation_rules";

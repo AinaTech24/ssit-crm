@@ -469,7 +469,11 @@ export function AmcEmpanelmentForm({
         </div>
       </Section>
 
-      {/* Documents */}
+      {/* Kept for records that already hold this, hidden when creating:
+          the new-empanelment form asks only for what is needed to empanel.
+          Nothing captured here is deleted — open an existing empanelment to
+          read or edit it. */}
+      {mode === "edit" && (
       <Section title="Empanelment letter / MOU / addendums">
         {v.documents.length > 0 ? (
           <ul className="space-y-1.5 mb-2">
@@ -527,8 +531,9 @@ export function AmcEmpanelmentForm({
           </button>
         </div>
       </Section>
+      )}
 
-      {/* Investment-committee due diligence (Network FP 3.1 parity) */}
+      {mode === "edit" && (
       <Section title="Investment-committee due diligence">
         <div className="space-y-3">
           <Field label="Core investment philosophy">
@@ -564,8 +569,9 @@ export function AmcEmpanelmentForm({
           </Field>
         </div>
       </Section>
+      )}
 
-      {/* Remarks */}
+      {mode === "edit" && (
       <Section title="Remarks">
         <textarea
           rows={3}
@@ -575,6 +581,7 @@ export function AmcEmpanelmentForm({
           placeholder="Brokerage notes, special arrangements, fund-house policies…"
         />
       </Section>
+      )}
 
       <div className="flex items-center justify-between pt-4 border-t">
         {mode === "edit" && v.status !== "terminated" ? (

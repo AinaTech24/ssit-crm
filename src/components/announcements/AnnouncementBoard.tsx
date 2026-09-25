@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, X, Plus, Pin, PinOff, Trash2, Megaphone, Save, Edit2, Eye, EyeOff, Check, CheckCheck, ShieldAlert } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { AttachmentPicker, EntityAttachments, uploadAttachments } from "@/components/common/EntityAttachments";
 
 type Row = Record<string, any>;
 
@@ -153,6 +154,20 @@ export function AnnouncementBoard({
                       )}
                     </div>
                     <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{r.body}</p>
+
+                    {/* Files, read-only on the card — a notice is something you
+                        read, and managing them belongs in Edit. Mounted only
+                        when the notice HAS files, so a board of plain notices
+                        doesn't fire a fetch per card. */}
+                    {Number(r.attachment_count ?? 0) > 0 ? (
+                      <div className="mt-3">
+                        <EntityAttachments
+                          basePath={`/api/announcements/${r.id}/attachments`}
+                          label="Attachments"
+                          readOnly
+                        />
+                      </div>
+                    ) : null}
                     <div className="text-[11px] text-muted-foreground mt-2 flex flex-wrap items-center gap-1.5">
                       {r.created_by_name ? <span>{r.created_by_name}</span> : null}
                       {r.created_by_name ? <span>·</span> : null}
@@ -335,6 +350,9 @@ function Composer({
   );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // A new notice has no id to attach to yet, so files are held here and
+  // uploaded the moment it exists. An existing one uploads immediately.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   function toggleRole(r: string) {
     setRoles((s) => (s.includes(r) ? s.filter((x) => x !== r) : [...s, r]));
@@ -381,6 +399,23 @@ function Composer({
       if (!res.ok) {
         setErr(j.error ?? `Failed (${res.status})`);
         return;
+      }
+
+      // Upload the held files now the notice has an id. A failure here must not
+      // read as "nothing saved" — the announcement is already posted — so it
+      // reports the upload specifically and leaves the composer open with the
+      // files still picked, rather than discarding them.
+      const newId = row?.id ?? j.id;
+      if (!row && pendingFiles.length && newId) {
+        try {
+          await uploadAttachments(`/api/announcements/${newId}/attachments`, pendingFiles);
+        } catch (e: any) {
+          setErr(
+            `Announcement posted, but the files did not upload: ${e?.message ?? "upload failed"}. Close this and add them from the notice.`
+          );
+          setPendingFiles([]);
+          return;
+        }
       }
       onSaved();
     } finally {
@@ -437,6 +472,22 @@ function Composer({
               />
             </Field>
           </div>
+          {/* Files. A saved notice uploads straight away; a new one holds them
+              until it has an id (see save()). */}
+          {row ? (
+            <EntityAttachments
+              basePath={`/api/announcements/${row.id}/attachments`}
+              label="Documents, images & video"
+            />
+          ) : (
+            <AttachmentPicker
+              files={pendingFiles}
+              onChange={setPendingFiles}
+              disabled={busy}
+              label="Documents, images & video"
+              hint="Drop files here — or use “Add files”. They upload when the announcement is posted. Max 25 MB each."
+            />
+          )}
           <Field label="Target Branch (optional)">
             <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="input-base">
               <option value="">All Branches</option>

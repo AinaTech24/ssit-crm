@@ -47,7 +47,8 @@ export async function GET(req: NextRequest) {
         const r = await tx.execute(sql`
           SELECT a.*, u.name AS created_by_name,
                  (SELECT count(*)::int FROM announcement_reads ar WHERE ar.announcement_id = a.id) AS read_count,
-                 (SELECT count(*)::int FROM announcement_reads ar WHERE ar.announcement_id = a.id AND ar.acknowledged_at IS NOT NULL) AS ack_count
+                 (SELECT count(*)::int FROM announcement_reads ar WHERE ar.announcement_id = a.id AND ar.acknowledged_at IS NOT NULL) AS ack_count,
+                 (SELECT count(*)::int FROM announcement_attachments aa WHERE aa.announcement_id = a.id AND aa.deleted_at IS NULL) AS attachment_count
           FROM announcements a LEFT JOIN users u ON u.id = a.created_by_user_id
           WHERE a.tenant_id = ${session.tenantId}::uuid
           ORDER BY a.is_pinned DESC, COALESCE(a.published_at, a.created_at) DESC
@@ -60,7 +61,8 @@ export async function GET(req: NextRequest) {
         SELECT a.id, a.title, a.body, a.category, a.is_pinned, a.requires_ack, a.published_at, a.expires_at,
                u.name AS created_by_name,
                (ar.read_at IS NOT NULL) AS is_read,
-               (ar.acknowledged_at IS NOT NULL) AS is_acknowledged
+               (ar.acknowledged_at IS NOT NULL) AS is_acknowledged,
+               (SELECT count(*)::int FROM announcement_attachments aa WHERE aa.announcement_id = a.id AND aa.deleted_at IS NULL) AS attachment_count
         FROM announcements a
         LEFT JOIN users u ON u.id = a.created_by_user_id
         LEFT JOIN announcement_reads ar ON ar.announcement_id = a.id AND ar.user_id = ${session.userId}::uuid
