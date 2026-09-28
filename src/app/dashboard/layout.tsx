@@ -403,6 +403,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // UI-only gating that check exists to close.
   const effectiveUserModules = userModules ?? roleDefaultNavKeys(session.roles);
 
+  /**
+   * Did an admin explicitly tick this item for this person in Sidebar Access?
+   *
+   * Reads `userModules` — the SAVED grant — not `effectiveUserModules`, which
+   * falls back to role defaults. Only a real tick counts.
+   *
+   * Why it matters: several nav items carry their own hardcoded `roles` list,
+   * and that check ran BEFORE the grant, so ticking an item for someone whose
+   * role was missing from the list did nothing at all and said nothing about
+   * it. An insurance user granted Clients simply never saw Clients. The list
+   * is a sensible DEFAULT for who gets an item out of the box; a human
+   * ticking a box for one person is a decision about that person, and it wins.
+   *
+   * This is not a way around the real gates. The firm's own grant
+   * (tenantAllowedSet) still applies, and every page keeps its capability
+   * check — granting the nav item opens the door, it does not hand over data
+   * the role cannot see.
+   */
+  const explicitlyGranted = (href: string) => userModules !== null && userModules.includes(href);
+
   // The platform admin's grant binds EVERYONE in the firm, owner included.
   //
   // This used to be `isOwnerUser`, exempting the firm admin from
@@ -482,7 +502,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
     items: section.items.filter((i) => {
       // Platform kill-switch — a globally-disabled sidebar item is hidden for everyone.
       if (moduleControls[i.href] === "disabled") return false;
-      if (i.roles && !session.roles.some((r) => i.roles!.includes(r) || r === "owner")) return false;
+      if (
+        i.roles &&
+        !explicitlyGranted(i.href) &&
+        !session.roles.some((r) => i.roles!.includes(r) || r === "owner")
+      )
+        return false;
       if (isGatableNav(i.href) && !navUnrestricted) {
         // Admin → MFD: the firm must have access to this sidebar item.
         if (!tenantAllowedSet.has(i.href)) return false;
