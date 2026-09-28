@@ -99,8 +99,15 @@ export async function loadAllowedBranches(
   return row.allowedBranches;
 }
 
-/** An admin's explicit answer for one person, overriding roles and grants. */
-export type ScopeOverride = "branch" | "own" | null;
+/**
+ * An admin's explicit answer for one person, overriding roles and grants.
+ *
+ * 'all' (migration 0229) is the WIDENING answer. Until it existed the only
+ * routes to the whole firm were holding owner / back_office / ops, or ticking
+ * every branch by hand and remembering the next new one — so "let this person
+ * see the clients" meant granting a role that also hands over edit rights.
+ */
+export type ScopeOverride = "all" | "branch" | "own" | null;
 
 /**
  * The per-user scope columns, read together (one query instead of several).
@@ -139,7 +146,7 @@ export async function loadScopeRow(
         ? raw.filter((v): v is string => typeof v === "string" && UUID_RE.test(v))
         : [],
       override:
-        rawOverride === "branch" || rawOverride === "own"
+        rawOverride === "all" || rawOverride === "branch" || rawOverride === "own"
           ? rawOverride
           : // 0222's boolean, for a row the 0223 backfill hasn't touched.
             row?.restrict_to_own_records === true
@@ -301,6 +308,15 @@ export async function explainDataScope(
   // checks: the whole point is to hold an otherwise-widening role (back office
   // for operational work, branch_head for approvals) without the book that
   // normally comes with it.
+  // The widening answer. Checked with the narrowing ones, above every role and
+  // grant, so an admin's explicit decision for one person is the deciding one
+  // whichever direction it points.
+  if (override === "all") {
+    return {
+      scope: { kind: "all" },
+      reason: "Sees every record in the firm, whoever owns it — set on their employee record.",
+    };
+  }
   if (override === "own") {
     return {
       scope: { kind: "own", userId: session.userId },

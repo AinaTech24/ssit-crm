@@ -104,7 +104,7 @@ export type EmployeeFormValues = {
   allowedBranches: string[] | null;
   delegatesFor: string[] | null;
   restrictToOwnRecords: boolean;
-  dataScopeOverride: "branch" | "own" | null;
+  dataScopeOverride: "all" | "branch" | "own" | null;
   customLeaveEntitlements: Partial<Record<string, number>> | null;
 };
 
@@ -183,6 +183,11 @@ export function EmployeeEditForm({
   // server would decide differently.
   const effectiveScope: { wide: boolean; text: string } = isOwnerRole
     ? { wide: true, text: "every record in the firm (Owner)." }
+    : v.dataScopeOverride === "all"
+    ? {
+        wide: true,
+        text: "every client in the firm, in every branch, whoever owns them — set below. Viewing only; it does not add edit rights.",
+      }
     : v.dataScopeOverride === "own"
       ? { wide: false, text: "only the records assigned to them — set below." }
       : v.dataScopeOverride === "branch"
@@ -674,19 +679,26 @@ export function EmployeeEditForm({
                 <SelectField
                   value={v.dataScopeOverride ?? ""}
                   onChange={(e) =>
-                    update("dataScopeOverride", (e.target.value || null) as "branch" | "own" | null)
+                    update(
+                      "dataScopeOverride",
+                      (e.target.value || null) as "all" | "branch" | "own" | null
+                    )
                   }
                   size="sm"
                   className="w-full"
                 >
                   <option value="">Decide from their roles (default)</option>
+                  <option value="all">All branches — every client in the firm</option>
                   <option value="branch">Their branch only</option>
                   <option value="own">Only their own records</option>
                 </SelectField>
                 <div className="text-[11px] text-muted-foreground">
-                  Overrides roles and grants. Use <strong>Their branch only</strong> for a branch head
-                  who also holds Back Office or Operations — those roles otherwise mean the whole firm,
-                  including clients with no RM assigned.
+                  Overrides roles and grants. <strong>All branches</strong> suits someone who services
+                  the whole book — an insurance or advisory user whose clients are not assigned to
+                  them — without granting Back Office, which would also hand over firm-wide editing.
+                  For a few named branches instead, leave this on the default and tick them below.
+                  Use <strong>Their branch only</strong> for a branch head who also holds Back Office
+                  or Operations, since those roles otherwise mean the whole firm.
                 </div>
               </div>
             )}

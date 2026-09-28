@@ -94,7 +94,7 @@ const PatchBody = z.object({
   allowedBranches: z.array(z.string().uuid()).nullable().optional(),
   delegatesFor: z.array(z.string().uuid()).nullable().optional(),
   restrictToOwnRecords: z.boolean().optional(),
-  dataScopeOverride: z.enum(["branch","own"]).nullable().optional(),
+  dataScopeOverride: z.enum(["all", "branch", "own"]).nullable().optional(),
   customLeaveEntitlements: z.record(z.number()).nullable().optional(),
 });
 
