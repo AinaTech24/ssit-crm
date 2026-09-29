@@ -23,6 +23,15 @@ const Body = z.object({
   // array would hold a write lock + memory for minutes. 10k/upload is well above
   // a normal book migration; larger imports should be split.
   rows: z.array(z.record(z.string(), z.any())).max(10000),
+  /**
+   * Run the new-lead automation for every imported row — the welcome
+   * WhatsApp + email the manual create path already triggers.
+   *
+   * OFF by default, and deliberately so: an import is how an event attendee
+   * list of 500 arrives, and messaging 500 people is not something to do
+   * because a checkbox defaulted on. The importer asks; the firm decides.
+   */
+  sendWelcome: z.boolean().default(false),
 });
 
 const VALID_STAGES = new Set(["new", "contacted", "qualified", "proposal_sent", "converted", "lost", "cold"]);
@@ -84,6 +93,7 @@ export async function POST(req: NextRequest) {
     }
 
     let inserted = 0;
+    const insertedIds: string[] = [];
     let skipped = 0;
     const errors: Array<{ rowIndex: number; error: string }> = [];
 
@@ -130,6 +140,7 @@ export async function POST(req: NextRequest) {
           phone: phoneVal,
         });
 
+        const leadId = uuid();
         try {
           await tx.execute(sql`
             INSERT INTO leads (
@@ -141,7 +152,7 @@ export async function POST(req: NextRequest) {
               owner_id, notes, custom_fields, created_at, updated_at
             )
             VALUES (
-              ${uuid()}, ${session.tenantId}, ${session.branchId ?? null},
+              ${leadId}, ${session.tenantId}, ${session.branchId ?? null},
               ${name},
               ${emailVal},
               ${phoneVal},
@@ -169,8 +180,27 @@ export async function POST(req: NextRequest) {
             )
           `);
           inserted++;
+          insertedIds.push(leadId);
         } catch (err: any) {
           errors.push({ rowIndex: i, error: String(err.message ?? "insert failed") });
+        }
+      }
+
+      // Run the new-lead automation for the imported rows, when asked. This is
+      // what makes an EVENT lead behave like one typed in by hand: the same
+      // lead.created event, so the installed welcome recipe sends its WhatsApp
+      // and email. Without it an imported attendee list landed silently, which
+      // is why event leads never got a message.
+      if (parse.data.sendWelcome && insertedIds.length) {
+        for (const leadId of insertedIds) {
+          await tx.execute(sql`
+            INSERT INTO events_outbox (tenant_id, kind, entity_type, entity_id, after, meta)
+            VALUES (
+              ${session.tenantId}::uuid, 'lead.created', 'lead', ${leadId}::uuid,
+              ${JSON.stringify({ via: "import" })}::jsonb,
+              ${JSON.stringify({ userId: session.userId })}::jsonb
+            )
+          `);
         }
       }
 
@@ -180,7 +210,7 @@ export async function POST(req: NextRequest) {
         action: "lead.bulk_import",
         entityType: "lead",
         entityId: null,
-        meta: { inserted, skipped, errored: errors.length, totalRows: parse.data.rows.length },
+        meta: { inserted, skipped, errored: errors.length, totalRows: parse.data.rows.length, sendWelcome: parse.data.sendWelcome },
         ...clientMeta,
       });
     });

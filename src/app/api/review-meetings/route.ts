@@ -15,6 +15,8 @@ import { v4 as uuid } from "uuid";
 import { sql, eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
+import { requestBaseUrl } from "@/lib/url/request-base";
+import { notifyMeetingCollaborators } from "@/lib/meetings/notify-collaborators";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
@@ -296,15 +298,56 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return { id, createdById, reminderTaskId };
+      // Name of whoever the meeting is about, for the notice.
+      let aboutName: string | null = null;
+      if (subjectId) {
+        const who = await tx.execute(
+          subjectType === "lead"
+            ? sql`SELECT name FROM leads WHERE id = ${subjectId}::uuid LIMIT 1`
+            : sql`SELECT name FROM investors WHERE id = ${subjectId}::uuid LIMIT 1`
+        );
+        aboutName = ((who.rows[0] as { name?: string } | undefined)?.name) ?? null;
+      }
+
+      return { id, createdById, reminderTaskId, aboutName, meetingDate, meetingType: body.meetingType, durationMinutes: body.durationMinutes };
     });
+
+    // Email the collaborators AFTER the meeting is committed: a bounced mailbox
+    // must never roll back a saved meeting, and there is nothing to tell anyone
+    // about until the row exists.
+    let invited = { sent: 0, skipped: 0 };
+    // The transaction can also return a scheduling conflict instead of a
+    // meeting, in which case there is nothing to announce.
+    if (result.id && result.meetingDate && (body.collaboratorIds ?? []).length > 0) {
+      const baseUrl = await requestBaseUrl();
+      invited = await withTenant(session.tenantId, async (tx) =>
+        notifyMeetingCollaborators(tx, {
+          tenantId: session.tenantId,
+          meeting: {
+            id: result.id!,
+            subject: body.subject ?? null,
+            meetingType: result.meetingType!,
+            meetingDate: result.meetingDate!,
+            durationMinutes: result.durationMinutes!,
+            meetingMode: body.meetingMode ?? null,
+            locationOrLink: body.locationOrLink ?? null,
+            discussionPoints: body.discussionPoints ?? null,
+          },
+          collaboratorIds: body.collaboratorIds ?? [],
+          createdById: result.createdById ?? null,
+          organiserName: session.name,
+          aboutName: result.aboutName ?? null,
+          baseUrl,
+        })
+      );
+    }
 
     // Double-booking: surface the clash so the UI can offer "Schedule anyway".
     if (result && "conflicts" in result) {
       return NextResponse.json({ error: "rm_conflict", conflicts: result.conflicts }, { status: 409 });
     }
 
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json({ ...result, collaboratorsEmailed: invited.sent }, { status: 201 });
   } catch (err: any) {
     return handleApiError(err);
   }

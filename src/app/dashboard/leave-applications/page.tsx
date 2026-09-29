@@ -9,7 +9,6 @@ import { CustomViews } from "@/components/common/CustomViews";
 import { LeaveTable } from "@/components/leave/LeaveTable";
 import { resolveLeaveScope, leaveScopeSql, decideLeaveCheck } from "@/lib/leave/access";
 import { LeaveTimeline } from "@/components/leave/LeaveTimeline";
-import { LEAVE_TYPE_LABELS } from "@/lib/leave/policy";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +21,6 @@ export default async function LeaveApplicationsPage({
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const statusFilter = (sp.status ?? "").split(",").filter(Boolean);
-  const typeFilter = (sp.type ?? "").split(",").filter(Boolean);
   const mine = sp.mine === "1";
   const view = sp.view ?? "list";
 
@@ -89,7 +87,6 @@ export default async function LeaveApplicationsPage({
       ];
       if (q) conds.push(sql`u.name ILIKE ${`%${q}%`}`);
       if (statusFilter.length) conds.push(sql`la.status IN (${sql.join(statusFilter.map((v) => sql`${v}`), sql`, `)})`);
-      if (typeFilter.length) conds.push(sql`la.leave_type IN (${sql.join(typeFilter.map((v) => sql`${v}`), sql`, `)})`);
       if (mine) conds.push(sql`la.employee_user_id = ${session.userId}::uuid`);
       const whereSql = sql`WHERE ${sql.join(conds, sql` AND `)}`;
 
@@ -132,7 +129,6 @@ export default async function LeaveApplicationsPage({
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (statusFilter.length) params.set("status", statusFilter.join(","));
-    if (typeFilter.length) params.set("type", typeFilter.join(","));
     if (mine) params.set("mine", "1");
     if (sp.year) params.set("year", sp.year);
     if (sp.month) params.set("month", sp.month);
@@ -203,12 +199,6 @@ export default async function LeaveApplicationsPage({
                   { value: "rejected", label: "Rejected" },
                   { value: "cancelled", label: "Cancelled" },
                 ],
-              },
-              {
-                type: "multi",
-                key: "type",
-                label: "Leave type",
-                options: Object.entries(LEAVE_TYPE_LABELS).map(([value, label]) => ({ value, label })),
               },
               { type: "select", key: "mine", label: "Mine", options: [{ value: "1", label: "My requests" }] },
             ]}

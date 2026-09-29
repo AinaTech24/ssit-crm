@@ -22,17 +22,27 @@ export function ImportWizard({
   parseUrl,
   commitUrl,
   requiredOurFields,
+  welcomePrompt,
 }: {
   entityLabel: string;
   backHref: string;
   parseUrl: string;
   commitUrl: string;
   requiredOurFields: string[];
+  /**
+   * When set, the mapping step offers a checkbox that runs the new-record
+   * automation for every imported row — the welcome WhatsApp + email a lead
+   * entered by hand already triggers. Off by default: an import is how a
+   * 500-name event list arrives, and messaging 500 people should be a
+   * decision rather than a default.
+   */
+  welcomePrompt?: { label: string; hint: string };
 }) {
   const router = useRouter();
   const [parsed, setParsed] = useState<any>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [step, setStep] = useState<"upload" | "map" | "done">("upload");
+  const [sendWelcome, setSendWelcome] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [commitResult, setCommitResult] = useState<any>(null);
@@ -65,7 +75,7 @@ export function ImportWizard({
       const res = await fetch(commitUrl, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mapping, rows: parsed.rows }),
+        body: JSON.stringify({ mapping, rows: parsed.rows, ...(welcomePrompt ? { sendWelcome } : {}) }),
       });
       const j = await res.json();
       if (!res.ok) {
@@ -181,6 +191,20 @@ export function ImportWizard({
             >
               Re-upload
             </button>
+            {welcomePrompt && (
+              <label className="flex items-start gap-2 text-xs mr-auto max-w-md cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sendWelcome}
+                  onChange={(e) => setSendWelcome(e.target.checked)}
+                  className="size-4 rounded mt-0.5"
+                />
+                <span>
+                  <span className="font-medium">{welcomePrompt.label}</span>
+                  <span className="block text-muted-foreground">{welcomePrompt.hint}</span>
+                </span>
+              </label>
+            )}
             <button
               onClick={commit}
               disabled={busy || !canCommit}

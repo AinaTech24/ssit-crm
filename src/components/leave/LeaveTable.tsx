@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Check, X, Ban } from "lucide-react";
 import { formatDate } from "@/lib/utils";
-import { LEAVE_TYPE_LABELS, LEAVE_DURATION_LABELS } from "@/lib/leave/policy";
+import { LEAVE_DURATION_LABELS } from "@/lib/leave/policy";
 
 const STATUS_TONE: Record<string, string> = {
   requested: "bg-blue-50 text-blue-700",
@@ -101,14 +101,13 @@ export function LeaveTable({
             return (
               <tr key={r.id} className="border-b last:border-0 hover:bg-secondary/40">
                 <td className="px-4 py-3 font-medium whitespace-nowrap">{r.employee_name ?? "—"}</td>
-                <td className="py-3 text-xs">{LEAVE_TYPE_LABELS[r.leave_type] ?? r.leave_type}</td>
                 <td className="py-3 text-xs whitespace-nowrap tabular-nums">
                   {formatDate(r.from_date)}
                   {r.to_date !== r.from_date ? ` → ${formatDate(r.to_date)}` : ""}
                   {r.duration === "half_day" && <span className="text-[10px] text-muted-foreground ml-1">({LEAVE_DURATION_LABELS.half_day})</span>}
                 </td>
                 <td className="py-3 text-right tabular-nums">{r.no_of_days}</td>
-                <td className="py-3 text-xs text-muted-foreground max-w-[220px] truncate">{r.reason ?? "—"}</td>
+                <td className="py-3 text-xs text-muted-foreground max-w-[340px]" title={r.reason ?? ""}>{r.reason ?? "—"}</td>
                 <td className="py-3"><span className={`chip capitalize ${STATUS_TONE[r.status] ?? ""}`}>{r.status}</span></td>
                 <td className="py-3 text-xs whitespace-nowrap">{r.approver_name ?? "—"}</td>
                 <td className="py-3 pr-4 text-right whitespace-nowrap">
