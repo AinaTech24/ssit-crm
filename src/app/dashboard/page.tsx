@@ -27,6 +27,8 @@ import { MarketingDashboard } from "@/components/dashboards/MarketingDashboard";
 import { ComplianceCockpit } from "@/components/dashboards/ComplianceCockpit";
 import { AnnouncementsStrip } from "@/components/announcements/AnnouncementsStrip";
 import { DashboardScopeFilter, type ScopeMember, type ScopeUnit } from "@/components/dashboards/DashboardScopeFilter";
+import { DashboardViewSwitch } from "@/components/dashboards/DashboardViewSwitch";
+import { ReviewMeetingsOverdue } from "@/components/dashboards/ReviewMeetingsOverdue";
 import { BranchCockpit } from "@/components/dashboards/BranchCockpit";
 import { primaryRoleNode } from "@/lib/auth/role-tree";
 import { ROLE_LABELS } from "@/lib/auth/rbac";
@@ -58,6 +60,8 @@ export default async function DashboardPage({
   const dateTo = (sp.date_to ?? "").slice(0, 10);
   const rmParam = (sp.rm ?? "").trim();
   // "b:<branchId>" or "d:<deskId>" — one param for both levels of the org.
+  // ?as=rm — a firm admin looking at their OWN book instead of the firm.
+  const asPersonal = (sp.as ?? "") === "rm";
   let unitParam = (sp.unit ?? "").trim();
   // A branch head landing on /dashboard cold (no ?unit= yet — that's every
   // normal login) fell through every "is a unit selected?" check below to
@@ -105,6 +109,8 @@ export default async function DashboardPage({
 
   // Owner / Branch Head sees the full cockpit — plus a "Viewing" member
   // selector that scopes the dashboard to a single team member's RmDashboard.
+  // Only the firm-wide admin cockpit carries the overdue-reviews worklist.
+  let showReviewOverdue = false;
   let dash: React.ReactNode;
   let memberBar: React.ReactNode = null;
   // View / Create / Period controls — shown on the right of the "Viewing" row,
@@ -196,19 +202,24 @@ export default async function DashboardPage({
 
       const selected = rmParam ? scope.members.find((m) => m.id === rmParam) : undefined;
       memberBar = (
-        <DashboardScopeFilter
-          units={scope.units}
-          members={scope.members}
-          selectedUnit={scope.branch ? unitParam : ""}
-          selectedMember={selected ? rmParam : ""}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <DashboardViewSwitch current={asPersonal ? "rm" : "admin"} />
+          <DashboardScopeFilter
+            units={scope.units}
+            members={scope.members}
+            selectedUnit={scope.branch ? unitParam : ""}
+            selectedMember={selected ? rmParam : ""}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+          />
+        </div>
       );
       // Whole firm → firm cockpit. Branch or desk → that team. Person → their own.
       dash = selected
         ? await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
-        : scope.branch
+        : asPersonal
+          ? await RmDashboard({ session, from: dateFrom, to: dateTo })
+          : scope.branch
           ? await BranchCockpit({
               session,
               branchId: scope.branch.id,
@@ -217,6 +228,7 @@ export default async function DashboardPage({
               deskName: scope.desk?.name,
             })
           : await OwnerCockpit({ session, period, customStart: pstart, customFrom: pfrom, customTo: pto });
+      showReviewOverdue = !selected && !scope.branch && !asPersonal;
       if (!selected && !scope.branch) {
         headerControls = <DashboardHeaderBar period={period} currentLabel={periodLabel} variant="light" />;
       }
@@ -284,6 +296,14 @@ export default async function DashboardPage({
           fetching — stream them in behind a skeleton so the shell (sidebar,
           topbar, announcements) paints immediately. */}
       <Suspense fallback={<DashboardPageSkeleton />}>{dash}</Suspense>
+      {/* Firm-wide worklist: reviews that have slipped and stayed slipped. Only
+          on the admin cockpit — a single RM's dashboard already lists their
+          own due reviews, and a desk view is about that desk's numbers. */}
+      {showReviewOverdue && (
+        <Suspense fallback={null}>
+          {await ReviewMeetingsOverdue({ session })}
+        </Suspense>
+      )}
     </>
   );
 }

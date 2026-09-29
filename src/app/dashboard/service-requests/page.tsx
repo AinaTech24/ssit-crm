@@ -6,6 +6,8 @@ import { requireSession } from "@/lib/auth/session";
 import { investorScopeSql } from "@/lib/investors/access";
 import { ServiceRequestsTable } from "@/components/service-requests/ServiceRequestsTable";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
 import { ColumnManager } from "@/components/common/ColumnManager";
@@ -65,7 +67,14 @@ export default async function ServiceRequestsPage({
   const assigneeFilter = (sp.assignee ?? "").split(",").filter(Boolean);
 
   // Build WHERE conditions
+  const scopeSel = parseScope(sp as Record<string, string | undefined>);
+  const showScopePicker = canPickScope(session);
+
   const conds: any[] = [sql`sr.tenant_id = ${session.tenantId}::uuid`];
+  // Sub-branch / RM view filter. A ticket sits with whoever is working it;
+  // an unassigned one falls back to the client's own RM, so it still appears
+  // under the desk that will have to pick it up.
+  conds.push(scopeFilterSql(scopeSel, session.tenantId, ["sr.assigned_to_user_id", "i.rm_id"]));
   if (mine) conds.push(sql`sr.assigned_to_user_id = ${session.userId}::uuid`);
   if (assigneeFilter.length)
     conds.push(sql`sr.assigned_to_user_id IN (${sql.join(assigneeFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
@@ -121,7 +130,9 @@ export default async function ServiceRequestsPage({
       WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
       ORDER BY name ASC
     `);
-    return { rows: rows.rows as any[], rms: rmRows.rows as any[] };
+    const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
+    const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
+    return { rows: rows.rows as any[], rms: rmRows.rows as any[], scopeUnits, scopeMembers };
   });
 
   const rmOptions = (result.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -146,6 +157,16 @@ export default async function ServiceRequestsPage({
           </Link>
         </div>
       </div>
+
+      {showScopePicker && (
+        <ScopeFilterBar
+          basePath="/dashboard/service-requests"
+          units={result.scopeUnits}
+          members={result.scopeMembers}
+          selectedUnit={scopeSel.unit}
+          selectedMember={scopeSel.rm}
+        />
+      )}
 
       <CompactFilterBar
         searchPlaceholder="Search ticket #, subject, or client…"

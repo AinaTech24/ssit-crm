@@ -28,6 +28,9 @@ import { LeadsTable } from "@/components/leads/LeadsTable";
 import { LeadsViewPersist } from "@/components/leads/LeadsViewPersist";
 // import { LeadQuickFilters } from "@/components/leads/LeadQuickFilters";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { ScopeBreakdownCards } from "@/components/common/ScopeBreakdownCards";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { Pager } from "@/components/common/Pager";
 import { dateRangeCond, dateRangeFilter } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -148,6 +151,9 @@ export default async function LeadsPage({
   };
   const userId = session.userId;
 
+  const scopeSel = parseScope(sp as Record<string, string | undefined>);
+  const showScopePicker = canPickScope(session);
+
   const data = await withTenant(session.tenantId, async (tx) => {
     const conds: any[] = [
       inArray(leads.stage, LEAD_PHASE_STAGES as any),
@@ -161,6 +167,10 @@ export default async function LeadsPage({
       // slice MUST be applied in the query — the page used to skip it entirely,
       // exposing the whole firm's pipeline to every RM.
       await leadScopeSql(tx, session, "leads"),
+      // "Show me one sub-branch / one RM" — narrows the view within the wall
+      // above, never past it. Derived from the owner's desk, not a column on
+      // the lead, so reassigning a lead moves it between desks correctly.
+      scopeFilterSql(scopeSel, session.tenantId, "leads.owner_id"),
     ];
     if (q) {
       conds.push(
@@ -287,12 +297,48 @@ export default async function LeadsPage({
     `);
     const kpi = (kpiRes.rows[0] as any) ?? { total: 0, created_today: 0, converted: 0, lost: 0 };
 
+    // Pipeline broken down by desk and by person, so a firm admin can see
+    // where the leads actually sit before drilling into one. Counted under the
+    // SAME wall + filters as the list, so the cards and the list can never
+    // disagree about the total.
+    const breakdownWhere = sql`${sql.join(conds, sql` AND `)}`;
+    const [byDeskRes, byRmRes] = await Promise.all([
+      tx.execute(sql`
+        SELECT COALESCE(d.name, 'No sub-branch') AS label, d.id AS desk_id, COUNT(*)::int AS n
+        FROM leads
+        LEFT JOIN users u ON u.id = leads.owner_id
+        LEFT JOIN desks d ON d.id = u.desk_id
+        WHERE ${breakdownWhere}
+        GROUP BY d.id, d.name
+        ORDER BY n DESC
+        LIMIT 12
+      `),
+      tx.execute(sql`
+        SELECT COALESCE(u.name, 'Unassigned') AS label, u.id AS rm_id, COUNT(*)::int AS n
+        FROM leads
+        LEFT JOIN users u ON u.id = leads.owner_id
+        WHERE ${breakdownWhere}
+        GROUP BY u.id, u.name
+        ORDER BY n DESC
+        LIMIT 12
+      `),
+    ]);
+
+    const { units: scopeUnits } = showScopePicker
+      ? await loadScopeUnits(tx, session)
+      : { units: [] };
+    const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
+
     return {
       rows,
       rms: rmRows.rows as any[],
       total,
       kpi,
       events: eventRes.rows as unknown as { name: string }[],
+      byDesk: byDeskRes.rows as unknown as { label: string; desk_id: string | null; n: number }[],
+      byRm: byRmRes.rows as unknown as { label: string; rm_id: string | null; n: number }[],
+      scopeUnits,
+      scopeMembers,
     };
   });
 
@@ -391,6 +437,24 @@ export default async function LeadsPage({
       {/* <div className="card-surface p-3">
         <LeadQuickFilters session={session} active={sp as Record<string, string | undefined>} />
       </div> */}
+
+      {showScopePicker && (
+        <>
+          <ScopeFilterBar
+            basePath="/dashboard/leads"
+            units={data.scopeUnits}
+            members={data.scopeMembers}
+            selectedUnit={scopeSel.unit}
+            selectedMember={scopeSel.rm}
+          />
+          <ScopeBreakdownCards
+            basePath="/dashboard/leads"
+            noun="leads"
+            byUnit={(data.byDesk ?? []).map((d) => ({ label: d.label, count: d.n, unitValue: d.desk_id ? `d:${d.desk_id}` : null }))}
+            byMember={(data.byRm ?? []).map((r) => ({ label: r.label, count: r.n, memberId: r.rm_id }))}
+          />
+        </>
+      )}
 
       <CompactFilterBar
         totalCount={data.total}

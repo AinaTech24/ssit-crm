@@ -8,6 +8,8 @@ import { can } from "@/lib/auth/rbac";
 import { investorScopeCondition, requireInvestorView } from "@/lib/investors/access";
 import { RecomputeTiersButton } from "@/components/investors/RecomputeTiersButton";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { dateRangeFilter } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -140,7 +142,10 @@ export default async function InvestorsPage({
   const PAGE_SIZE = 50;
   const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
 
-  const { rows, total, kanbanRows, rms, allIds, dupCount } = await withTenant(session.tenantId, async (tx) => {
+  const scopeSel = parseScope(sp as Record<string, string | undefined>);
+  const showScopePicker = canPickScope(session);
+
+  const { rows, total, kanbanRows, rms, allIds, dupCount, scopeUnits, scopeMembers } = await withTenant(session.tenantId, async (tx) => {
     // Filters live in one shared helper so the page and the Excel export apply
     // identical WHERE logic. Tenant isolation is handled by RLS.
     // Row scope: an RM sees only their own book, a branch head only their
@@ -149,7 +154,16 @@ export default async function InvestorsPage({
     // correctly but this page did not.
     const scope = await investorScopeCondition(tx, session);
     const filters = buildInvestorWhere(sp, userId);
-    const where = scope ? and(filters as any, scope) : filters;
+    // "Show me one sub-branch / one RM" — a VIEW filter on top of the wall,
+    // never instead of it, so picking a desk can only ever narrow what this
+    // session was already allowed to see. Owner is BOTH the relationship RM
+    // and the servicing RM: a client serviced by someone on the desk belongs
+    // to that desk's view even when the relationship sits elsewhere.
+    const viewScope = scopeFilterSql(scopeSel, session.tenantId, [
+      "investors.rm_id",
+      "investors.service_rm_id",
+    ]);
+    const where = and(filters, scope, viewScope);
 
     // Project only the columns the table + kanban actually read — the table
     // never needs the heavy/sensitive jsonb (kycData, nominees, crossSell,
@@ -287,7 +301,14 @@ export default async function InvestorsPage({
     // Possible-duplicate count (same PAN / mobile) — surfaced as a banner.
     const dupCount = await countPossibleDuplicates(tx as any, session.tenantId);
 
-    return { rows: r, total: Number(c[0]?.c ?? 0), kanbanRows, rms, allIds, dupCount };
+    // Options for the sub-branch / RM picker. Loaded only for sessions that
+    // get the picker — an RM sees their own book whatever it said.
+    const { units: scopeUnits } = showScopePicker
+      ? await loadScopeUnits(tx, session)
+      : { units: [] };
+    const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
+
+    return { rows: r, total: Number(c[0]?.c ?? 0), kanbanRows, rms, allIds, dupCount, scopeUnits, scopeMembers };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
   const rmOptions = (rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -406,6 +427,16 @@ export default async function InvestorsPage({
           active={sp as Record<string, string | undefined>}
         />
       </div> */}
+
+      {showScopePicker && (
+        <ScopeFilterBar
+          basePath="/dashboard/investors"
+          units={scopeUnits}
+          members={scopeMembers}
+          selectedUnit={scopeSel.unit}
+          selectedMember={scopeSel.rm}
+        />
+      )}
 
       <CompactFilterBar
         totalCount={total}

@@ -8,6 +8,8 @@ import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { taskScopeSql } from "@/lib/tasks/access";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { Pager } from "@/components/common/Pager";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -68,6 +70,9 @@ export default async function TasksPage({
   // matrix (and the subtitle promise).
   const canViewAll = can(session.roles, "task.view.all", session.permissions);
 
+  const scopeSel = parseScope(sp as Record<string, string | undefined>);
+  const showScopePicker = canPickScope(session);
+
   const result = await withTenant(session.tenantId, async (tx) => {
     // Tenant predicate is mandatory under the superuser/RLS-bypass model.
     // Trashed (soft-deleted) tasks never appear in any list — only in Trash.
@@ -76,6 +81,10 @@ export default async function TasksPage({
     // can't drift. Replaces "task.view.all ⇒ the whole firm", which handed
     // every sub-branch head the other sub-branches' tasks.
     conds.push(await taskScopeSql(tx, session));
+    // Sub-branch / RM view filter. A task belongs to the desk of whoever it is
+    // ASSIGNED to, or — when nobody is assigned yet — whoever raised it, so an
+    // unassigned task still shows under the desk that created it.
+    conds.push(scopeFilterSql(scopeSel, session.tenantId, ["tasks.assignee_id", "tasks.created_by_id"]));
 
     // View-tab scope: tasks assigned TO me, or tasks I assigned (created).
     if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
@@ -192,7 +201,9 @@ export default async function TasksPage({
       ORDER BY tag ASC
       LIMIT 100
     `);
-    return { rows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[] };
+    const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
+    const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
+    return { rows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[], scopeUnits, scopeMembers };
   });
 
   const rmOptions = (result.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -225,6 +236,16 @@ export default async function TasksPage({
           </Link>
         </div>
       </div>
+
+      {showScopePicker && (
+        <ScopeFilterBar
+          basePath="/dashboard/tasks"
+          units={result.scopeUnits}
+          members={result.scopeMembers}
+          selectedUnit={scopeSel.unit}
+          selectedMember={scopeSel.rm}
+        />
+      )}
 
       {/* Search + filter + sort + view — rendered inside the table header (list)
           or above the board (kanban). */}

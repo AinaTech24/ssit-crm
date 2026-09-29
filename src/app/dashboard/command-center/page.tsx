@@ -18,6 +18,8 @@ import {
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { withTenant } from "@/db/client";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { parseScope, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { buildCommandQueue, type ActionGroup, type ActionItem, type Severity } from "@/lib/command-center/queue";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -62,11 +64,16 @@ export default async function CommandCenterPage({
   const catFilter = (sp.category ?? "").split(",").filter(Boolean);
   // Owners can scope the whole queue to one user; everyone else only sees their
   // own book, so the user filter is owner-only.
-  const userParam = firmWide ? (sp.user ?? "").trim() : "";
+  // ?rm= is the shared scope param used by Clients / Leads / Tasks / SRs, so a
+  // person picked in one module is still picked here. ?user= is kept as the
+  // older param this page shipped with.
+  const userParam = firmWide ? ((sp.rm ?? sp.user ?? "").trim()) : "";
+  const scopeSel = parseScope(sp as Record<string, string | undefined>);
+  const showScopePicker = canPickScope(session);
   // Scope the whole board to a single client (search-as-you-type picker).
   const clientId = (sp.client ?? "").trim();
 
-  const { allGroups, userOptions, clientName } = await withTenant(
+  const { allGroups, userOptions, clientName, scopeUnits, scopeMembers } = await withTenant(
     session.tenantId,
     async (tx) => {
       const groups = await buildCommandQueue(
@@ -93,7 +100,9 @@ export default async function CommandCenterPage({
         `);
         users = (r.rows as { id: string; name: string }[]).map((u) => ({ value: String(u.id), label: u.name ?? "—" }));
       }
-      return { allGroups: groups, userOptions: users, clientName };
+      const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
+      const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
+      return { allGroups: groups, userOptions: users, clientName, scopeUnits, scopeMembers };
     },
     { userId: session.userId, branchId: session.branchId, roles: session.roles }
   );
@@ -139,6 +148,15 @@ export default async function CommandCenterPage({
     <div className="space-y-5 max-w-7xl">
       {/* Triage queue is "act now" — keep it fresh as work completes elsewhere. */}
       <AutoRefresh intervalMs={30000} />
+      {showScopePicker && (
+        <ScopeFilterBar
+          basePath="/dashboard/command-center"
+          units={scopeUnits}
+          members={scopeMembers}
+          selectedUnit={scopeSel.unit}
+          selectedMember={scopeSel.rm}
+        />
+      )}
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
