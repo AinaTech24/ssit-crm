@@ -103,3 +103,80 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return handleApiError(err);
   }
 }
+
+/**
+ * DELETE /api/leave-applications/[id] — remove a leave application outright.
+ *
+ * Distinct from cancelling. Cancelling keeps the row and its history, which is
+ * what you want for a request that was genuinely made and then withdrawn.
+ * Deleting is for one that should never have existed — a duplicate, a wrong
+ * employee, a test row — so it leaves nothing behind except the audit entry.
+ *
+ * Who: the applicant while it is still theirs to withdraw (not yet decided),
+ * or anyone who could have decided it — the same rule as approve/reject, so a
+ * branch head can tidy their own sub-branch and nobody else's.
+ *
+ * An APPROVED request is deliberately not deletable by the applicant: it has
+ * already been counted against their balance and acted on, and making that
+ * disappear is an admin's call, not the requester's.
+ */
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    const session = await requireSession();
+    const clientMeta = clientMetaFromHeaders(req.headers);
+
+    const result = await withTenant(session.tenantId, async (tx) => {
+      const before = (
+        await tx
+          .select()
+          .from(leaveApplications)
+          .where(and(eq(leaveApplications.id, id), eq(leaveApplications.tenantId, session.tenantId)))
+          .limit(1)
+      )[0];
+      if (!before) return { notFound: true as const };
+
+      const scope = await resolveLeaveScope(tx, session);
+      const applicant = await loadLeaveApplicant(tx, session.tenantId, before.employeeUserId);
+      if (!applicant) return { notFound: true as const };
+
+      const isMine = before.employeeUserId === session.userId;
+      const canDecide = decideLeaveCheck(session, scope, applicant).ok;
+      if (!canDecide && !isMine) {
+        return { forbidden: "You can only delete your own leave requests." };
+      }
+      if (isMine && !canDecide && before.status === "approved") {
+        return {
+          forbidden: "An approved request can only be removed by an admin — ask them, or cancel it instead.",
+        };
+      }
+
+      await tx
+        .delete(leaveApplications)
+        .where(and(eq(leaveApplications.id, id), eq(leaveApplications.tenantId, session.tenantId)));
+
+      await recordAudit(tx, {
+        tenantId: session.tenantId,
+        actorUserId: session.userId,
+        action: "leave.delete",
+        entityType: "leave_application",
+        entityId: id,
+        before: {
+          status: before.status,
+          employeeUserId: before.employeeUserId,
+          fromDate: before.fromDate,
+          toDate: before.toDate,
+          reason: before.reason,
+        },
+        ...clientMeta,
+      });
+      return { ok: true as const };
+    });
+
+    if ("notFound" in result) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if ("forbidden" in result) return NextResponse.json({ error: result.forbidden }, { status: 403 });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return handleApiError(err);
+  }
+}

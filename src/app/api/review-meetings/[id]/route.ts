@@ -539,6 +539,35 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       const before = (await tx.select().from(reviewMeetings).where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return "not_found" as const;
       if (!canTouchMeeting(before, session.userId) && !(await meetingInBranchScope(tx, session, before.rmId, before.createdById))) return "forbidden" as const;
+
+      // ?purge=1 REMOVES the meeting; without it this cancels it, which is what
+      // this route has always done despite the verb. Cancelling is the honest
+      // record of a meeting that was booked and called off — it stays on the
+      // client's history. Purging is for one that should never have been
+      // booked: a duplicate, a test, the wrong client.
+      if (req.nextUrl.searchParams.get("purge") === "1") {
+        if (before.reminderTaskId) {
+          await tx
+            .update(tasks)
+            .set({ status: "cancelled", updatedAt: new Date() })
+            .where(eq(tasks.id, before.reminderTaskId));
+        }
+        // Attachments cascade with the row (migration 0201).
+        await tx
+          .delete(reviewMeetings)
+          .where(and(eq(reviewMeetings.id, id), eq(reviewMeetings.tenantId, session.tenantId)));
+        await recordAudit(tx, {
+          tenantId: session.tenantId,
+          actorUserId: session.userId,
+          action: "review_meeting.delete",
+          entityType: "review_meeting",
+          entityId: id,
+          before: { subject: before.subject, meetingDate: before.meetingDate, status: before.status },
+          ...clientMeta,
+        });
+        return "ok" as const;
+      }
+
       await tx
         .update(reviewMeetings)
         .set({ status: "cancelled", updatedAt: new Date() } as any)

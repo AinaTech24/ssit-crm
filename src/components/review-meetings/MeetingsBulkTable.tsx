@@ -12,7 +12,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Calendar, ChevronDown, CalendarX } from "lucide-react";
+import { Calendar, ChevronDown, CalendarX, Trash2 } from "lucide-react";
 import { formatDate, formatRelative } from "@/lib/utils";
 import { REVIEW_MEETING_STATUSES } from "@/db/schema/review_meetings";
 import { BulkTable, type BulkColumn, type BulkAction } from "@/components/common/BulkTable";
@@ -119,6 +119,61 @@ function CancelMeetingButton({ id, disabled }: { id: string; disabled?: boolean 
         tone="danger"
         busy={busy}
         onConfirm={doCancel}
+        onCancel={() => setConfirm(false)}
+      />
+    </>
+  );
+}
+
+/**
+ * Per-row delete — REMOVES the meeting, unlike Cancel which keeps it marked
+ * cancelled on the client's history. For a duplicate or a wrong-client booking
+ * that should never have been made.
+ */
+function DeleteMeetingButton({ id, subject }: { id: string; subject?: string | null }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  async function doDelete() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/review-meetings/${id}?purge=1`, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast.error(j.error ?? "Couldn't delete the meeting");
+        return;
+      }
+      toast.success("Meeting deleted");
+      setConfirm(false);
+      router.refresh();
+    } catch {
+      toast.error("Couldn't delete the meeting");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setConfirm(true); }}
+        className="rounded-md p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+        title="Delete meeting"
+        aria-label="Delete meeting"
+        data-no-row-nav
+      >
+        <Trash2 className="size-4" />
+      </button>
+      <ConfirmDialog
+        open={confirm}
+        title="Delete this meeting?"
+        message={`${subject ? `"${subject}" ` : ""}will be removed entirely. This cannot be undone — cancel it instead if it was genuinely booked.`}
+        confirmLabel="Delete"
+        cancelLabel="Keep"
+        tone="danger"
+        busy={busy}
+        onConfirm={doDelete}
         onCancel={() => setConfirm(false)}
       />
     </>

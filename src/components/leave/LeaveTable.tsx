@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Check, X, Ban } from "lucide-react";
+import { Loader2, Check, X, Ban, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { LEAVE_DURATION_LABELS } from "@/lib/leave/policy";
 
@@ -67,6 +67,22 @@ export function LeaveTable({
     }
   }
 
+  /**
+   * Removes the request outright, unlike Cancel which keeps it with its
+   * history. For a duplicate or a row filed against the wrong person.
+   */
+  async function remove(id: string) {
+    if (!window.confirm("Delete this leave request? This cannot be undone — use Cancel to withdraw one instead.")) return;
+    setBusy(id);
+    try {
+      const res = await fetch(`/api/leave-applications/${id}`, { method: "DELETE" });
+      if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.error ?? "Delete failed"); return; }
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   if (rows.length === 0) {
     return (
       <div className="card-surface p-12 text-center text-sm text-muted-foreground">
@@ -124,7 +140,16 @@ export function LeaveTable({
                       {pending && (isOwnRow || mayDecide) && (
                         <button onClick={() => act(r.id, "cancel")} className="btn-ghost text-xs text-muted-foreground inline-flex items-center gap-1"><Ban className="size-3.5" /> Cancel</button>
                       )}
-                      {!pending && <span className="text-xs text-muted-foreground">—</span>}
+                      {(isOwnRow || mayDecide) && (
+                        <button
+                          onClick={() => remove(r.id)}
+                          title="Delete this request"
+                          className="btn-ghost text-xs text-rose-600 inline-flex items-center gap-1"
+                        >
+                          <Trash2 className="size-3.5" /> Delete
+                        </button>
+                      )}
+                      {!pending && !isOwnRow && !mayDecide && <span className="text-xs text-muted-foreground">—</span>}
                     </div>
                   )}
                 </td>

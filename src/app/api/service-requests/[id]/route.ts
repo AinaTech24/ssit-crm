@@ -164,7 +164,41 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     requireCap(session.roles, "service_request.manage", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const clientMeta = clientMetaFromHeaders(req.headers);
-    await withTenant(session.tenantId, async (tx) => {
+    // ?purge=1 REMOVES the ticket; without it this closes it, which is what
+    // this route has always done despite the verb. Two different intents:
+    // closing is "dealt with", purging is "should never have existed".
+    const purge = req.nextUrl.searchParams.get("purge") === "1";
+
+    const outcome = await withTenant(session.tenantId, async (tx) => {
+      const [before] = await tx
+        .select()
+        .from(serviceRequests)
+        .where(and(eq(serviceRequests.id, id), eq(serviceRequests.tenantId, session.tenantId)))
+        .limit(1);
+      if (!before) return "not_found" as const;
+
+      if (purge) {
+        // A complaint is a REGULATORY record: SEBI expects it retained, with
+        // its SCORES reference and its 21-day clock. Deleting one to tidy a
+        // list is not a trade worth offering, so it can only ever be closed.
+        if (before.type === "complaint") {
+          return "complaint" as const;
+        }
+        await tx
+          .delete(serviceRequests)
+          .where(and(eq(serviceRequests.id, id), eq(serviceRequests.tenantId, session.tenantId)));
+        await recordAudit(tx, {
+          tenantId: session.tenantId,
+          actorUserId: session.userId,
+          action: "service_request.delete",
+          entityType: "service_request",
+          entityId: id,
+          before: { ticketNo: before.ticketNo, subject: before.subject, status: before.status },
+          ...clientMeta,
+        });
+        return "deleted" as const;
+      }
+
       await tx
         .update(serviceRequests)
         .set({ status: "closed", updatedAt: new Date() } as any)
@@ -177,8 +211,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         entityId: id,
         ...clientMeta,
       });
+      return "closed" as const;
     });
-    return NextResponse.json({ ok: true });
+
+    if (outcome === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (outcome === "complaint") {
+      return NextResponse.json(
+        { error: "A complaint is a regulatory record and can't be deleted — close it instead." },
+        { status: 400 }
+      );
+    }
+    return NextResponse.json({ ok: true, deleted: outcome === "deleted" });
   } catch (err: any) {
     return handleApiError(err);
   }

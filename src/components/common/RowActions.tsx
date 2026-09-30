@@ -39,6 +39,7 @@ export function RowActions({
   inline = false,
   deleteIcon: DeleteIcon = Trash2,
   items,
+  purgeAction,
 }: {
   editHref?: string;
   deleteUrl?: string;
@@ -56,6 +57,13 @@ export function RowActions({
   deleteIcon?: LucideIcon;
   /** Extra navigation entries shown at the top of the ⋯ menu (menu mode only). */
   items?: { label: string; href: string }[];
+  /**
+   * A SECOND destructive action, for rows whose primary one is not really a
+   * delete. A service request "Close"s and a meeting "Cancel"s — both keep the
+   * record, which is usually right; this is the separate "remove it entirely"
+   * for a row that should never have existed.
+   */
+  purgeAction?: { url: string; label: string; confirmMessage: string };
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -63,6 +71,7 @@ export function RowActions({
   const btnRef = useRef<HTMLButtonElement | null>(null);
   const [coords, setCoords] = useState<{ left: number; top: number; bottom: number; openUp: boolean } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const subject = itemName ? `"${itemName}"` : itemLabel;
@@ -89,6 +98,29 @@ export function RowActions({
       else router.refresh();
     } catch (e: any) {
       toast.error(e?.message ?? "Network error", `${verb} failed`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doPurge() {
+    if (!purgeAction) return;
+    setBusy(true);
+    try {
+      const res = await fetch(purgeAction.url, { method: "DELETE" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast.error(j.error ?? `Request failed (HTTP ${res.status})`, "Delete failed");
+        return;
+      }
+      toast.success(`Deleted ${subject}`);
+      onDeleted?.();
+      setPurgeOpen(false);
+      setOpen(false);
+      if (redirectTo) router.push(redirectTo);
+      else router.refresh();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Network error", "Delete failed");
     } finally {
       setBusy(false);
     }

@@ -71,42 +71,71 @@ export async function BranchCockpit({
            ${deskId ? sql`AND u.desk_id = ${deskId}::uuid` : sql``}
          GROUP BY r
       `),
+      // Every headline number is scoped to the PEOPLE in this branch/desk, not
+      // to the record's own branch_id column.
+      //
+      // Two bugs in one. The totals used to filter on branch_id alone and
+      // ignore deskId completely, so switching sub-branch changed the roster
+      // underneath while clients, AUM, leads and the rest stayed stubbornly at
+      // branch level — the switch looked broken because for these numbers it
+      // was. And branch_id on a record is stamped at creation: it drifts the
+      // moment a client is reassigned or their RM moves branch, so it was the
+      // wrong column even for the branch view.
+      //
+      // Deriving from the owner matches the data wall and the list filters, so
+      // a desk's dashboard and that desk's Clients page now count the same
+      // book. Clients count the relationship RM OR the servicing RM, the same
+      // pair the wall treats as ownership.
       tx.execute(sql`
+        WITH scope_members AS (
+          SELECT id FROM users
+           WHERE tenant_id = ${session.tenantId}::uuid
+             AND branch_id = ${branchId}::uuid
+             AND status = 'active'
+             ${deskId ? sql`AND desk_id = ${deskId}::uuid` : sql``}
+        )
         SELECT
-          (SELECT count(*)::int FROM investors
-            WHERE branch_id = ${branchId}::uuid AND deleted_at IS NULL AND status = 'active')  AS clients,
+          (SELECT count(*)::int FROM investors i
+            WHERE (i.rm_id IN (SELECT id FROM scope_members)
+                   OR i.service_rm_id IN (SELECT id FROM scope_members))
+              AND i.deleted_at IS NULL AND i.status = 'active')                                AS clients,
           (SELECT COALESCE(SUM(f.aum), 0)::numeric FROM folios f
             JOIN investors i ON i.id = f.investor_id
-           WHERE i.branch_id = ${branchId}::uuid AND i.deleted_at IS NULL)                     AS aum,
+           WHERE (i.rm_id IN (SELECT id FROM scope_members)
+                  OR i.service_rm_id IN (SELECT id FROM scope_members))
+             AND i.deleted_at IS NULL)                                                         AS aum,
           (SELECT COALESCE(SUM(s.amount), 0)::numeric FROM sips s
             JOIN investors i ON i.id = s.investor_id
-           WHERE i.branch_id = ${branchId}::uuid AND i.deleted_at IS NULL
+           WHERE (i.rm_id IN (SELECT id FROM scope_members)
+                  OR i.service_rm_id IN (SELECT id FROM scope_members))
+             AND i.deleted_at IS NULL
              AND s.status = 'active')                                                          AS sip_book,
           (SELECT COALESCE(SUM(CASE WHEN tr.direction = 'inflow' THEN tr.amount::numeric
                                      ELSE -tr.amount::numeric END), 0)::numeric
              FROM transactions tr
              JOIN investors i ON i.id = tr.investor_id
-            WHERE i.branch_id = ${branchId}::uuid
+            WHERE (i.rm_id IN (SELECT id FROM scope_members)
+                   OR i.service_rm_id IN (SELECT id FROM scope_members))
               AND tr.status IN ('processed', 'successful')
               AND tr.order_date >= date_trunc('month', current_date))                           AS net_mtd,
           (SELECT COALESCE(SUM(tr.amount) FILTER (WHERE tr.direction = 'inflow'), 0)::numeric
              FROM transactions tr
              JOIN investors i ON i.id = tr.investor_id
-            WHERE i.branch_id = ${branchId}::uuid
+            WHERE (i.rm_id IN (SELECT id FROM scope_members)
+                   OR i.service_rm_id IN (SELECT id FROM scope_members))
               AND tr.status IN ('processed', 'successful')
               AND tr.order_date >= date_trunc('month', current_date))                           AS gross_mtd,
           (SELECT count(*)::int FROM leads l
-            WHERE l.branch_id = ${branchId}::uuid
+            WHERE l.owner_id IN (SELECT id FROM scope_members)
               AND l.converted_investor_id IS NULL
               AND l.stage NOT IN ('lost', 'not_interested'))                                    AS open_leads,
           (SELECT count(*)::int FROM tasks t
-            WHERE t.assignee_id IN (
-                    SELECT id FROM users
-                     WHERE tenant_id = ${session.tenantId}::uuid AND branch_id = ${branchId}::uuid)
+            WHERE t.assignee_id IN (SELECT id FROM scope_members)
               AND t.status IN ('open', 'in_progress') AND t.deleted_at IS NULL)                 AS tasks_open,
           (SELECT count(*)::int FROM service_requests sr
-            JOIN investors i ON i.id = sr.investor_id
-           WHERE i.branch_id = ${branchId}::uuid
+            LEFT JOIN investors i ON i.id = sr.investor_id
+           WHERE (sr.assigned_to_user_id IN (SELECT id FROM scope_members)
+                  OR i.rm_id IN (SELECT id FROM scope_members))
              AND sr.status NOT IN ('resolved', 'closed'))                                       AS sr_open
       `),
       // The roster itself, each row carrying the book that person owns so the

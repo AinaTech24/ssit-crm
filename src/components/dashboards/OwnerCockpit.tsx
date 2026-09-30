@@ -18,6 +18,9 @@ import { isDashboardWidgetVisible } from "@/config/dashboard-widgets";
 import { GrowthRetentionSection } from "./GrowthRetentionSection";
 import { AttentionQueuesSection } from "./AttentionQueuesSection";
 import { RmLeaderboard } from "./RmLeaderboard";
+import { TaskLeaderboard } from "./TaskLeaderboard";
+import { MeetingLeaderboard } from "./MeetingLeaderboard";
+import { ServiceRequestLeaderboard } from "./ServiceRequestLeaderboard";
 import { LeadFunnelSection } from "./LeadFunnelSection";
 import { AumSegmentSection } from "./AumSegmentSection";
 import { SchemeHoldingsSection } from "./SchemeHoldingsSection";
@@ -579,6 +582,23 @@ async function OwnerCockpitBody({
         )}
       </div>
       )}
+
+      {/* ---------- Team workload, the same shape as the RM board ----------
+           Tasks, meetings and service requests each as their own card, so a
+           firm admin can see where work is piling up per person without
+           opening three modules. Each is a separate component and reads its
+           own numbers; they share only the card shell. */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Suspense fallback={<LeaderboardSkeleton />}>
+          <TaskLeaderboard session={session} />
+        </Suspense>
+        <Suspense fallback={<LeaderboardSkeleton />}>
+          <MeetingLeaderboard session={session} />
+        </Suspense>
+        <Suspense fallback={<LeaderboardSkeleton />}>
+          <ServiceRequestLeaderboard session={session} />
+        </Suspense>
+      </div>
 
       {/* ---------- Scheme-wise holdings + total SIF book ---------- */}
       <Suspense fallback={<ChartSkeleton />}>

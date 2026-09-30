@@ -187,7 +187,19 @@ export function ServiceRequestsTable({ rows }: { rows: any[] }) {
                   </td>
                   <td data-col="attachments" className="py-3 text-right tabular-nums text-muted-foreground">{sr.attach_count > 0 ? sr.attach_count : "—"}</td>
                   <td data-col="actions" className="px-4 py-3 text-right">
-                    <RowActions editHref={`/dashboard/service-requests/${sr.id}`} deleteUrl={`/api/service-requests/${sr.id}`} itemLabel="ticket" itemName={sr.ticket_no} verb="Close" deleteIcon={Ban} />
+                    <RowActions
+                      editHref={`/dashboard/service-requests/${sr.id}`}
+                      deleteUrl={`/api/service-requests/${sr.id}`}
+                      itemLabel="ticket"
+                      itemName={sr.ticket_no}
+                      verb="Close"
+                      deleteIcon={Ban}
+                      purgeAction={{
+                        url: `/api/service-requests/${sr.id}?purge=1`,
+                        label: "Delete permanently",
+                        confirmMessage: `Permanently delete ticket ${sr.ticket_no}? This cannot be undone — close it instead if it was genuinely raised. Complaints cannot be deleted.`,
+                      }}
+                    />
                   </td>
                 </tr>
               );

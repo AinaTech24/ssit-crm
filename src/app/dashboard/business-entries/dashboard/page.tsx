@@ -4,6 +4,7 @@ import { ChevronLeft, Droplets, Filter, X } from "lucide-react";
 import { sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { formatINR } from "@/lib/utils";
 import { getBusinessSummary } from "@/lib/business/report";
 import { ASSET_CLASS_LABELS, type AssetClass } from "@/lib/business/asset-class";
@@ -65,12 +66,35 @@ export default async function BusinessDashboardPage({
   const status = sp.status && (BUSINESS_ENTRY_STATUSES as readonly string[]).includes(sp.status) ? sp.status : null;
   const customRange = Boolean(sp.from || sp.to);
 
+  // Whose business this dashboard opens on.
+  //
+  // It used to open on EVERYONE, which is the wrong default for the person
+  // who books the business: an RM landed on the firm's numbers rather than
+  // their own. It now opens on YOUR book, and anyone entitled to the firm-wide
+  // view can still switch to All users or to a colleague — the difference is
+  // that seeing the whole firm is now a choice rather than the landing state.
+  //
+  // Same entitlement the entries LIST uses, so the two screens agree.
+  const seesAll =
+    can(session.roles, "investor.view.all", session.permissions) ||
+    can(session.roles, "reports.business", session.permissions);
+
   const { summary, rmUsers, rmId } = await withTenant(session.tenantId, async (tx) => {
     const rmUsers = (
       await tx.execute(sql`SELECT id, name FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' ORDER BY name`)
     ).rows as Array<{ id: string; name: string }>;
     // Only honour an rm filter that matches a real tenant user (avoids a bad ::uuid cast).
-    const rmId = sp.rm && rmUsers.some((u) => u.id === sp.rm) ? sp.rm : null;
+    // "all" is the explicit firm-wide choice; anything else falls back to the
+    // viewer themselves. Someone without the firm-wide entitlement is pinned to
+    // their own book whatever the URL says.
+    const picked = (sp.rm ?? "").trim();
+    const rmId = !seesAll
+      ? session.userId
+      : picked === "all"
+        ? null
+        : rmUsers.some((u) => u.id === picked)
+          ? picked
+          : session.userId;
     const summary = await getBusinessSummary(tx, session.tenantId, { fromISO, toISO, rmId, productType: product, status });
     return { summary, rmUsers, rmId };
   });
@@ -111,8 +135,17 @@ export default async function BusinessDashboardPage({
           </label>
           <label className="block">
             <span className="text-xs text-muted-foreground">User (RM)</span>
-            <select name="rm" defaultValue={rmId ?? ""} className="input-base mt-1">
-              <option value="">All users</option>
+            <select
+              name="rm"
+              defaultValue={rmId ?? "all"}
+              disabled={!seesAll}
+              title={!seesAll ? "You see your own business" : undefined}
+              className="input-base mt-1 disabled:opacity-60"
+            >
+              {/* Only offered to someone entitled to the firm-wide view — and
+                  never the landing state, so the dashboard opens on your own
+                  book rather than the firm's. */}
+              {seesAll && <option value="all">All users</option>}
               {rmUsers.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
