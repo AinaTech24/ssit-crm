@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { amcEmpanelments } from "@/db/schema";
 import { AmcEmpanelmentForm } from "@/components/amc-empanelments/AmcEmpanelmentForm";
+import { AmcRecords } from "@/components/amc-empanelments/AmcRecords";
 import { RecordProvenance } from "@/components/common/RecordProvenance";
 
 export const dynamic = "force-dynamic";

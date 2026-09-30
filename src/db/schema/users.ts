@@ -156,7 +156,13 @@ export const users = pgTable(
      * Set by the firm admin in the employee form; enforced in
      * src/lib/auth/data-scope.ts.
      */
-    allowedBranches: jsonb("allowed_branches").$type<string[]>(),
+    /**
+   * Client BOOK tags this user may see (investors.tags). NULL/[] = no
+   * restriction. Narrows the data wall and never widens it, so a back-office
+   * user who runs only the Motilal Oswal book stops seeing the whole list.
+   */
+  allowedClientTags: jsonb("allowed_client_tags").$type<string[]>(),
+  allowedBranches: jsonb("allowed_branches").$type<string[]>(),
     /**
      * Explicit "only their own records" override (migration 0222). Beats the
      * implicit branch_head widening and any allowed_branches grant — for the

@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { Plus, Phone, Mail, ExternalLink } from "lucide-react";
+import { Plus, Phone, Mail, ExternalLink, FileUp } from "lucide-react";
 import { and, eq, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";

@@ -94,11 +94,61 @@ export async function investorScopeCondition(tx: any, session: SessionUser) {
   return investorScopeSql(tx, session);
 }
 
+/**
+ * The client BOOKS this user is allowed to see (users.allowed_client_tags).
+ *
+ * A firm's back office is not one desk — one person runs the Motilal Oswal
+ * book, another Mutual Fund — but back_office is firm-wide in the data wall,
+ * so each of them saw every client. This narrows by the tag the client already
+ * carries.
+ *
+ * Read from the DATABASE rather than the session token, like every other scope
+ * input, so taking a book away bites on the next request instead of the next
+ * login. Fails OPEN to "no restriction" on a pre-migration database, which is
+ * the behaviour every existing firm already has.
+ */
+async function allowedClientTags(tx: any, session: SessionUser): Promise<string[]> {
+  try {
+    const r = await tx.execute(sql`
+      SELECT allowed_client_tags FROM users
+      WHERE id = ${session.userId}::uuid AND tenant_id = ${session.tenantId}::uuid
+      LIMIT 1
+    `);
+    const raw = (r.rows[0] as { allowed_client_tags?: unknown } | undefined)?.allowed_client_tags;
+    return Array.isArray(raw) ? raw.filter((v): v is string => typeof v === "string" && !!v.trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The tag restriction as SQL. TRUE when unrestricted, so it can be ANDed
+ * unconditionally.
+ *
+ * Case-insensitive: a tag typed by hand ("motilal oswal") has to match the one
+ * pressed as a chip ("Motilal Oswal"), or the restriction silently hides
+ * clients it was never meant to.
+ */
+function clientTagSql(tags: string[], alias: string): SQL {
+  if (tags.length === 0) return sql`TRUE`;
+  return sql`EXISTS (
+    SELECT 1 FROM jsonb_array_elements_text(COALESCE(${sql.raw(alias)}.tags, '[]'::jsonb)) AS t(tag)
+    WHERE lower(t.tag) IN (${sql.join(
+      tags.map((t) => sql`${t.trim().toLowerCase()}`),
+      sql`, `
+    )})
+  )`;
+}
+
 /** Same rule as raw SQL, for queries built with sql`` fragments. */
 export async function investorScopeSql(tx: any, session: SessionUser, alias = "investors") {
   requireInvestorView(session);
   const cols = INVESTOR_COLS(alias);
-  return dataScopeSqlViaOwnerBranch(await resolveDataScope(tx, session), cols.owner);
+  const wall = dataScopeSqlViaOwnerBranch(await resolveDataScope(tx, session), cols.owner);
+  // ANDed with the wall, never instead of it — a book restriction can only
+  // ever take clients away.
+  const books = clientTagSql(await allowedClientTags(tx, session), alias);
+  return sql`(${wall} AND ${books})`;
 }
 
 /**
@@ -117,9 +167,50 @@ export async function investorScopeSql(tx: any, session: SessionUser, alias = "i
 export async function assertCanViewClient(
   tx: any,
   session: SessionUser,
-  inv: { rmId?: string | null; serviceRmId?: string | null; branchId?: string | null }
+  inv: {
+    id?: string | null;
+    rmId?: string | null;
+    serviceRmId?: string | null;
+    branchId?: string | null;
+    tags?: unknown;
+  }
 ): Promise<void> {
   requireInvestorView(session);
+
+  // Book restriction first — it applies whatever the wall says, including to
+  // back office, who otherwise see the whole firm. Checked here as well as in
+  // the list so the detail page cannot disagree with it: a client filtered off
+  // someone's list must not open by id.
+  //
+  // Callers select whatever columns they needed for their own job and mostly
+  // do not carry `tags`, so this looks them up by id rather than treating a
+  // missing field as "no tags" — which would 403 every restricted user on
+  // every client, including the ones they do handle.
+  const books = await allowedClientTags(tx, session);
+  if (books.length > 0) {
+    let tags: unknown = inv.tags;
+    if (tags === undefined && inv.id) {
+      const r = await tx.execute(sql`
+        SELECT tags FROM investors
+        WHERE id = ${inv.id}::uuid AND tenant_id = ${session.tenantId}::uuid
+        LIMIT 1
+      `);
+      tags = (r.rows[0] as { tags?: unknown } | undefined)?.tags ?? [];
+    }
+    // No id and no tags to judge by: the list query has already applied the
+    // restriction, so fall through rather than blocking on a guess.
+    if (tags !== undefined) {
+      const want = new Set(books.map((b) => b.trim().toLowerCase()));
+      const has = Array.isArray(tags)
+        ? (tags as unknown[]).some((t) => typeof t === "string" && want.has(t.trim().toLowerCase()))
+        : false;
+      if (!has) {
+        throw Object.assign(new Error("forbidden: this client is outside the books you handle"), {
+          status: 403,
+        });
+      }
+    }
+  }
   // Same rule as the list: visible if you own it, or if whoever owns it sits in
   // your branch. Checked against the OWNER's branch, not the client's stored
   // branch column, so the detail page can't disagree with the list.

@@ -348,6 +348,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           permissions: (emp as any).permissions as string[] | null,
           enabledModules: ((emp as any).enabledModules as string[] | null) ?? null,
           allowedBranches: emp.allowedBranches ?? null,
+          allowedClientTags: emp.allowedClientTags ?? null,
           delegatesFor: emp.delegatesFor ?? null,
           restrictToOwnRecords: emp.restrictToOwnRecords ?? false,
           dataScopeOverride: (emp.dataScopeOverride ?? null) as "all" | "branch" | "own" | null,

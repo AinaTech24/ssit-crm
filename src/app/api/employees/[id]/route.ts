@@ -92,6 +92,8 @@ const PatchBody = z.object({
    * uuids here so a malformed value can never reach a ::uuid cast at query time.
    */
   allowedBranches: z.array(z.string().uuid()).nullable().optional(),
+  /** Client BOOK tags this user may see. [] / null = no restriction. */
+  allowedClientTags: z.array(z.string().max(60)).max(25).nullable().optional(),
   delegatesFor: z.array(z.string().uuid()).nullable().optional(),
   restrictToOwnRecords: z.boolean().optional(),
   dataScopeOverride: z.enum(["all", "branch", "own"]).nullable().optional(),
@@ -229,6 +231,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.permissions !== undefined) patch.permissions = body.permissions;
       if (body.enabledModules !== undefined) patch.enabledModules = body.enabledModules;
       if (body.allowedBranches !== undefined) patch.allowedBranches = body.allowedBranches;
+      if (body.allowedClientTags !== undefined) patch.allowedClientTags = body.allowedClientTags;
       if (body.delegatesFor !== undefined) patch.delegatesFor = body.delegatesFor;
       if (body.restrictToOwnRecords !== undefined) patch.restrictToOwnRecords = body.restrictToOwnRecords;
       if (body.dataScopeOverride !== undefined) patch.dataScopeOverride = body.dataScopeOverride;

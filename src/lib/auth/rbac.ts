@@ -208,7 +208,11 @@ export type Capability =
  */
 const MATRIX: Record<Capability, Role[]> = {
   // Investor data — back_office sees all, RM sees assigned, marketing blocked.
-  "investor.view.all": ["compliance", "back_office", "ops", "gifting_hr"],
+  // ra_research reads the book to ANALYSE it — how many clients, which
+  // portfolios are due review, how that splits by RM. Viewing only: the edit
+  // capabilities below are unchanged, so research can count the firm's clients
+  // without being able to alter one.
+  "investor.view.all": ["compliance", "back_office", "ops", "gifting_hr", "ra_research"],
   "investor.view.assigned": ["rm", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
   "investor.edit.all": ["back_office", "ops"],
   // sub_broker held investor.view.assigned (read) but never edit — an external
@@ -270,7 +274,10 @@ const MATRIX: Record<Capability, Role[]> = {
 
   // Review meetings — back_office plans for all, RM runs assigned
   "review_meeting.manage.all": ["back_office", "ops", "branch_head", "gifting_hr"],
-  "review_meeting.manage.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
+  // ra_research joins so the Meetings module opens for them at all — their
+  // own meetings to manage, and the firm-wide picture as ANALYTICS on the RA
+  // dashboard rather than edit rights over everyone's diary.
+  "review_meeting.manage.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance", "ra_research"],
 
   // Office administration. gifting_hr is the desk this describes — "Gifting /
   // HR" already ran the client engagement programme; it now also carries the

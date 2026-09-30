@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { Plus, CalendarOff, Clock, CheckCircle2, CalendarDays, SlidersHorizontal } from "lucide-react";
+import { Plus, CalendarOff, Clock, CheckCircle2, CalendarDays, SlidersHorizontal, FileUp } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
@@ -165,6 +165,11 @@ export default async function LeaveApplicationsPage({
               Team Timeline
             </Link>
           </div>
+          {canApprove && (
+            <Link href="/dashboard/leave-applications/import" className="btn-secondary">
+              <FileUp className="size-4" /> Bulk upload
+            </Link>
+          )}
           {canApprove && (
             <Link href="/dashboard/leave-applications/settings" className="btn-secondary">
               <SlidersHorizontal className="size-4" /> Leave policy

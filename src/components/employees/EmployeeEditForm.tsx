@@ -24,6 +24,7 @@ import { can, type Capability } from "@/lib/auth/rbac";
 import { NAV_ACCESS_GROUPS, roleDefaultNavKeys } from "@/config/nav-access";
 import { CAPABILITY_GROUPS } from "@/lib/auth/capability-catalog";
 import { formatINR, formatDate } from "@/lib/utils";
+import { CLIENT_BOOK_TAGS } from "@/lib/investors/client-tags";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
 import { DownloadButton } from "@/components/common/SecureLinkButtons";
@@ -102,6 +103,7 @@ export type EmployeeFormValues = {
   enabledModules: string[] | null;
   /** Per-user BRANCH data grant. null / [] = own records only. */
   allowedBranches: string[] | null;
+  allowedClientTags: string[] | null;
   delegatesFor: string[] | null;
   restrictToOwnRecords: boolean;
   dataScopeOverride: "all" | "branch" | "own" | null;
@@ -142,6 +144,8 @@ export function EmployeeEditForm({
   const [moduleAccessActive, setModuleAccessActive] = useState(!!employee.enabledModules);
   // Per-user branch DATA access. Empty = the default wall (own records only).
   const [branchAccess, setBranchAccess] = useState<string[]>(employee.allowedBranches ?? []);
+  // Which client BOOKS this person handles. Empty = no restriction.
+  const [bookTags, setBookTags] = useState<string[]>(employee.allowedClientTags ?? []);
   const [delegatesFor, setDelegatesFor] = useState<string[]>(employee.delegatesFor ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -371,6 +375,7 @@ export function EmployeeEditForm({
           // Owners and back office already see every branch, so a grant on them
           // would be a stored no-op that looks meaningful on screen.
           allowedBranches: seesAllBranchesByRole ? null : branchAccess,
+          allowedClientTags: bookTags,
           delegatesFor,
           restrictToOwnRecords: v.dataScopeOverride === "own",
           dataScopeOverride: v.dataScopeOverride,
@@ -699,6 +704,53 @@ export function EmployeeEditForm({
                   For a few named branches instead, leave this on the default and tick them below.
                   Use <strong>Their branch only</strong> for a branch head who also holds Back Office
                   or Operations, since those roles otherwise mean the whole firm.
+                </div>
+              </div>
+            )}
+
+            {/* Which client BOOKS this person handles. Separate from branches
+                because a firm's back office splits by book, not by geography:
+                one person runs Motilal Oswal, another Mutual Fund, and
+                back_office is firm-wide in the wall so both saw everything. */}
+            {!isOwnerRole && (
+              <div className="border rounded-md p-2.5 bg-card space-y-1.5">
+                <div className="text-xs font-medium">Client books</div>
+                <div className="flex flex-wrap gap-2">
+                  {CLIENT_BOOK_TAGS.map((tag) => {
+                    const on = bookTags.some((t) => t.toLowerCase() === tag.toLowerCase());
+                    return (
+                      <label
+                        key={tag}
+                        className={
+                          "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs cursor-pointer " +
+                          (on
+                            ? "border-brand-cyan bg-brand-cyan/10 text-brand-cyan font-medium"
+                            : "border-border")
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          onChange={(e) =>
+                            setBookTags((prev) =>
+                              e.target.checked
+                                ? [...prev, tag]
+                                : prev.filter((t) => t.toLowerCase() !== tag.toLowerCase())
+                            )
+                          }
+                          className="size-3.5 rounded"
+                        />
+                        {tag}
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {bookTags.length === 0
+                    ? "No restriction — they see every client the rules above allow."
+                    : "Only clients tagged " +
+                      bookTags.join(" or ") +
+                      ". This NARROWS the access above; it never adds any."}
                 </div>
               </div>
             )}

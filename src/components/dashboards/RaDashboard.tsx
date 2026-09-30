@@ -6,6 +6,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { leadScopeSql } from "@/lib/leads/access";
 import { formatRelative, formatDate } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
+import { ResearchCoverageSection } from "./ResearchCoverageSection";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
 import { formatTrackerItems, type TrackerItem } from "@/db/schema/activity_entries";
 import { loadTenantLicense } from "@/lib/auth/license";
@@ -157,6 +158,11 @@ export async function RaDashboard({ session }: { session: SessionUser }) {
           {showNav("/dashboard/tasks") && <Kpi label="Open tasks" value={String(data.tasks.length)} />}
         </div>
       </div>
+
+      {/* The book, as research is asked about it: how many clients are
+          covered, what has gone unreviewed, and how that splits by RM. Read
+          only — it counts, it does not link anywhere that edits. */}
+      {isResearch && <ResearchCoverageSection session={session} />}
 
       {isResearch && (
         <Section title="Recent research" count={data.research!.recent.length} icon={FlaskConical}>

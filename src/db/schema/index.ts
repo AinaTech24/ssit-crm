@@ -89,6 +89,7 @@ export * from "./custom_field_defs";
 export * from "./activities";
 export * from "./announcements";
 export * from "./announcement_attachments";
+export * from "./amc_records";
 export * from "./assignment_rules";
 export * from "./macros";
 export * from "./validation_rules";
