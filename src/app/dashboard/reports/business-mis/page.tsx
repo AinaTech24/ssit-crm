@@ -105,7 +105,7 @@ export default async function BusinessMisPage({
         <h1 className="text-2xl font-bold tracking-tight">Results MIS — Business Summary</h1>
         <p className="text-muted-foreground text-sm">
           Product × asset-class AUM, Gross Sales, Redemption and Net Sales for the full financial
-          year. Flows come from Business Entries; AUM from your RTA-imported folios.
+          year. Flows come from Transactions; AUM from your RTA-imported folios.
         </p>
       </div>
 
@@ -227,7 +227,7 @@ export default async function BusinessMisPage({
         <Info className="size-3.5 shrink-0 mt-px" />
         AUM is sourced from RTA-imported folios (CAMS / Kfintech) and split by scheme category, so
         it reflects mutual-fund holdings. Gross / Redemption / Net Sales are derived from confirmed
-        Business Entries (switch &amp; STP count as gross; SIP-stop is excluded). Net Sales = Gross −
+        Transactions (switch &amp; STP count as gross; SIP-stop is excluded). Net Sales = Gross −
         Redemption.
       </p>
     </div>

@@ -73,7 +73,7 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
   {
     title: "Operations",
     items: [
-      { key: "/dashboard/business-entries", label: "Business Entries", module: "business_entries" },
+      { key: "/dashboard/business-entries", label: "Transactions", module: "business_entries" },
       { key: "/dashboard/transactions", label: "MF Transactions", module: "transactions" },
       { key: "/dashboard/rta-imports", label: "RTA File Imports", module: "transactions" },
       { key: "/dashboard/reconciliation", label: "Reconciliation", module: "transactions" },

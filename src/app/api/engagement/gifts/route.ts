@@ -22,6 +22,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
+import { investorScopeSql } from "@/lib/investors/access";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { notifyGiftDelivered, notifyGiftLogged } from "@/lib/gifts/notify";
@@ -86,13 +87,27 @@ export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
     // Engagement is a management view of the whole firm's gifting.
-    requireAny(session.roles, ["investor.view.all", "gifting.manage"], session.permissions);
+    // An RM sees their OWN clients' engagement — the queries below are walled,
+    // so opening the board no longer means seeing the firm's whole gift log.
+    requireAny(
+      session.roles,
+      ["investor.view.all", "investor.view.assigned", "gifting.manage"],
+      session.permissions
+    );
 
     const monthParse = MonthStr.safeParse(req.nextUrl.searchParams.get("month") ?? "");
     const month = monthParse.success ? monthParse.data : new Date().toISOString().slice(0, 7);
     const monthStart = `${month}-01`;
 
     const data = await withTenant(session.tenantId, async (tx) => {
+      // The board was tenant-scoped only: whoever could open it saw every
+      // client's gifts. Now that an RM can open it, each query is narrowed to
+      // the clients that session may see — firm-wide roles resolve to TRUE and
+      // are unaffected. Derived from the CLIENT the gift is for, so a gift
+      // logged by back office on an RM's client still shows to that RM.
+      const giftScope = await investorScopeSql(tx, session, "gi");
+      const scoped = sql`EXISTS (SELECT 1 FROM investors gi WHERE gi.id = client_gifts.investor_id AND ${giftScope})`;
+      const scopedG = sql`EXISTS (SELECT 1 FROM investors gi WHERE gi.id = g.investor_id AND ${giftScope})`;
       // One month of gifts, for the calendar and the recent-activity list.
       const rows = (
         await tx.execute(sql`
@@ -104,6 +119,7 @@ export async function GET(req: NextRequest) {
             JOIN investors i ON i.id = g.investor_id
             LEFT JOIN users u ON u.id = g.rm_id
            WHERE g.tenant_id = ${session.tenantId}::uuid
+             AND ${scopedG}
              AND g.given_on >= ${monthStart}::date
              AND g.given_on < (${monthStart}::date + interval '1 month')
            ORDER BY g.given_on DESC, g.created_at DESC
@@ -123,6 +139,7 @@ export async function GET(req: NextRequest) {
             COALESCE(SUM(amount) FILTER (WHERE given_on >= date_trunc('year', current_date)), 0)::int AS spend_ytd
           FROM client_gifts
           WHERE tenant_id = ${session.tenantId}::uuid
+            AND ${scoped}
         `)
       ).rows[0] as unknown as TotalsSql | undefined;
 
@@ -139,6 +156,7 @@ export async function GET(req: NextRequest) {
             FROM client_gifts g
             LEFT JOIN users u ON u.id = g.rm_id
            WHERE g.tenant_id = ${session.tenantId}::uuid
+             AND ${scopedG}
            GROUP BY g.rm_id, u.name
            ORDER BY year DESC, total DESC
         `)
@@ -151,6 +169,7 @@ export async function GET(req: NextRequest) {
                  count(*)::int                      AS n
             FROM client_gifts
            WHERE tenant_id = ${session.tenantId}::uuid
+             AND ${scoped}
              AND given_on >= date_trunc('year', current_date)
            GROUP BY 1, 2
            ORDER BY n DESC

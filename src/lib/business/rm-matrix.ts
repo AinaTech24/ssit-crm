@@ -1,7 +1,7 @@
 /**
  * Branch + RM-wise business matrix — computes the monthly-meeting tables ("Anand
  * DK SIP", "… Equity Lumpsum", "… Liquid Lumpsum", "… Insurance") live from the
- * Business Entries + Insurance modules. SERVER-ONLY (imports the DB).
+ * Transactions + Insurance modules. SERVER-ONLY (imports the DB).
  *
  * For a branch + month + kind: one row per branch RM (role rm / branch_head),
  * each column summed from that RM's booked business; an "Outside to our" residual

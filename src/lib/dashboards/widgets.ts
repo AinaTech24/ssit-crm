@@ -26,8 +26,8 @@ export interface WidgetMeta {
 export const WIDGET_META: WidgetMeta[] = [
   // ── KPIs ──────────────────────────────────────────────────────────────
   { key: "kpi_aum", title: "Total AUM", category: "Sales", type: "kpi", desc: "Live assets under management.", defaultColSpan: 1, defaultRowSpan: 1, supportsRm: true },
-  { key: "kpi_net_sales_mtd", title: "Net Business (MTD)", category: "Sales", type: "kpi", desc: "Business Entries: inflow − outflow, month to date.", defaultColSpan: 1, defaultRowSpan: 1 },
-  { key: "kpi_gross_business_mtd", title: "Gross Business (MTD)", category: "Sales", type: "kpi", desc: "Business Entries: all purchases booked this month.", defaultColSpan: 1, defaultRowSpan: 1 },
+  { key: "kpi_net_sales_mtd", title: "Net Business (MTD)", category: "Sales", type: "kpi", desc: "Transactions: inflow − outflow, month to date.", defaultColSpan: 1, defaultRowSpan: 1 },
+  { key: "kpi_gross_business_mtd", title: "Gross Business (MTD)", category: "Sales", type: "kpi", desc: "Transactions: all purchases booked this month.", defaultColSpan: 1, defaultRowSpan: 1 },
   { key: "kpi_active_sip", title: "Active SIP Book", category: "SIP", type: "kpi", desc: "Monthly SIP run-rate.", defaultColSpan: 1, defaultRowSpan: 1, supportsRm: true },
   { key: "kpi_clients", title: "Active Clients", category: "Clients", type: "kpi", desc: "Count of active clients.", defaultColSpan: 1, defaultRowSpan: 1, supportsRm: true },
   { key: "kpi_new_leads_mtd", title: "New Leads (MTD)", category: "Leads", type: "kpi", desc: "Leads added this month.", defaultColSpan: 1, defaultRowSpan: 1, supportsRm: true },
@@ -36,8 +36,8 @@ export const WIDGET_META: WidgetMeta[] = [
   { key: "kpi_overdue_reviews", title: "Overdue Reviews", category: "Clients", type: "kpi", desc: "Active clients past review date.", defaultColSpan: 1, defaultRowSpan: 1, supportsRm: true },
 
   // ── Charts ────────────────────────────────────────────────────────────
-  { key: "chart_net_sales", title: "Net Business Trend", category: "Sales", type: "chart", chart: "area", desc: "Business Entries: daily net business — last 30 days.", defaultColSpan: 2, defaultRowSpan: 2 },
-  { key: "chart_business_by_product", title: "Business by Product", category: "Sales", type: "chart", chart: "donut", desc: "Business Entries: mix by product (MF / PMS / AIF…) — 90 days.", defaultColSpan: 1, defaultRowSpan: 2 },
+  { key: "chart_net_sales", title: "Net Business Trend", category: "Sales", type: "chart", chart: "area", desc: "Transactions: daily net business — last 30 days.", defaultColSpan: 2, defaultRowSpan: 2 },
+  { key: "chart_business_by_product", title: "Business by Product", category: "Sales", type: "chart", chart: "donut", desc: "Transactions: mix by product (MF / PMS / AIF…) — 90 days.", defaultColSpan: 1, defaultRowSpan: 2 },
   { key: "chart_aum_movement", title: "AUM Movement", category: "Sales", type: "chart", chart: "bar", desc: "Inflow vs outflow — last 12 months.", defaultColSpan: 2, defaultRowSpan: 2 },
   { key: "chart_amc_business", title: "AMC-wise Business", category: "Sales", type: "chart", chart: "bar", desc: "Net business by AMC — last 90 days.", defaultColSpan: 2, defaultRowSpan: 2 },
   { key: "chart_scheme_category", title: "Category Mix", category: "Sales", type: "chart", chart: "donut", desc: "Net business by scheme category.", defaultColSpan: 1, defaultRowSpan: 2 },

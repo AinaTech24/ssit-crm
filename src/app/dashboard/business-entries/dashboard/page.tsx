@@ -105,11 +105,11 @@ export default async function BusinessDashboardPage({
   return (
     <div className="space-y-6 max-w-6xl">
       <Link href="/dashboard/business-entries" className="text-sm text-muted-foreground hover:underline flex items-center gap-1">
-        <ChevronLeft className="size-4" /> Back to entries
+        <ChevronLeft className="size-4" /> Back to transactions
       </Link>
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Business Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Transactions Dashboard</h1>
           <p className="text-muted-foreground text-sm">
             Booked business for <span className="font-medium text-foreground">{rangeLabel}</span>.
           </p>

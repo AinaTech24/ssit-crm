@@ -23,7 +23,7 @@ const EMPTY_AST = { type: "group", op: "AND", children: [] } as any;
 const SUBJECTS = [
   { subject: "lead", label: "Leads" },
   { subject: "investor", label: "Clients" },
-  { subject: "business_entry", label: "Business Entries" },
+  { subject: "business_entry", label: "Transactions" },
   { subject: "transaction", label: "Transactions" },
   { subject: "review_meeting", label: "Meetings" },
   { subject: "task", label: "Tasks" },

@@ -141,7 +141,7 @@ export function SipRejectionBoard() {
       )}
 
       <p className="text-xs text-muted-foreground print:hidden">
-        Rejection &amp; Pending from SIP transactions (by the client's RM); Add. Purchase from Business Entries.
+        Rejection &amp; Pending from SIP transactions (by the client's RM); Add. Purchase from Transactions.
         Grouped by desk; assign RMs under Settings → Desks.
       </p>
     </div>

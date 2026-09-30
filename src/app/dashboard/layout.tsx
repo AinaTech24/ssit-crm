@@ -159,8 +159,11 @@ const NAV: NavSection[] = [
       // The gifting programme. Firm-wide reads (per-RM league table), so the
       // roles here match the capability the page requires — no "rm", same
       // reasoning as Referrals above.
+      // RMs included: the page and its API now accept investor.view.assigned and
+      // wall every query to the clients that session may see, so an RM gets
+      // their own book's engagement rather than a locked door or the firm's.
       { href: "/dashboard/engagement", label: "Client Engagement", icon: Gift, module: "client_master",
-        roles: ["owner", "back_office", "ops", "compliance", "gifting_hr", "assistant"] },
+        roles: ["owner", "back_office", "ops", "compliance", "gifting_hr", "assistant", "rm"] },
       { href: "/dashboard/risk-profiles", label: "Risk Profile", icon: Gauge, module: "risk_profile",
         roles: ["owner", "compliance", "back_office", "ops", "rm"] },
       { href: "/dashboard/discovery", label: "Client Discovery", icon: ClipboardList,
@@ -186,7 +189,7 @@ const NAV: NavSection[] = [
       // Transactions hidden from marketing
       { href: "/dashboard/transactions", label: "MF Transactions", icon: Repeat, module: "transactions",
         roles: ["owner", "back_office", "ops", "rm", "branch_head", "compliance"] },
-      { href: "/dashboard/business-entries", label: "Business Entries", icon: Briefcase, module: "business_entries",
+      { href: "/dashboard/business-entries", label: "Transactions", icon: Briefcase, module: "business_entries",
         roles: ["owner", "branch_head", "rm", "back_office", "ops"] },
       { href: "/dashboard/expected-inflows", label: "Expected Inflows", icon: IndianRupee,
         roles: ["owner", "branch_head", "rm", "back_office", "ops"] },

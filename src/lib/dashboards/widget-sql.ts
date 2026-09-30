@@ -32,7 +32,7 @@ const rmTask = (rmId?: string) => (rmId ? sql`AND assignee_id = ${rmId}::uuid` :
  * Net-business value of one business_entry_lines row `l`: positive for fresh
  * purchases (SIP / lumpsum / additional purchase), negative for redemptions &
  * SWP, and zero for internal switches/STP (not fresh money). Reused by the
- * net-sales widgets so they read the Business Entries ledger, not the RTA feed.
+ * net-sales widgets so they read the Transactions ledger, not the RTA feed.
  */
 const BE_NET = sql`CASE WHEN l.txn_type IN ('sip','sip_topup','lumpsum','additional_purchase') THEN l.amount::numeric WHEN l.txn_type IN ('redemption','swp') THEN -l.amount::numeric ELSE 0 END`;
 
@@ -44,7 +44,7 @@ export const WIDGET_SQL: Record<string, WidgetSqlDef> = {
   },
   kpi_net_sales_mtd: {
     view: { kind: "kpi", valueKey: "value", format: "inr" },
-    // Net business from the Business Entries ledger (what the firm actually
+    // Net business from the Transactions ledger (what the firm actually
     // books), not the RTA transactions feed: inflow (SIP + lumpsum + additional
     // purchase) minus outflow (redemption + SWP), this month, excluding drafts'
     // siblings only by way of cancelled entries.
@@ -54,7 +54,7 @@ export const WIDGET_SQL: Record<string, WidgetSqlDef> = {
   },
   kpi_gross_business_mtd: {
     view: { kind: "kpi", valueKey: "value", format: "inr" },
-    // Gross booked business (all purchase legs) this month, from Business Entries.
+    // Gross booked business (all purchase legs) this month, from Transactions.
     run: (s) => s`SELECT COALESCE(SUM(l.amount::numeric) FILTER (WHERE l.txn_type IN ('sip','sip_topup','lumpsum','additional_purchase','switch','stp')),0)::numeric AS value
       FROM business_entry_lines l JOIN business_entries e ON e.id = l.entry_id
       WHERE e.status <> 'cancelled' AND e.business_date >= date_trunc('month', now())::date`,
@@ -88,7 +88,7 @@ export const WIDGET_SQL: Record<string, WidgetSqlDef> = {
   // ── Charts ────────────────────────────────────────────────────────────
   chart_net_sales: {
     view: { kind: "chart", x: "label", series: [{ key: "net", label: "Net" }], format: "inr" },
-    // Daily net business from the Business Entries ledger — last 30 days.
+    // Daily net business from the Transactions ledger — last 30 days.
     run: (s) => s`SELECT to_char(e.business_date,'DD Mon') AS label, e.business_date AS d,
       COALESCE(SUM(${BE_NET}),0)::numeric AS net
       FROM business_entry_lines l JOIN business_entries e ON e.id = l.entry_id
@@ -98,7 +98,7 @@ export const WIDGET_SQL: Record<string, WidgetSqlDef> = {
   chart_business_by_product: {
     view: { kind: "donut", labelKey: "label", valueKey: "value", format: "inr" },
     // Business mix by product type (MF / PMS / AIF / …) — last 90 days, from
-    // the Business Entries ledger.
+    // the Transactions ledger.
     run: (s) => s`SELECT e.product_type AS label,
       COALESCE(SUM(l.amount::numeric) FILTER (WHERE l.txn_type IN ('sip','sip_topup','lumpsum','additional_purchase','switch','stp')),0)::numeric AS value
       FROM business_entry_lines l JOIN business_entries e ON e.id = l.entry_id
@@ -131,7 +131,7 @@ export const WIDGET_SQL: Record<string, WidgetSqlDef> = {
   // ── Comparator + Target meter ─────────────────────────────────────────
   cmp_net_sales_mom: {
     view: { kind: "comparator", currentKey: "cur", previousKey: "prev", format: "inr" },
-    // This month vs last month net business, from the Business Entries ledger.
+    // This month vs last month net business, from the Transactions ledger.
     run: (s) => s`SELECT
       COALESCE(SUM(CASE WHEN e.business_date >= date_trunc('month', now())::date THEN (${BE_NET}) ELSE 0 END),0)::numeric AS cur,
       COALESCE(SUM(CASE WHEN e.business_date >= (date_trunc('month', now()) - interval '1 month')::date AND e.business_date < date_trunc('month', now())::date THEN (${BE_NET}) ELSE 0 END),0)::numeric AS prev

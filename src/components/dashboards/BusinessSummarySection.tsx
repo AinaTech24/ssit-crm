@@ -3,7 +3,7 @@ import { formatINR } from "@/lib/utils";
 
 /**
  * BusinessSummarySection — the firm's period business MIS, sourced from the
- * Business Entries ledger (mutual-fund lines by asset class + txn type, and
+ * Transactions ledger (mutual-fund lines by asset class + txn type, and
  * PMS/AIF/SIF by product type) plus the Insurance module (new annual premium).
  *
  * Definitions (kept visible in the footnote so the owner knows exactly what

@@ -54,7 +54,7 @@ export interface CustomChartConfig {
 export const CHART_SUBJECTS: Array<{ subject: string; label: string }> = [
   { subject: "lead", label: "Leads" },
   { subject: "investor", label: "Clients" },
-  { subject: "business_entry", label: "Business Entries" },
+  { subject: "business_entry", label: "Transactions" },
   { subject: "transaction", label: "Transactions" },
   { subject: "review_meeting", label: "Meetings" },
   { subject: "task", label: "Tasks" },

@@ -667,7 +667,7 @@ export const MODULES: Record<ModuleKey, ModuleCatalog> = {
 
   business_entries: {
     key: "business_entries",
-    label: "Business Entries",
+    label: "Transactions",
     table: "business_entries",
     entityType: "business_entry",
     eventPrefix: "business_entry",

@@ -1,7 +1,7 @@
 /**
  * GET /api/reports/branch-rm?kind=<key>&branch=<uuid>&period=YYYY-MM
  *   → { branches, matrix } — branch + RM-wise business matrix for the kind,
- *     computed live from Business Entries / Insurance. If no branch is given,
+ *     computed live from Transactions / Insurance. If no branch is given,
  *     defaults to the first branch.
  */
 

@@ -20,7 +20,7 @@ export default async function LiquidReportPage() {
   return (
     <div className="space-y-5 max-w-5xl">
       <Link href="/dashboard/business-entries" className="text-sm text-muted-foreground hover:underline flex items-center gap-1">
-        <ChevronLeft className="size-4" /> Back to entries
+        <ChevronLeft className="size-4" /> Back to transactions
       </Link>
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">

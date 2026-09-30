@@ -157,7 +157,7 @@ export function RedemptionReportBoard() {
 
       <p className="text-xs text-muted-foreground print:hidden">
         Redemptions booked in the month, grouped by contact owner (RM) → client, with desk, branch and firm
-        subtotals. Source: redemption entries in Business Entries.
+        subtotals. Source: redemption entries in Transactions.
       </p>
     </div>
   );

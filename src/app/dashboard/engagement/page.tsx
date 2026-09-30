@@ -16,7 +16,14 @@ export const dynamic = "force-dynamic";
  */
 export default async function EngagementPage() {
   const session = await requireSession();
-  requireAny(session.roles, ["investor.view.all", "gifting.manage"], session.permissions);
+  // An RM opens this for their OWN clients — the board's queries are walled by
+  // the client data scope, so "can see the module" no longer means "can see the
+  // firm's whole gift log".
+  requireAny(
+    session.roles,
+    ["investor.view.all", "investor.view.assigned", "gifting.manage"],
+    session.permissions
+  );
   const canLog =
     can(session.roles, "investor.edit.all", session.permissions) ||
     can(session.roles, "investor.edit.assigned", session.permissions) ||

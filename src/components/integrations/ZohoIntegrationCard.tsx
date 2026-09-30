@@ -32,7 +32,7 @@ const SYNCED_MODULES: { label: string; zoho: string; native?: boolean }[] = [
   { label: "Families", zoho: "Families" },
   { label: "Insurance Policies", zoho: "Insurance_Policies" },
   { label: "Insurance Claims", zoho: "Insurance_Claims" },
-  { label: "Business Entries", zoho: "Business_Entries" },
+  { label: "Transactions", zoho: "Business_Entries" },
   { label: "SIP Tracker", zoho: "SIPs" },
   { label: "SIP Rejections", zoho: "SIP_Rejections" },
   { label: "Scheme Master", zoho: "Schemes" },

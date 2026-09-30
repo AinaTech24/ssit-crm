@@ -72,7 +72,7 @@ export type ModuleKey = (typeof ALL_MODULES)[number];
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   crm: "CRM Dashboard",
   dashboards: "Dashboards",
-  business_entries: "Business Entries",
+  business_entries: "Transactions",
   lead_management: "Leads",
   client_master: "Clients",
   family_mapping: "Family Mapping",

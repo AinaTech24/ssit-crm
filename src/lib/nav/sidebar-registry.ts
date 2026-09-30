@@ -50,7 +50,7 @@ export const SIDEBAR_REGISTRY: SidebarEntry[] = [
   { group: "CRM", href: "/dashboard/insurance/commission", label: "Insurance Commission" },
   // Operations
   { group: "Operations", href: "/dashboard/transactions", label: "MF Transactions" },
-  { group: "Operations", href: "/dashboard/business-entries", label: "Business Entries" },
+  { group: "Operations", href: "/dashboard/business-entries", label: "Transactions" },
   { group: "Operations", href: "/dashboard/rta-imports", label: "RTA File Imports" },
   { group: "Operations", href: "/dashboard/reconciliation", label: "Reconciliation" },
   { group: "Operations", href: "/dashboard/sips", label: "SIP Tracker" },

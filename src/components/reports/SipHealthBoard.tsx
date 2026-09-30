@@ -111,7 +111,7 @@ export function SipHealthBoard() {
       )}
 
       <p className="text-xs text-muted-foreground print:hidden">
-        Live SIP from the client book; Fresh/Stopped from Business Entries (SIP / SIP-Stop); Maturing from SIP
+        Live SIP from the client book; Fresh/Stopped from Transactions (SIP / SIP-Stop); Maturing from SIP
         end-dates; Bounced from SIP transactions. Efforts are actuals booked this month.
       </p>
     </div>

@@ -147,7 +147,7 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
         <Queue href="/dashboard/service-requests" label="Service requests" value={Number(data.book?.sr_open ?? 0)} />
         <Queue
           href="/dashboard/business-entries"
-          label="Business entries (MTD)"
+          label="Transactions (MTD)"
           value={Number(data.book?.entries_mtd ?? 0)}
           sub={formatINR(Number(data.book?.gross_mtd ?? 0))}
         />

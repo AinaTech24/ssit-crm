@@ -3,7 +3,7 @@
 /**
  * Branch + RM-wise business report ("Anand DK SIP", "… Equity Lumpsum",
  * "… Liquid Lumpsum", "… Insurance"). Pick a branch + month → each branch RM is a
- * row with the kind's columns (computed live from Business Entries / Insurance),
+ * row with the kind's columns (computed live from Transactions / Insurance),
  * plus an "Outside to our" residual and a TOTAL. Read-only.
  */
 
@@ -169,7 +169,7 @@ export function BranchRmMatrix({ kind }: { kind: RmMatrixKey }) {
       )}
 
       <p className="text-xs text-muted-foreground print:hidden">
-        Computed live from {meta.source === "insurance" ? "the Insurance module (annual premium)" : "Business Entries"}.
+        Computed live from {meta.source === "insurance" ? "the Insurance module (annual premium)" : "Transactions"}.
         Each RM in the branch is a row; “Outside to our” is the branch business not booked by a branch RM.
         {kind === "sip" && " SIP Stop is captured via the “SIP Stop” transaction type on a business entry."}
       </p>

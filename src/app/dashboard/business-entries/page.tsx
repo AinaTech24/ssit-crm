@@ -96,7 +96,7 @@ export default async function BusinessEntriesPage({
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Briefcase className="size-6 text-brand-cyan" /> Business Closing Entries
+            <Briefcase className="size-6 text-brand-cyan" /> Transactions
           </h1>
           <p className="text-muted-foreground text-sm">
             Log booked business (MF / PMS / AIF / SIF…), email clients, and report.
@@ -129,7 +129,7 @@ export default async function BusinessEntriesPage({
       {rows.length === 0 ? (
         <div className="card-surface p-12 text-center text-sm text-muted-foreground">
           <Briefcase className="size-8 mx-auto text-muted-foreground/40" />
-          <div className="mt-2 font-medium">No business entries yet.</div>
+          <div className="mt-2 font-medium">No transactions yet.</div>
           <Link href="/dashboard/business-entries/new" className="text-brand-cyan hover:underline mt-2 inline-block">
             Log your first closing →
           </Link>
