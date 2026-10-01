@@ -95,6 +95,10 @@ export default async function AmcEmpanelmentDetailPage({
           redFlags: (row as any).redFlags ?? null,
         }}
       />
+
+      {/* The relationship itself — meetings held and notes kept. The form above
+          is the panel STATUS; this is what has actually happened with the AMC. */}
+      <AmcRecords amcId={row.id} amcName={row.amcName} />
     </div>
   );
 }

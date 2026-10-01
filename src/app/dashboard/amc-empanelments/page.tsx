@@ -95,9 +95,14 @@ export default async function AmcEmpanelmentsListPage({
         <div>
           <h1 className="text-2xl font-semibold">AMC empanelments</h1>
         </div>
-        <Link href="/dashboard/amc-empanelments/new" className="btn-primary text-sm">
-          <Plus className="size-4" /> Add empanelment
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/amc-empanelments/import" className="btn-secondary text-sm">
+            <FileUp className="size-4" /> Bulk upload
+          </Link>
+          <Link href="/dashboard/amc-empanelments/new" className="btn-primary text-sm">
+            <Plus className="size-4" /> Add empanelment
+          </Link>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
