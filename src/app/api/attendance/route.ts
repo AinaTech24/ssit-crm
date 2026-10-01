@@ -103,3 +103,63 @@ export async function POST(req: NextRequest) {
     return handleApiError(err);
   }
 }
+
+/**
+ * DELETE /api/attendance?employeeUserId=<uuid>&date=<yyyy-mm-dd>
+ *
+ * Clears one day's attendance mark, so the day reads as unmarked again rather
+ * than carrying a wrong status.
+ *
+ * A row here is keyed (tenant, employee, date) and marking is an upsert, so a
+ * WRONG status is fixed by marking again — this is for the day that should
+ * have no record at all: someone marked on a holiday, or against the wrong
+ * person. Same gate as marking; an employee cannot erase their own attendance.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await requireSession();
+    if (!can(session.roles, "attendance.manage.all", session.permissions)) {
+      return NextResponse.json({ error: "only a manager can remove an attendance mark" }, { status: 403 });
+    }
+    const sp = req.nextUrl.searchParams;
+    const employeeUserId = (sp.get("employeeUserId") ?? "").trim();
+    const date = (sp.get("date") ?? "").slice(0, 10);
+    if (!/^[0-9a-f-]{36}$/i.test(employeeUserId) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: "employeeUserId and date are required" }, { status: 400 });
+    }
+    const clientMeta = clientMetaFromHeaders(req.headers);
+
+    const removed = await withTenant(session.tenantId, async (tx) => {
+      const before = await tx.execute(sql`
+        SELECT status, note FROM attendance
+         WHERE tenant_id = ${session.tenantId}::uuid
+           AND employee_user_id = ${employeeUserId}::uuid
+           AND attendance_date = ${date}::date
+         LIMIT 1
+      `);
+      if (before.rows.length === 0) return false;
+
+      await tx.execute(sql`
+        DELETE FROM attendance
+         WHERE tenant_id = ${session.tenantId}::uuid
+           AND employee_user_id = ${employeeUserId}::uuid
+           AND attendance_date = ${date}::date
+      `);
+      await recordAudit(tx, {
+        tenantId: session.tenantId,
+        actorUserId: session.userId,
+        action: "attendance.delete",
+        entityType: "attendance",
+        entityId: session.tenantId,
+        before: { employeeUserId, date, ...(before.rows[0] as Record<string, unknown>) },
+        ...clientMeta,
+      });
+      return true;
+    });
+
+    if (!removed) return NextResponse.json({ error: "no attendance marked for that day" }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return handleApiError(err);
+  }
+}

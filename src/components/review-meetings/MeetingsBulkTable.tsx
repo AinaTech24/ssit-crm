@@ -188,8 +188,15 @@ function actionsFor(rmOptions: { value: string; label: string }[]): BulkAction[]
 }
 
 const cancelColumn: BulkColumn<Row> = {
-  key: "cancel", header: "", thClass: "text-right py-2 w-10", tdClass: "py-2.5 pr-3 text-right",
-  render: (m) => <CancelMeetingButton id={m.id} disabled={!CANCELLABLE.has(m.status)} />,
+  key: "cancel", header: "", thClass: "text-right py-2 w-20", tdClass: "py-2.5 pr-3 text-right",
+  // Cancel keeps the meeting on the client's history; Delete removes it. Side
+  // by side, with the milder action nearest to hand.
+  render: (m) => (
+    <span className="inline-flex items-center justify-end gap-0.5">
+      <CancelMeetingButton id={m.id} disabled={!CANCELLABLE.has(m.status)} />
+      <DeleteMeetingButton id={m.id} subject={m.subject} />
+    </span>
+  ),
 };
 
 export function MeetingsBulkTable({

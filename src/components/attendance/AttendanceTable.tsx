@@ -2,7 +2,7 @@
 
 import { useState, useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Clock } from "lucide-react";
+import { Loader2, Clock, Trash2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { ATTENDANCE_STATUS_LABELS, ATTENDANCE_STATUS_TONE, fmtMinutes } from "@/lib/attendance/policy";
 import { SelectField } from "@/components/ui/SelectField";
@@ -88,6 +88,33 @@ export function AttendanceTable({ rows, canManage, toolbar }: { rows: AttRow[]; 
         return;
       }
       toast.success(okMsg);
+      router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Clears the day's mark entirely, so it reads as unmarked again.
+   *
+   * A WRONG status is fixed by changing the dropdown — marking is an upsert.
+   * This is for a day that should carry no record at all: marked on a holiday,
+   * or against the wrong person.
+   */
+  async function removeMark(r: AttRow) {
+    if (!window.confirm(`Remove the attendance mark for ${r.employee_name ?? "this employee"} on ${r.attendance_date}? The day will read as unmarked.`)) return;
+    setBusy(r.id);
+    try {
+      const res = await fetch(
+        `/api/attendance?employeeUserId=${encodeURIComponent(r.employee_user_id)}&date=${encodeURIComponent(r.attendance_date)}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        toast.error(j.error ?? "Could not remove the mark");
+        return;
+      }
+      toast.success("Attendance mark removed");
       router.refresh();
     } finally {
       setBusy(null);
@@ -183,7 +210,8 @@ export function AttendanceTable({ rows, canManage, toolbar }: { rows: AttRow[]; 
               <th className="text-left py-2 font-medium">Clock In</th>
               <th className="text-left py-2 font-medium">Clock Out</th>
               <th className="text-right py-2 font-medium">Worked</th>
-              <th className="text-left py-2 font-medium pr-4">Note</th>
+              <th className="text-left py-2 font-medium">Note</th>
+              {canManage && <th className="text-right py-2 font-medium pr-4 w-10"></th>}
             </tr>
           </thead>
           <tbody>
@@ -271,6 +299,20 @@ export function AttendanceTable({ rows, canManage, toolbar }: { rows: AttRow[]; 
                     <span className="text-muted-foreground/40">—</span>
                   )}
                 </td>
+                {canManage && (
+                  <td className="py-2.5 pr-4 text-right">
+                    <button
+                      type="button"
+                      onClick={() => removeMark(r)}
+                      disabled={busy === r.id}
+                      title="Remove this attendance mark"
+                      aria-label="Remove attendance mark"
+                      className="text-muted-foreground hover:text-rose-600 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </td>
+                )}
                 <td className="py-2.5 pr-4 text-xs text-muted-foreground max-w-[200px] truncate">
                   {r.note ? r.note : <span className="text-muted-foreground/40">—</span>}
                 </td>
