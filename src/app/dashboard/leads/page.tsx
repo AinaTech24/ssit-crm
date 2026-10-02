@@ -116,6 +116,7 @@ export default async function LeadsPage({
   // disagree (they did: an RM row said 2 and opened 0).
   const referrerRm = (sp.referrerRm ?? "").trim();
   const referrerBranch = (sp.referrerBranch ?? "").trim();
+  const referrerDesk = (sp.referrerDesk ?? "").trim();
   // One entry of the interest_products array. The free-text search covers name,
   // phone and email only, so it could never find these.
   const productFilter = (sp.product ?? "").trim();
@@ -202,6 +203,14 @@ export default async function LeadsPage({
         SELECT 1 FROM investors ri
           JOIN users ru ON ru.id = ri.rm_id
          WHERE ri.id = leads.referred_by_investor_id AND ru.branch_id = ${referrerBranch}::uuid
+      )`);
+    // Sub-branch drill-down from the referrals board: leads referred by a
+    // client whose RM sits on that desk.
+    if (referrerDesk)
+      conds.push(sql`EXISTS (
+        SELECT 1 FROM investors ri
+          JOIN users ru ON ru.id = ri.rm_id
+         WHERE ri.id = leads.referred_by_investor_id AND ru.desk_id = ${referrerDesk}::uuid
       )`);
     if (qf.mine) conds.push(sql`leads.owner_id = ${userId}`);
     if (qf.unassigned) conds.push(sql`leads.owner_id IS NULL`);

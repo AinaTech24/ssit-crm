@@ -91,17 +91,52 @@ export default async function ReferralsPage({
        ORDER BY referrals DESC
     `);
 
-    const byBranch = await tx.execute(sql`
-      SELECT br.id, COALESCE(br.name, 'Unassigned') AS name,
+    // Grouped by SUB-BRANCH (desk), not the registered branch. Most firms have
+    // one branch — "Head Office" — so a branch split was a single row saying
+    // nothing. The desks are the teams people actually run and report on.
+    //
+    // Every desk is listed, including ones with no referrals yet: a desk head
+    // looking for their own row needs to find it, and a zero is information
+    // ("nobody on that desk has brought a referral in") rather than absence.
+    // Hence the RIGHT JOIN from desks rather than grouping what the leads
+    // happen to have.
+    const byDesk = await tx.execute(sql`
+      SELECT d.id, d.name,
              COUNT(l.id)::int AS referrals,
+             COUNT(l.id) FILTER (WHERE l.converted_investor_id IS NOT NULL OR l.stage = 'converted')::int AS converted,
+             -- Only ACTIVE people count as team size, but an offboarded RM's
+             -- clients still credit their referrals to the desk: the referral
+             -- happened and the desk keeps the relationship. Filtering the
+             -- join on status instead would have quietly dropped those.
+             COUNT(DISTINCT du.id) FILTER (WHERE du.status = 'active')::int AS members
+        FROM desks d
+        LEFT JOIN users du
+               ON du.desk_id = d.id
+              AND du.tenant_id = d.tenant_id
+        LEFT JOIN investors i
+               ON i.rm_id = du.id
+              AND i.tenant_id = d.tenant_id
+              AND i.deleted_at IS NULL
+        LEFT JOIN leads l
+               ON l.referred_by_investor_id = i.id
+              AND l.tenant_id = d.tenant_id
+       WHERE d.tenant_id = ${session.tenantId}::uuid
+       GROUP BY d.id, d.name
+       ORDER BY referrals DESC, d.name ASC
+    `);
+
+    // Referrals credited to someone on no desk at all — an owner-only account,
+    // or a client whose RM has not been placed yet. Shown separately so the
+    // desk rows stay a clean read of the structure and nothing is silently
+    // dropped from the total.
+    const noDesk = await tx.execute(sql`
+      SELECT COUNT(l.id)::int AS referrals,
              COUNT(l.id) FILTER (WHERE l.converted_investor_id IS NOT NULL OR l.stage = 'converted')::int AS converted
         FROM leads l
         JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
         LEFT JOIN users u ON u.id = i.rm_id
-        LEFT JOIN branches br ON br.id = u.branch_id
        WHERE i.deleted_at IS NULL
-       GROUP BY br.id, br.name
-       ORDER BY referrals DESC
+         AND (u.id IS NULL OR u.desk_id IS NULL)
     `);
 
     // Products the referred lead asked about. A lead can name several, so the
@@ -139,7 +174,8 @@ export default async function ReferralsPage({
       rows: rows.rows as any[],
       summary: summary.rows[0] as any,
       byRm: byRm.rows as any[],
-      byBranch: byBranch.rows as any[],
+      byDesk: byDesk.rows as any[],
+      noDesk: (noDesk.rows[0] ?? { referrals: 0, converted: 0 }) as any,
       byProduct: byProduct.rows as any[],
       business: (business.rows[0] as any) ?? { total: 0, entries: 0, clients: 0 },
     };
@@ -216,18 +252,39 @@ export default async function ReferralsPage({
         </div>
 
         <div className="card-surface p-4">
-          <h2 className="text-sm font-semibold mb-2">Branch-wise referrals</h2>
+          <h2 className="text-sm font-semibold mb-2">Sub-branch-wise referrals</h2>
           <SplitTable
-            rows={data.byBranch.map((r: any) => ({
-              key: r.id,
-              name: r.name,
-              count: Number(r.referrals),
-              extra: `${Number(r.converted)} converted`,
-              href: r.id
-                ? `/dashboard/leads?referred=1&referrerBranch=${r.id}`
-                : "/dashboard/leads?referred=1",
-            }))}
+            rows={[
+              ...data.byDesk.map((r: any) => ({
+                key: r.id,
+                name: r.name,
+                count: Number(r.referrals),
+                // Team size rides along: "0 referrals" from a desk of six reads
+                // very differently from one of a desk of one.
+                extra: `${Number(r.converted)} converted · ${Number(r.members)} in team`,
+                href: `/dashboard/leads?referred=1&referrerDesk=${r.id}`,
+              })),
+              // Only shown when there is something in it — an always-present
+              // "No sub-branch: 0" row is noise.
+              ...(Number(data.noDesk?.referrals ?? 0) > 0
+                ? [
+                    {
+                      key: "no-desk",
+                      name: "No sub-branch",
+                      count: Number(data.noDesk.referrals),
+                      extra: `${Number(data.noDesk.converted)} converted`,
+                      href: "/dashboard/leads?referred=1",
+                    },
+                  ]
+                : []),
+            ]}
           />
+          {data.byDesk.length === 0 && (
+            <p className="text-[11px] text-muted-foreground mt-2">
+              No sub-branches set up yet — add them in Settings → Desks and assign each person to
+              one.
+            </p>
+          )}
         </div>
 
         <div className="card-surface p-4">
