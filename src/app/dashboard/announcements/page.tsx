@@ -3,7 +3,7 @@ import { Megaphone } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { AnnouncementBoard } from "@/components/announcements/AnnouncementBoard";
-import { branches } from "@/db/schema";
+import { branches, desks } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export default async function AnnouncementsPage() {
   const session = await requireSession();
   const manager = isManager(session.roles);
 
-  const { rows, branchRows } = await withTenant(session.tenantId, async (tx) => {
+  const { rows, branchRows, deskRows } = await withTenant(session.tenantId, async (tx) => {
     let rRows: any[];
     if (manager) {
       const r = await tx.execute(sql`
@@ -57,7 +57,14 @@ export default async function AnnouncementsPage() {
       .from(branches)
       .orderBy(branches.name);
 
-    return { rows: rRows, branchRows: bList };
+    // Sub-branches are the unit a notice is usually aimed at — most firms run
+    // one registered branch, so "Target Branch" alone offered no real choice.
+    const dList = await tx
+      .select({ id: desks.id, name: desks.name })
+      .from(desks)
+      .orderBy(desks.name);
+
+    return { rows: rRows, branchRows: bList, deskRows: dList };
   });
 
   return (
@@ -65,7 +72,7 @@ export default async function AnnouncementsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><Megaphone className="size-6 text-brand-cyan" /> Announcements</h1>
       </div>
-      <AnnouncementBoard rows={rows} branches={branchRows} isManager={manager} />
+      <AnnouncementBoard rows={rows} branches={branchRows} desks={deskRows} isManager={manager} />
     </div>
   );
 }

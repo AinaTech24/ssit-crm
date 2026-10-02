@@ -20,6 +20,7 @@ import { formatINR } from "@/lib/utils";
 import type { SessionUser } from "@/lib/auth/session";
 import { investorScopeSql } from "@/lib/investors/access";
 import { can } from "@/lib/auth/rbac";
+import { ResearchRmFilter } from "./ResearchRmFilter";
 
 /** A review this far past due is the one research is being asked about. */
 const REVIEW_OVERDUE_DAYS = 100;
@@ -30,11 +31,23 @@ type RmRow = {
   clients: number;
   aum: string | number;
   reviews_due: number;
+  meetings_90d: number;
+  reviews_done_90d: number;
 };
 
-export async function ResearchCoverageSection({ session }: { session: SessionUser }) {
+export async function ResearchCoverageSection({
+  session,
+  rmId,
+}: {
+  session: SessionUser;
+  /** ?rm= — narrows every figure here to one relationship manager. */
+  rmId?: string;
+}) {
   let totals = { clients: 0, aum: 0, reviews_due: 0, reviewed_90d: 0 };
   let byRm: RmRow[] = [];
+  // Roster for the filter. Loaded WITHOUT the rm filter applied, or selecting
+  // someone would leave a dropdown containing only them and no way back.
+  let rmOptions: { id: string; name: string }[] = [];
 
   try {
     const data = await withTenant(session.tenantId, async (tx) => {
@@ -46,13 +59,17 @@ export async function ResearchCoverageSection({ session }: { session: SessionUse
       // own — investorScopeSql enforces that, RLS keeps it inside the tenant.
       const seesAll = can(session.roles, "investor.view.all", session.permissions);
       const scope = seesAll ? sql`TRUE` : await investorScopeSql(tx, session, "investors");
+      // One RM when asked for, the whole visible book otherwise. Applied to
+      // the totals as well as the table, so the tiles and the rows always
+      // describe the same set of clients.
+      const rmFilter = rmId ? sql` AND investors.rm_id = ${rmId}::uuid` : sql``;
       const base = sql`
         investors.deleted_at IS NULL
         AND investors.status = 'active'
-        AND ${scope}
+        AND ${scope}${rmFilter}
       `;
 
-      const [totalsRes, rmRes] = await Promise.all([
+      const [totalsRes, rmRes, rosterRes] = await Promise.all([
         tx.execute(sql`
           SELECT
             COUNT(*)::int AS clients,
@@ -76,13 +93,39 @@ export async function ResearchCoverageSection({ session }: { session: SessionUse
                  COUNT(investors.id) FILTER (
                    WHERE investors.next_review_at IS NOT NULL
                      AND investors.next_review_at <= now() - (${REVIEW_OVERDUE_DAYS} || ' days')::interval
-                 )::int AS reviews_due
+                 )::int AS reviews_due,
+                 -- Activity, not just the book: how much this RM has actually
+                 -- DONE in the last quarter. Counted as correlated subqueries
+                 -- rather than more joins — joining meetings onto a per-client
+                 -- row would multiply the client and AUM figures beside them.
+                 (SELECT COUNT(*)::int FROM review_meetings m
+                   WHERE m.tenant_id = investors.tenant_id
+                     AND COALESCE(m.rm_id, m.created_by_id) = u.id
+                     AND m.status = 'completed'
+                     AND m.meeting_date >= now() - interval '90 days') AS meetings_90d,
+                 COUNT(investors.id) FILTER (
+                   WHERE investors.last_review_at IS NOT NULL
+                     AND investors.last_review_at >= now() - interval '90 days'
+                 )::int AS reviews_done_90d
             FROM investors
             LEFT JOIN users u ON u.id = investors.rm_id
            WHERE ${base}
-           GROUP BY u.id, u.name
+           GROUP BY u.id, u.name, investors.tenant_id
            ORDER BY aum DESC NULLS LAST
-           LIMIT 10
+           LIMIT 25
+        `),
+        // Everyone who owns at least one visible client — the filter's options.
+        // Deliberately NOT narrowed by rmFilter, so choosing a person leaves a
+        // dropdown you can get back out of.
+        tx.execute(sql`
+          SELECT DISTINCT u.id, u.name
+            FROM investors
+            JOIN users u ON u.id = investors.rm_id
+           WHERE investors.deleted_at IS NULL
+             AND investors.status = 'active'
+             AND ${scope}
+           ORDER BY u.name ASC
+           LIMIT 100
         `),
       ]);
 
@@ -100,10 +143,14 @@ export async function ResearchCoverageSection({ session }: { session: SessionUse
           reviewed_90d: Number(t?.reviewed_90d ?? 0),
         },
         byRm: rmRes.rows as unknown as RmRow[],
+        rmOptions: (rosterRes.rows as { id: string; name: string | null }[])
+          .filter((r) => r.id)
+          .map((r) => ({ id: String(r.id), name: r.name ?? "—" })),
       };
     });
     totals = data.totals;
     byRm = data.byRm;
+    rmOptions = data.rmOptions;
   } catch {
     // A dashboard panel must never take the whole page down.
     return null;
@@ -139,12 +186,15 @@ export async function ResearchCoverageSection({ session }: { session: SessionUse
               </div>
             </div>
           </div>
+          <div className="flex items-center gap-3">
+          <ResearchRmFilter options={rmOptions} selected={rmId} />
           <Link
             href="/dashboard/investors?sort=review&dir=asc"
             className="text-xs text-violet-700 hover:underline font-medium inline-flex items-center gap-1"
           >
             All clients <ArrowRight className="size-3.5" />
           </Link>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs table-modern">
@@ -153,6 +203,8 @@ export async function ResearchCoverageSection({ session }: { session: SessionUse
                 <th className="text-left py-1.5 px-3">RM</th>
                 <th className="text-right py-1.5 px-3">Clients</th>
                 <th className="text-right py-1.5 px-3">AUM</th>
+                <th className="text-right py-1.5 px-3">Meetings (90d)</th>
+                <th className="text-right py-1.5 px-3">Reviews done (90d)</th>
                 <th className="text-right py-1.5 px-3">Reviews due</th>
               </tr>
             </thead>
@@ -162,6 +214,8 @@ export async function ResearchCoverageSection({ session }: { session: SessionUse
                   <td className="py-2 px-3 font-medium">{r.rm_name ?? "Unassigned"}</td>
                   <td className="py-2 px-3 text-right tabular-nums">{r.clients}</td>
                   <td className="py-2 px-3 text-right tabular-nums">{formatINR(Number(r.aum))}</td>
+                  <td className="py-2 px-3 text-right tabular-nums">{r.meetings_90d}</td>
+                  <td className="py-2 px-3 text-right tabular-nums">{r.reviews_done_90d}</td>
                   <td
                     className={`py-2 px-3 text-right tabular-nums ${
                       Number(r.reviews_due) > 0 ? "text-rose-600 font-semibold" : ""

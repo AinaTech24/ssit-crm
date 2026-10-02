@@ -43,6 +43,12 @@ export async function canViewAnnouncement(
       AND a.published_at IS NOT NULL AND a.published_at <= now()
       AND (a.expires_at IS NULL OR a.expires_at > now())
       AND (a.branch_id IS NULL OR a.branch_id = ${session.branchId ?? null})
+        -- Desk scope, read from the user row so a move between sub-branches
+        -- takes effect on the next request rather than the next login.
+        AND (
+          a.desk_id IS NULL
+          OR a.desk_id = (SELECT desk_id FROM users WHERE id = ${session.userId}::uuid)
+        )
       AND (
         a.audience_roles IS NULL
         OR jsonb_array_length(a.audience_roles) = 0

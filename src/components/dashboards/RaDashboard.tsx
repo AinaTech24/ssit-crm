@@ -33,7 +33,7 @@ type LeadRow = { id: string; name: string; avatar_url: string | null; stage: str
 type CountRow = { n: number | string | null };
 type TaskRow = { id: string; title: string; priority: string; due_at: string | null };
 
-export async function RaDashboard({ session }: { session: SessionUser }) {
+export async function RaDashboard({ session, rmId }: { session: SessionUser; rmId?: string }) {
   const isResearch = session.roles.includes("ra_research");
   const isSales = session.roles.includes("ra_sales");
 
@@ -162,7 +162,7 @@ export async function RaDashboard({ session }: { session: SessionUser }) {
       {/* The book, as research is asked about it: how many clients are
           covered, what has gone unreviewed, and how that splits by RM. Read
           only — it counts, it does not link anywhere that edits. */}
-      {isResearch && <ResearchCoverageSection session={session} />}
+      {isResearch && <ResearchCoverageSection session={session} rmId={rmId} />}
 
       {isResearch && (
         <Section title="Recent research" count={data.research!.recent.length} icon={FlaskConical}>

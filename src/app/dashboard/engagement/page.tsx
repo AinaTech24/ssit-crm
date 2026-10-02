@@ -1,4 +1,5 @@
-import { Gift } from "lucide-react";
+import Link from "next/link";
+import { Gift, FileUp } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny, can } from "@/lib/auth/rbac";
 import { EngagementBoard } from "@/components/engagement/EngagementBoard";
@@ -32,13 +33,23 @@ export default async function EngagementPage() {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-          <Gift className="size-5" /> Client engagement
-        </h1>
-        <p className="text-muted-foreground text-sm">
-          Gifts sent to clients — what went out, from whose desk, and when.
-        </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <Gift className="size-5" /> Client engagement
+          </h1>
+          <p className="text-muted-foreground text-sm">
+            Gifts sent to clients — what went out, from whose desk, and when.
+          </p>
+        </div>
+        {/* Gifting runs in batches — a festival list, a birthday month — so the
+            upload sits beside the board rather than behind the single-gift
+            form. */}
+        {canLog && (
+          <Link href="/dashboard/engagement/import" className="btn-secondary text-sm">
+            <FileUp className="size-4" /> Bulk upload gifts
+          </Link>
+        )}
       </div>
       <EngagementBoard canLog={canLog} />
     </div>

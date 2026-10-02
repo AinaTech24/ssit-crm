@@ -30,6 +30,12 @@ export async function AnnouncementsStrip({ session }: { session: { tenantId: str
         AND a.published_at IS NOT NULL AND a.published_at <= now()
         AND (a.expires_at IS NULL OR a.expires_at > now())
         AND (a.branch_id IS NULL OR a.branch_id = ${session.branchId ?? null})
+        -- Desk scope, read from the user row so a move between sub-branches
+        -- takes effect on the next request rather than the next login.
+        AND (
+          a.desk_id IS NULL
+          OR a.desk_id = (SELECT desk_id FROM users WHERE id = ${session.userId}::uuid)
+        )
         AND (a.is_pinned = true OR a.category = 'urgent' OR a.requires_ack = true)
         AND (
           a.audience_roles IS NULL

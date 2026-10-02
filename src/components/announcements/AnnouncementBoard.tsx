@@ -19,9 +19,15 @@ const CATEGORIES = [
   ["event", "Event"],
   ["system", "System"],
   ["urgent", "Urgent"],
+  ["amc_meeting", "AMC meeting"],
+  ["staff", "Staff"],
+  ["achievement", "Achievement"],
 ] as const;
 
 const CAT_TONE: Record<string, string> = {
+  amc_meeting: "bg-indigo-50 text-indigo-700",
+  staff: "bg-teal-50 text-teal-700",
+  achievement: "bg-emerald-50 text-emerald-700",
   general: "bg-slate-50 text-slate-600",
   policy: "bg-blue-50 text-blue-700",
   event: "bg-violet-50 text-violet-700",
@@ -37,10 +43,12 @@ const ROLE_OPTS = [
 export function AnnouncementBoard({
   rows,
   branches = [],
+  desks = [],
   isManager,
 }: {
   rows: Row[];
   branches?: Row[];
+  desks?: Row[];
   isManager: boolean;
 }) {
   const router = useRouter();
@@ -312,6 +320,7 @@ export function AnnouncementBoard({
         <Composer
           row={editingRow}
           branches={branches}
+          desks={desks}
           onClose={() => {
             setCompose(false);
             setEditingRow(null);
@@ -330,11 +339,13 @@ export function AnnouncementBoard({
 function Composer({
   row,
   branches = [],
+  desks = [],
   onClose,
   onSaved,
 }: {
   row?: Row | null;
   branches?: Row[];
+  desks?: Row[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -345,6 +356,7 @@ function Composer({
   const [requiresAck, setRequiresAck] = useState(row?.requires_ack ?? false);
   const [roles, setRoles] = useState<string[]>(row?.audience_roles ?? []);
   const [branchId, setBranchId] = useState(row?.branch_id ?? "");
+  const [deskId, setDeskId] = useState(row?.desk_id ?? "");
   const [expiresAt, setExpiresAt] = useState(
     row?.expires_at ? new Date(row.expires_at).toISOString().slice(0, 16) : ""
   );
@@ -377,6 +389,7 @@ function Composer({
         requiresAck,
         audienceRoles: roles,
         branchId: branchId ? branchId : null,
+        deskId: deskId ? deskId : null,
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       };
 
@@ -497,6 +510,26 @@ function Composer({
                 </option>
               ))}
             </select>
+          </Field>
+
+          {/* Most firms run one registered branch, so the sub-branch is the
+              target that actually narrows anything. Separate control rather
+              than one merged list: the two are different scopes and a notice
+              can legitimately be aimed at a branch OR a desk within it. */}
+          <Field label="Target Sub-branch (optional)">
+            <select value={deskId} onChange={(e) => setDeskId(e.target.value)} className="input-base">
+              <option value="">All sub-branches</option>
+              {desks.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            {deskId ? (
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Only people on that sub-branch will see this notice.
+              </p>
+            ) : null}
           </Field>
           <div>
             <div className="text-[11px] text-muted-foreground mb-1">Audience (none = everyone)</div>

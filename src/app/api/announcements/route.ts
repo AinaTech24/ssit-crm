@@ -17,7 +17,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { ANNOUNCEMENT_CATEGORIES, announcements } from "@/db/schema";
-import { audienceRolesSchema, checkBranchTarget } from "@/lib/announcements/validate";
+import { audienceRolesSchema, checkBranchTarget, checkDeskTarget } from "@/lib/announcements/validate";
 import { notifyAnnouncementPublished } from "@/lib/announcements/notify";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +30,8 @@ const Body = z.object({
   category: z.enum(ANNOUNCEMENT_CATEGORIES).default("general"),
   audienceRoles: audienceRolesSchema.default([]),
   branchId: z.string().uuid().nullable().optional(),
+  /** Sub-branch target. Most firms run one branch, so this is the useful one. */
+  deskId: z.string().uuid().nullable().optional(),
   isPinned: z.boolean().default(false),
   requiresAck: z.boolean().default(false),
   publishNow: z.boolean().default(true),
@@ -70,6 +72,14 @@ export async function GET(req: NextRequest) {
           AND a.published_at IS NOT NULL AND a.published_at <= now()
           AND (a.expires_at IS NULL OR a.expires_at > now())
           AND (a.branch_id IS NULL OR a.branch_id = ${session.branchId ?? null})
+          -- Desk scope. Read from the USER ROW rather than the session token,
+          -- like every other desk check, so moving someone to another
+          -- sub-branch changes what they see on the next request instead of
+          -- the next login.
+          AND (
+            a.desk_id IS NULL
+            OR a.desk_id = (SELECT desk_id FROM users WHERE id = ${session.userId}::uuid)
+          )
           AND (
             a.audience_roles IS NULL
             OR jsonb_array_length(a.audience_roles) = 0
@@ -104,6 +114,13 @@ export async function POST(req: NextRequest) {
         ownBranchId: session.branchId ?? null,
       });
       if (branchErr) return { error: branchErr };
+      const deskErr = await checkDeskTarget(tx, {
+        deskId: b.deskId,
+        tenantId: session.tenantId,
+        roles: session.roles,
+        ownBranchId: session.branchId ?? null,
+      });
+      if (deskErr) return { error: deskErr };
 
       await tx.insert(announcements).values({
         id,
@@ -113,6 +130,7 @@ export async function POST(req: NextRequest) {
         category: b.category,
         audienceRoles: b.audienceRoles,
         branchId: b.branchId ?? null,
+        deskId: b.deskId ?? null,
         isPinned: b.isPinned,
         requiresAck: b.requiresAck,
         publishedAt: b.publishNow ? new Date() : null,

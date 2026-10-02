@@ -241,7 +241,9 @@ export default async function DashboardPage({
     } else if (can(roles, "dashboard.view.ria", perms)) {
       dash = await RiaDashboard({ session });
     } else if (can(roles, "dashboard.view.ra", perms)) {
-      dash = await RaDashboard({ session });
+      // ?rm= also drives the research coverage filter, the same param every
+      // other module uses for "show me one person".
+      dash = await RaDashboard({ session, rmId: rmParam || undefined });
     } else if (can(roles, "dashboard.view.rm", perms)) {
       dash = await RmDashboard({ session, from: dateFrom, to: dateTo });
     } else {

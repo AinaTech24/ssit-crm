@@ -9,7 +9,7 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "@/db/client";
-import { branches } from "@/db/schema";
+import { branches, desks } from "@/db/schema";
 import { ASSIGNABLE_ROLES } from "@/lib/auth/rbac";
 
 const ASSIGNABLE = new Set<string>(ASSIGNABLE_ROLES);
@@ -43,4 +43,27 @@ export async function checkBranchTarget(
     .where(and(eq(branches.id, opts.branchId), eq(branches.tenantId, opts.tenantId)))
     .limit(1);
   return br ? null : "branch not found in this firm";
+}
+
+/**
+ * A desk target must belong to the tenant, and a non-owner manager may only
+ * target a desk inside their OWN branch — the same rule branch targeting
+ * follows, so a branch head cannot address another branch's teams.
+ */
+export async function checkDeskTarget(
+  tx: Tx,
+  opts: { deskId: string | null | undefined; tenantId: string; roles: string[]; ownBranchId: string | null }
+): Promise<string | null> {
+  if (!opts.deskId) return null;
+  const [d] = await tx
+    .select({ id: desks.id, branchId: desks.branchId })
+    .from(desks)
+    .where(and(eq(desks.id, opts.deskId), eq(desks.tenantId, opts.tenantId)))
+    .limit(1);
+  if (!d) return "sub-branch not found in this firm";
+  const isOwner = opts.roles.includes("owner");
+  if (!isOwner && d.branchId && d.branchId !== opts.ownBranchId) {
+    return "branch heads can only post to sub-branches in their own branch";
+  }
+  return null;
 }

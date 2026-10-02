@@ -10,7 +10,19 @@
 import { boolean, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { id, tenantId, timestamps } from "./_shared";
 
-export const ANNOUNCEMENT_CATEGORIES = ["general", "policy", "event", "system", "urgent"] as const;
+export const ANNOUNCEMENT_CATEGORIES = [
+  "general",
+  "policy",
+  "event",
+  "system",
+  "urgent",
+  // Added for the kinds of notice firms actually post: a visit or review with
+  // an AMC, a joiner/leaver or other staff notice, and a win worth telling the
+  // firm about.
+  "amc_meeting",
+  "staff",
+  "achievement",
+] as const;
 export type AnnouncementCategory = (typeof ANNOUNCEMENT_CATEGORIES)[number];
 
 export const announcements = pgTable(
@@ -29,6 +41,11 @@ export const announcements = pgTable(
     audienceRoles: jsonb("audience_roles").$type<string[]>().default([]),
     /** Optional branch scope — null = all branches. */
     branchId: uuid("branch_id"),
+    /**
+     * Optional SUB-BRANCH scope (migration 0233). Most firms run one branch, so
+     * the desk is the unit a notice is usually aimed at. NULL = not desk-scoped.
+     */
+    deskId: uuid("desk_id"),
 
     isPinned: boolean("is_pinned").notNull().default(false),
     /** When true, staff must explicitly click "I acknowledge" (policy/urgent
