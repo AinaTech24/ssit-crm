@@ -1,6 +1,7 @@
 import { and, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Plus, ListChecks, CalendarDays } from "lucide-react";
+import { Plus, ListChecks, CalendarDays, CircleDot, AlarmClock, CheckCircle2 } from "lucide-react";
+import { ModuleKpis } from "@/components/modules/ModuleKpis";
 import Link from "next/link";
 import { withTenant } from "@/db/client";
 import { tasks, users, investors, leads } from "@/db/schema";
@@ -9,6 +10,7 @@ import { can } from "@/lib/auth/rbac";
 import { taskScopeSql } from "@/lib/tasks/access";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { usersInScopeSql } from "@/lib/auth/data-scope";
 import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { Pager } from "@/components/common/Pager";
 import { dateRangeCond } from "@/lib/filters/date-range";
@@ -190,6 +192,7 @@ export default async function TasksPage({
     const rmRows = await tx.execute(sql`
       SELECT id, name FROM users
       WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+        AND ${await usersInScopeSql(tx, session)}
       ORDER BY name ASC
     `);
     // Distinct tags in use — powers the Tags filter dropdown.
@@ -203,7 +206,22 @@ export default async function TasksPage({
     `);
     const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
     const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
-    return { rows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[], scopeUnits, scopeMembers };
+    // Headline counts: the visible book under the wall + sub-branch pick, not
+    // the list's own status / search filters.
+    const kpiRes = await tx.execute(sql`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE tasks.status IN ('open', 'in_progress'))::int AS open,
+        COUNT(*) FILTER (WHERE tasks.status IN ('open', 'in_progress') AND tasks.due_at < now())::int AS overdue,
+        COUNT(*) FILTER (WHERE tasks.status = 'completed')::int AS completed
+      FROM tasks
+      WHERE tasks.tenant_id = ${session.tenantId}::uuid
+        AND tasks.deleted_at IS NULL
+        AND ${await taskScopeSql(tx, session)}
+        AND ${scopeFilterSql(scopeSel, session.tenantId, ["tasks.assignee_id", "tasks.created_by_id"])}
+    `);
+    const kpi = (kpiRes.rows[0] as { total: number; open: number; overdue: number; completed: number } | undefined) ?? { total: 0, open: 0, overdue: 0, completed: 0 };
+    return { rows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[], scopeUnits, scopeMembers, kpi };
   });
 
   const rmOptions = (result.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -236,6 +254,15 @@ export default async function TasksPage({
           </Link>
         </div>
       </div>
+
+      <ModuleKpis
+        items={[
+          { label: "Total tasks", value: Number(result.kpi.total), icon: ListChecks },
+          { label: "Open", value: Number(result.kpi.open), icon: CircleDot },
+          { label: "Overdue", value: Number(result.kpi.overdue), icon: AlarmClock, tone: "rose" },
+          { label: "Completed", value: Number(result.kpi.completed), icon: CheckCircle2, tone: "emerald" },
+        ]}
+      />
 
       {showScopePicker && (
         <ScopeFilterBar

@@ -7,7 +7,7 @@
  */
 
 import Link from "next/link";
-import { Plus, Phone, Mail, ExternalLink, FileUp } from "lucide-react";
+import { Plus, Phone, Mail, FileUp } from "lucide-react";
 import { and, eq, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -170,18 +170,15 @@ export default async function AmcEmpanelmentsListPage({
         </div>
       ) : (
         <div className="card-surface table-scroll">
-          <table className="w-full text-xs min-w-[1100px]">
+          <table className="w-full text-xs min-w-[900px]">
             <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 text-left">AMC</th>
                 <th className="px-3 py-2 text-left">Product line</th>
-                <th className="px-3 py-2 text-left">Distributor code</th>
                 <th className="px-3 py-2 text-left">Empanelled since</th>
                 <th className="px-3 py-2 text-left">RM contact</th>
                 <th className="px-3 py-2 text-left">Ops contact</th>
                 <th className="px-3 py-2 text-left">Escalation</th>
-                <th className="px-3 py-2 text-left">Trail %</th>
-                <th className="px-3 py-2 text-left">Portal</th>
                 <th className="px-3 py-2 text-left">Status</th>
               </tr>
             </thead>
@@ -208,9 +205,6 @@ export default async function AmcEmpanelmentsListPage({
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 font-mono">
-                    {r.distributorCode ?? "—"}
-                  </td>
                   <td className="px-3 py-2">
                     {r.empanelmentDate
                       ? new Date(r.empanelmentDate).toLocaleDateString("en-GB", {
@@ -235,29 +229,6 @@ export default async function AmcEmpanelmentsListPage({
                     email={r.escalationEmail}
                     phone={r.escalationPhone}
                   />
-                  <td className="px-3 py-2">
-                    {r.trailRateOverridePct ? (
-                      <span className="chip bg-violet-50 text-violet-700 text-[10px]">
-                        {Number(r.trailRateOverridePct).toFixed(2)}%
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">default</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.portalUrl ? (
-                      <a
-                        href={r.portalUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-violet-600 hover:underline inline-flex items-center gap-1 text-[11px]"
-                      >
-                        Login <ExternalLink className="size-2.5" />
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </td>
                   <td className="px-3 py-2">
                     <span
                       className={`chip text-[10px] ${STATUS_TONE[r.status] ?? "bg-slate-100"

@@ -19,6 +19,7 @@ import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { withTenant } from "@/db/client";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { usersInScopeSql } from "@/lib/auth/data-scope";
 import { parseScope, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { buildCommandQueue, type ActionGroup, type ActionItem, type Severity } from "@/lib/command-center/queue";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
@@ -96,6 +97,7 @@ export default async function CommandCenterPage({
         const r = await tx.execute(sql`
           SELECT id, name FROM users
           WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+        AND ${await usersInScopeSql(tx, session)}
           ORDER BY name ASC
         `);
         users = (r.rows as { id: string; name: string }[]).map((u) => ({ value: String(u.id), label: u.name ?? "—" }));

@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { Plus, LifeBuoy, FileText } from "lucide-react";
+import { Plus, LifeBuoy, FileText, CircleDot, CheckCircle2, AlarmClock } from "lucide-react";
+import { ModuleKpis } from "@/components/modules/ModuleKpis";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { investorScopeSql } from "@/lib/investors/access";
 import { ServiceRequestsTable } from "@/components/service-requests/ServiceRequestsTable";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { usersInScopeSql } from "@/lib/auth/data-scope";
 import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -128,11 +130,27 @@ export default async function ServiceRequestsPage({
     const rmRows = await tx.execute(sql`
       SELECT id, name FROM users
       WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+        AND ${await usersInScopeSql(tx, session)}
       ORDER BY name ASC
     `);
     const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
     const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
-    return { rows: rows.rows as any[], rms: rmRows.rows as any[], scopeUnits, scopeMembers };
+    // Headline counts under the same wall and sub-branch pick, but not the
+    // list's own status / search filters.
+    const kpiRes = await tx.execute(sql`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE sr.status NOT IN ('resolved', 'closed'))::int AS open,
+        COUNT(*) FILTER (WHERE sr.status IN ('resolved', 'closed'))::int AS resolved,
+        COUNT(*) FILTER (WHERE sr.status NOT IN ('resolved', 'closed') AND sr.sla_resolution_at < now())::int AS breached
+      FROM service_requests sr
+      LEFT JOIN investors i ON i.id = sr.investor_id
+      WHERE sr.tenant_id = ${session.tenantId}::uuid
+        AND (${clientScope} OR sr.assigned_to_user_id = ${session.userId}::uuid)
+        AND ${scopeFilterSql(scopeSel, session.tenantId, ["sr.assigned_to_user_id", "i.rm_id"])}
+    `);
+    const kpi = (kpiRes.rows[0] as { total: number; open: number; resolved: number; breached: number } | undefined) ?? { total: 0, open: 0, resolved: 0, breached: 0 };
+    return { rows: rows.rows as any[], rms: rmRows.rows as any[], scopeUnits, scopeMembers, kpi };
   });
 
   const rmOptions = (result.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -157,6 +175,15 @@ export default async function ServiceRequestsPage({
           </Link>
         </div>
       </div>
+
+      <ModuleKpis
+        items={[
+          { label: "Total requests", value: Number(result.kpi.total), icon: LifeBuoy },
+          { label: "Open", value: Number(result.kpi.open), icon: CircleDot },
+          { label: "Resolved", value: Number(result.kpi.resolved), icon: CheckCircle2, tone: "emerald" },
+          { label: "SLA breached", value: Number(result.kpi.breached), icon: AlarmClock, tone: "rose" },
+        ]}
+      />
 
       {showScopePicker && (
         <ScopeFilterBar

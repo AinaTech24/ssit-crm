@@ -364,7 +364,12 @@ export async function explainDataScope(
   const ownBranch = managesOwnBranch(session);
   // Same rule for the implicit branch_head widening: if this firm runs desks,
   // a branch head's world is their desk, not every desk in the office.
-  if (ownBranch && deskId && allowedBranches.length === 0) {
+  // A grant of the HOME branch (the registered office every desk sits under)
+  // does not widen a desk head: that branch is the whole firm, so ticking it
+  // turned a sub-branch head into someone who saw every other sub-branch. Only
+  // a grant of ANOTHER branch moves them off their desk.
+  const grantsBeyondHome = allowedBranches.filter((b) => b !== session.branchId);
+  if (ownBranch && deskId && grantsBeyondHome.length === 0) {
     return {
       scope: { kind: "desks", deskIds: [deskId] },
       reason: "Sees every record owned by someone on their desk (sub-branch), because they hold Branch Head.",
@@ -547,4 +552,30 @@ export async function assertInScope(
     new Error(`forbidden: this ${what} belongs to another branch or team member`),
     { status: 403 }
   );
+}
+
+/**
+ * Condition over the `users` table: "people this session is allowed to see".
+ *
+ * For the roster dropdowns (RM / assignee / owner filters). Those listed every
+ * active user in the firm to anyone who could open the page — so a sub-branch
+ * head picking an RM saw every other sub-branch's staff, and the filter
+ * offered people whose records the wall would never show them anyway.
+ *
+ * Mirrors the record wall: everyone for the firm admin / back office, the desk
+ * or branch for a head, and only yourself otherwise. `alias` is the users
+ * table alias when the query has one ("u" → `u.desk_id`).
+ */
+export async function usersInScopeSql(tx: any, session: SessionUser, alias = ""): Promise<SQL> {
+  const scope = await resolveDataScope(tx, session);
+  const p = alias ? `${alias}.` : "";
+  const col = (c: string) => sql.raw(`${p}${c}`);
+  if (scope.kind === "all") return sql`TRUE`;
+  if (scope.kind === "desks") {
+    return sql`${col("desk_id")} IN (${sql.join(scope.deskIds.map((d) => sql`${d}::uuid`), sql`, `)})`;
+  }
+  if (scope.kind === "branches") {
+    return sql`${col("branch_id")} IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`;
+  }
+  return sql`${col("id")} = ${scope.userId}::uuid`;
 }

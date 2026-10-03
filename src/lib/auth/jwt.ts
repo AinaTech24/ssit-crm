@@ -68,6 +68,9 @@ export type SessionUser = {
    *  Node-side revocation check can compare it against users.sessions_invalid_after.
    *  Carried through the middleware `x-mfd-session` header. */
   iat?: number;
+  /** Set by getSession (never signed into a token) when the user has switched
+   *  to the firm-admin view — see lib/auth/view-mode.ts. */
+  viewMode?: "admin";
 };
 
 function secretKey(): Uint8Array {

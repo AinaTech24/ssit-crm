@@ -56,8 +56,14 @@ export function ScopeBreakdownCards({
 
   if (byUnit.length === 0 && byMember.length === 0) return null;
 
+  // A sub-branch head's records sit in ONE sub-branch — a by-sub-branch split
+  // of one bucket is noise, and naming it invites the question of where the
+  // others went. Only the firm-wide view gets the split.
+  const showUnits = byUnit.filter((u) => u.count > 0).length > 1;
+
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
+    <div className={`grid gap-3 ${showUnits ? "lg:grid-cols-2" : ""}`}>
+      {showUnits && (
       <Group
         icon={<Building2 className="size-3.5" />}
         title={`By sub-branch`}
@@ -74,6 +80,7 @@ export function ScopeBreakdownCards({
         }))}
         noun={noun}
       />
+      )}
       <Group
         icon={<User className="size-3.5" />}
         title="By RM"

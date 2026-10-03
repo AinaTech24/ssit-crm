@@ -21,6 +21,7 @@ import { Save, Loader2, Trash2, Plus, X, ExternalLink } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
 import { EMPANELMENT_CATEGORIES } from "@/db/schema/amc_empanelments";
 import { DateField } from "@/components/ui/DateField";
+import { AmcPicker } from "./AmcPicker";
 
 const STATUSES = [
   { value: "empanelled", label: "Empanelled" },
@@ -124,12 +125,6 @@ export function AmcEmpanelmentForm({
     setOk(null);
   }
 
-  function onAmcPick(code: string) {
-    const found = amcCatalog.find((a) => a.code === code);
-    if (!found) return;
-    setV((p) => ({ ...p, amcCode: found.code, amcName: found.name }));
-  }
-
   function addContact() {
     if (!newContact.role.trim() || !newContact.name.trim()) return;
     field("additionalContacts", [...v.additionalContacts, { ...newContact }]);
@@ -173,6 +168,11 @@ export function AmcEmpanelmentForm({
     setBusy(true);
     setErr(null);
     setOk(null);
+    if (mode === "create" && !v.amcCode) {
+      setErr("Pick an AMC first.");
+      setBusy(false);
+      return;
+    }
     try {
       const url =
         mode === "create"
@@ -242,20 +242,11 @@ export function AmcEmpanelmentForm({
         <Grid>
           {mode === "create" ? (
             <Field label="AMC *">
-              <SelectField
-                required
+              <AmcPicker
+                catalog={amcCatalog}
                 value={v.amcCode}
-                onChange={(e) => onAmcPick(e.target.value)}
-                className="text-sm w-full"
-                placeholder="Select an AMC…"
-              >
-                <option value="">Select an AMC…</option>
-                {amcCatalog.map((a) => (
-                  <option key={a.code} value={a.code}>
-                    {a.name}
-                  </option>
-                ))}
-              </SelectField>
+                onPick={(a) => setV((p) => ({ ...p, amcCode: a.code, amcName: a.name }))}
+              />
             </Field>
           ) : (
             <Field label="AMC (immutable)">
@@ -293,45 +284,11 @@ export function AmcEmpanelmentForm({
               ))}
             </SelectField>
           </Field>
-          <Field label="Distributor code (AMC-issued)">
-            <input
-              value={v.distributorCode ?? ""}
-              onChange={(e) => field("distributorCode", e.target.value || null)}
-              className="input-base text-sm w-full font-mono"
-              placeholder="e.g. HDFC-DST-123"
-            />
-          </Field>
           <Field label="Empanelment date">
             <DateField
               value={v.empanelmentDate ?? ""}
               onChange={(e) => field("empanelmentDate", e.target.value || null)}
               className="text-sm w-full"
-            />
-          </Field>
-          <Field label="Distributor portal URL">
-            <input
-              type="url"
-              value={v.portalUrl ?? ""}
-              onChange={(e) => field("portalUrl", e.target.value || null)}
-              className="input-base text-sm w-full"
-              placeholder="https://distributor.hdfcfund.com"
-            />
-          </Field>
-          <Field label="Trail rate override (% per annum)">
-            <input
-              type="number"
-              min={0}
-              max={10}
-              step={0.0001}
-              value={v.trailRateOverridePct ?? ""}
-              onChange={(e) =>
-                field(
-                  "trailRateOverridePct",
-                  e.target.value === "" ? null : Number(e.target.value)
-                )
-              }
-              className="input-base text-sm w-full"
-              placeholder="e.g. 0.85"
             />
           </Field>
         </Grid>

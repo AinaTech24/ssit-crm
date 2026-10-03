@@ -162,6 +162,8 @@ export const users = pgTable(
    * user who runs only the Motilal Oswal book stops seeing the whole list.
    */
   allowedClientTags: jsonb("allowed_client_tags").$type<string[]>(),
+  /** May switch to the firm-admin view from the profile menu (migration 0234). */
+  canSwitchAdmin: boolean("can_switch_admin").notNull().default(false),
   allowedBranches: jsonb("allowed_branches").$type<string[]>(),
     /**
      * Explicit "only their own records" override (migration 0222). Beats the

@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { Plus, FileDown, LayoutGrid, List, FileUp, Cake } from "lucide-react";
+import { Plus, FileDown, LayoutGrid, List, FileUp, Cake, CalendarPlus, CheckCircle2, CalendarClock } from "lucide-react";
 import { and, asc, desc, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { investors } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
-import { investorScopeCondition, requireInvestorView } from "@/lib/investors/access";
+import { investorScopeCondition, investorScopeSql, requireInvestorView } from "@/lib/investors/access";
+import { ModuleKpis } from "@/components/modules/ModuleKpis";
 import { RecomputeTiersButton } from "@/components/investors/RecomputeTiersButton";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { usersInScopeSql } from "@/lib/auth/data-scope";
 import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { dateRangeFilter } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -145,7 +147,7 @@ export default async function InvestorsPage({
   const scopeSel = parseScope(sp as Record<string, string | undefined>);
   const showScopePicker = canPickScope(session);
 
-  const { rows, total, kanbanRows, rms, allIds, dupCount, scopeUnits, scopeMembers } = await withTenant(session.tenantId, async (tx) => {
+  const { rows, total, kanbanRows, rms, allIds, dupCount, scopeUnits, scopeMembers, kpi } = await withTenant(session.tenantId, async (tx) => {
     // Filters live in one shared helper so the page and the Excel export apply
     // identical WHERE logic. Tenant isolation is handled by RLS.
     // Row scope: an RM sees only their own book, a branch head only their
@@ -293,6 +295,7 @@ export default async function InvestorsPage({
       const rmRes = await tx.execute(sql`
         SELECT id, name FROM users
         WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+        AND ${await usersInScopeSql(tx, session)}
         ORDER BY name ASC
       `);
       rms = rmRes.rows as any[];
@@ -308,7 +311,23 @@ export default async function InvestorsPage({
       : { units: [] };
     const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
 
-    return { rows: r, total: Number(c[0]?.c ?? 0), kanbanRows, rms, allIds, dupCount, scopeUnits, scopeMembers };
+    // Headline counts — the whole visible book, not the list's search / filter
+    // state, under the same wall and sub-branch pick as the list.
+    const kpiRes = await tx.execute(sql`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE investors.created_at::date = CURRENT_DATE)::int AS added_today,
+        COUNT(*) FILTER (WHERE investors.status = 'active')::int AS active,
+        COUNT(*) FILTER (WHERE investors.next_review_at IS NOT NULL AND investors.next_review_at < now())::int AS review_due
+      FROM investors
+      WHERE investors.tenant_id = ${session.tenantId}::uuid
+        AND investors.deleted_at IS NULL
+        AND ${await investorScopeSql(tx, session, "investors")}
+        AND ${viewScope}
+    `);
+    const kpi = (kpiRes.rows[0] as { total: number; added_today: number; active: number; review_due: number } | undefined) ?? { total: 0, added_today: 0, active: 0, review_due: 0 };
+
+    return { rows: r, total: Number(c[0]?.c ?? 0), kanbanRows, rms, allIds, dupCount, scopeUnits, scopeMembers, kpi };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
   const rmOptions = (rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -427,6 +446,15 @@ export default async function InvestorsPage({
           active={sp as Record<string, string | undefined>}
         />
       </div> */}
+
+      <ModuleKpis
+        items={[
+          { label: "Total clients", value: Number(kpi.total), icon: Users },
+          { label: "Added today", value: Number(kpi.added_today), icon: CalendarPlus },
+          { label: "Active", value: Number(kpi.active), icon: CheckCircle2, tone: "emerald" },
+          { label: "Review overdue", value: Number(kpi.review_due), icon: CalendarClock, tone: "rose" },
+        ]}
+      />
 
       {showScopePicker && (
         <ScopeFilterBar

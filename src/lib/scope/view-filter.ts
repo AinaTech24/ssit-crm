@@ -21,6 +21,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth/session";
 import { ROLE_LABELS } from "@/lib/auth/rbac";
+import { explainDataScope } from "@/lib/auth/data-scope";
 
 export type ScopeUnit = {
   /** "b:<branchId>" or "d:<deskId>". */
@@ -104,6 +105,19 @@ export function scopeFilterSql(
 }
 
 /**
+ * The ONE desk (sub-branch) this session is confined to, or null.
+ *
+ * Taken from the data wall itself rather than re-derived from roles, so the
+ * pickers can never offer a desk the wall would then refuse to show — or hide
+ * one it would. A sub-branch head gets their desk; the firm admin, back office
+ * and anyone with a wider grant get null.
+ */
+export async function confinedDeskId(tx: any, session: SessionUser): Promise<string | null> {
+  const { scope } = await explainDataScope(tx, session);
+  return scope.kind === "desks" && scope.deskIds.length === 1 ? scope.deskIds[0] : null;
+}
+
+/**
  * The branches and desks this session may look at, as one indented list.
  *
  * A branch head is held to their own branch: the picker must not hand them
@@ -113,6 +127,7 @@ export async function loadScopeUnits(
   tx: any,
   session: SessionUser
 ): Promise<{ units: ScopeUnit[]; branchIds: string[] }> {
+  const confined = await confinedDeskId(tx, session);
   const [branchRes, deskRes] = await Promise.all([
     tx.execute(sql`
       SELECT id, name FROM branches
@@ -136,9 +151,17 @@ export async function loadScopeUnits(
   const branchIds = new Set(branches.map((b) => b.id));
   const desks = (deskRes.rows as { id: string; name: string | null; branch_id: string }[])
     .filter((d) => branchIds.has(String(d.branch_id)))
+    // A desk head sees their own desk and no other — not the sibling
+    // sub-branches the registered office also holds.
+    .filter((d) => !confined || String(d.id) === confined)
     .map((d) => ({ id: String(d.id), name: d.name ?? "—", branchId: String(d.branch_id) }));
 
   const units: ScopeUnit[] = [];
+  if (confined) {
+    // One entry, no branch above it: nothing to choose between.
+    for (const d of desks) units.push({ value: `d:${d.id}`, label: d.name, depth: 0 });
+    return { units, branchIds: [...branchIds] };
+  }
   for (const b of branches) {
     units.push({ value: `b:${b.id}`, label: b.name, depth: 0 });
     for (const d of desks.filter((x) => x.branchId === b.id)) {
@@ -161,10 +184,20 @@ export async function loadScopeMembers(
   session: SessionUser,
   sel: ScopeSelection
 ): Promise<ScopeMember[]> {
-  if (!sel.branchId && !sel.deskId) return [];
-  const where = sel.deskId
-    ? sql`desk_id = ${sel.deskId}::uuid`
-    : sql`branch_id = ${sel.branchId}::uuid`;
+  // A desk head's team is their desk, whatever the URL says — and nothing
+  // picked from the URL may reach a unit this session cannot see, or the
+  // roster of another sub-branch leaks through the dropdown.
+  const confined = await confinedDeskId(tx, session);
+  const { units } = await loadScopeUnits(tx, session);
+  const allowed = new Set(units.map((u) => u.value));
+  const deskId = confined ?? sel.deskId;
+  const branchId = confined ? null : sel.branchId;
+  if (!deskId && !branchId) return [];
+  if (deskId && !allowed.has(`d:${deskId}`)) return [];
+  if (branchId && !allowed.has(`b:${branchId}`)) return [];
+  const where = deskId
+    ? sql`desk_id = ${deskId}::uuid`
+    : sql`branch_id = ${branchId}::uuid`;
   const r = await tx.execute(sql`
     SELECT id, name, roles FROM users
     WHERE tenant_id = ${session.tenantId}::uuid

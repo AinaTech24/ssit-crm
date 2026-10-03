@@ -27,6 +27,7 @@ import {
   type SessionUser,
 } from "./jwt";
 import { isSessionRevoked, isDeviceSessionRevoked } from "./revocation";
+import { applyViewMode } from "./view-mode";
 
 // Re-export the Edge-safe surface so existing `@/lib/auth/session` imports
 // (signSession in the auth routes, verifySession/SESSION_COOKIE, the type) are
@@ -68,7 +69,9 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
   const deviceRevoked = await isDeviceSessionRevoked({ sid: session.sid, tenantId: session.tenantId });
   if (deviceRevoked) return null;
 
-  return session;
+  // A sub-branch head who has chosen "Switch to admin view" is a firm admin for
+  // this request; everyone else comes back unchanged.
+  return applyViewMode(session);
 });
 
 /**

@@ -10,6 +10,7 @@ import { AttendanceTable } from "@/components/attendance/AttendanceTable";
 import { AttendanceToolbar } from "@/components/attendance/AttendanceToolbar";
 import { ATTENDANCE_STATUS_LABELS, computeAttendanceFlags } from "@/lib/attendance/policy";
 import { loadAttendancePolicy } from "@/lib/attendance/settings";
+import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
 
 const PAGE_SIZE = 50;
 
@@ -33,7 +34,21 @@ export default async function AttendancePage({
 
   const data = await withTenant(session.tenantId, async (tx) => {
     const policy = await loadAttendancePolicy(tx, session.tenantId);
-    const conds: any[] = [sql`a.tenant_id = ${session.tenantId}::uuid`];
+    // Whose attendance this session may see: the same wall as clients and
+    // leads. A sub-branch head reads their own sub-branch's people, an RM only
+    // themselves, the firm admin and back office everyone. The page used to
+    // list the whole firm to anyone who could open it.
+    const scope = await resolveDataScope(tx, session);
+    const walled = dataScopeSqlViaOwnerBranch(scope, "a.employee_user_id");
+    const peopleInScope =
+      scope.kind === "all"
+        ? sql`TRUE`
+        : scope.kind === "desks"
+          ? sql`u2.desk_id IN (${sql.join(scope.deskIds.map((d) => sql`${d}::uuid`), sql`, `)})`
+          : scope.kind === "branches"
+            ? sql`u2.branch_id IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`
+            : sql`u2.id = ${scope.userId}::uuid`;
+    const conds: any[] = [sql`a.tenant_id = ${session.tenantId}::uuid`, walled];
     if (q) conds.push(sql`u.name ILIKE ${`%${q}%`}`);
     if (statusFilter.length) conds.push(sql`a.status IN (${sql.join(statusFilter.map((v) => sql`${v}`), sql`, `)})`);
     const dr = dateRangeCond(sp, "date", "a.attendance_date");
@@ -74,8 +89,8 @@ export default async function AttendancePage({
         COUNT(*) FILTER (WHERE attendance_date = current_date AND status = 'present')::int AS present_today,
         COUNT(*) FILTER (WHERE attendance_date = current_date AND status = 'absent')::int AS absent_today,
         COUNT(*) FILTER (WHERE attendance_date = current_date AND status = 'on_leave')::int AS on_leave_today,
-        (SELECT COUNT(*)::int FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active') AS active_employees
-      FROM attendance WHERE tenant_id = ${session.tenantId}::uuid
+        (SELECT COUNT(*)::int FROM users u2 WHERE u2.tenant_id = ${session.tenantId}::uuid AND u2.status = 'active' AND ${peopleInScope}) AS active_employees
+      FROM attendance a WHERE a.tenant_id = ${session.tenantId}::uuid AND ${walled}
     `);
 
     const myToday = await tx.execute(sql`

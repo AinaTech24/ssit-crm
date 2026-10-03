@@ -18,7 +18,7 @@ import { users, branches } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, areAssignableRoles, areKnownCapabilities } from "@/lib/auth/rbac";
 import { wouldExceedFirmAdminCap, MAX_FIRM_ADMINS_MESSAGE } from "@/lib/auth/firm-admin-guard";
-import { areKnownNavKeys } from "@/config/nav-access";
+import { areKnownNavKeys, ALL_NAV_KEYS } from "@/config/nav-access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { offboardUser, type OffboardSummary } from "@/lib/offboarding";
 import { clearSessionRevocationCache, clearDeviceSessionCache } from "@/lib/auth/revocation";
@@ -95,6 +95,8 @@ const PatchBody = z.object({
   /** Client BOOK tags this user may see. [] / null = no restriction. */
   allowedClientTags: z.array(z.string().max(60)).max(25).nullable().optional(),
   delegatesFor: z.array(z.string().uuid()).nullable().optional(),
+  /** Let this person switch to the firm-admin view (migration 0234). */
+  canSwitchAdmin: z.boolean().optional(),
   restrictToOwnRecords: z.boolean().optional(),
   dataScopeOverride: z.enum(["all", "branch", "own"]).nullable().optional(),
   customLeaveEntitlements: z.record(z.number()).nullable().optional(),
@@ -151,8 +153,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.permissions != null && !areKnownCapabilities(body.permissions)) {
       return NextResponse.json({ error: "one or more permissions are not recognised" }, { status: 400 });
     }
+    // A sidebar item that was renamed or retired can still be sitting in a
+    // user's saved list. Rejecting the whole save over it blocked every later
+    // toggle for that person, so drop the dead keys and keep the rest.
     if (body.enabledModules != null && !areKnownNavKeys(body.enabledModules)) {
-      return NextResponse.json({ error: "one or more sidebar items are not recognised" }, { status: 400 });
+      const known = new Set(ALL_NAV_KEYS);
+      body.enabledModules = body.enabledModules.filter((k) => known.has(k));
     }
 
     const meta = clientMetaFromHeaders(req.headers);
@@ -233,6 +239,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.allowedBranches !== undefined) patch.allowedBranches = body.allowedBranches;
       if (body.allowedClientTags !== undefined) patch.allowedClientTags = body.allowedClientTags;
       if (body.delegatesFor !== undefined) patch.delegatesFor = body.delegatesFor;
+      if (body.canSwitchAdmin !== undefined) patch.canSwitchAdmin = body.canSwitchAdmin;
       if (body.restrictToOwnRecords !== undefined) patch.restrictToOwnRecords = body.restrictToOwnRecords;
       if (body.dataScopeOverride !== undefined) patch.dataScopeOverride = body.dataScopeOverride;
       if (body.customLeaveEntitlements !== undefined) patch.customLeaveEntitlements = body.customLeaveEntitlements;
@@ -259,6 +266,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         // whenever their current token happens to expire.
         (body.restrictToOwnRecords !== undefined &&
           body.restrictToOwnRecords !== existing.restrictToOwnRecords) ||
+        // Handing someone the admin switch is an access change in its own right.
+        (body.canSwitchAdmin !== undefined && body.canSwitchAdmin !== existing.canSwitchAdmin) ||
         (body.dataScopeOverride !== undefined && body.dataScopeOverride !== existing.dataScopeOverride);
       // users.sessions_invalid_after is the revocation epoch the token check
       // actually reads — revoking the user_sessions rows alone only tidies the

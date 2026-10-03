@@ -15,6 +15,7 @@ import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { ATTENDANCE_STATUSES } from "@/db/schema";
+import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -36,10 +37,13 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit")) || 100));
     const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
     const rows = await withTenant(session.tenantId, async (tx) => {
+      // Same wall as the attendance page: own sub-branch for a head, own row
+      // for everyone else, the whole firm for admin / back office.
+      const walled = dataScopeSqlViaOwnerBranch(await resolveDataScope(tx, session), "a.employee_user_id");
       const r = await tx.execute(sql`
         SELECT a.*, u.name AS employee_name
         FROM attendance a LEFT JOIN users u ON u.id = a.employee_user_id
-        WHERE a.tenant_id = ${session.tenantId}::uuid
+        WHERE a.tenant_id = ${session.tenantId}::uuid AND ${walled}
         ORDER BY a.attendance_date DESC LIMIT ${limit} OFFSET ${offset}
       `);
       return r.rows;

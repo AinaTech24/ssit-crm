@@ -38,7 +38,10 @@ export function DashboardScopeFilter({
   selectedMember,
   dateFrom,
   dateTo,
+  confined = false,
 }: {
+  /** A sub-branch head: one fixed unit, so no branch picker — just their people. */
+  confined?: boolean;
   units: ScopeUnit[];
   /** People in the selected scope. Empty until a scope is picked. */
   members: ScopeMember[];
@@ -75,6 +78,8 @@ export function DashboardScopeFilter({
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      {!confined && (
+        <>
       <span className="text-xs font-medium text-muted-foreground inline-flex items-center gap-1.5">
         <Building2 className="size-3.5" /> Branch
       </span>
@@ -87,6 +92,8 @@ export function DashboardScopeFilter({
         searchable={units.length > 8}
         ariaLabel="View dashboard for a branch or desk"
       />
+        </>
+      )}
 
       {selectedUnit && (
         <>

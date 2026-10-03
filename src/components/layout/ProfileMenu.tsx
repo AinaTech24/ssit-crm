@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Settings, ShieldCheck, Building2, UserCircle, LogOut, ChevronDown, Loader2, CreditCard } from "lucide-react";
+import { Settings, ShieldCheck, Building2, UserCircle, LogOut, ChevronDown, Loader2, CreditCard, Repeat } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 /**
@@ -17,6 +17,8 @@ export function ProfileMenu({
   roleLabel,
   initials,
   avatarUrl,
+  canSwitchAdmin = false,
+  adminMode = false,
 }: {
   name: string;
   email?: string;
@@ -24,6 +26,10 @@ export function ProfileMenu({
   initials: string;
   /** Profile photo (uploaded in Settings → My profile). Falls back to initials. */
   avatarUrl?: string | null;
+  /** This person may switch between their sub-branch view and the admin view. */
+  canSwitchAdmin?: boolean;
+  /** Currently in the admin view. */
+  adminMode?: boolean;
   /** License plan key, e.g. "premium" — shown as the "premium" chip. */
   /** License status, e.g. "trial" / "active". */
   /** e.g. "19 Jun" — shown as a "Trial ends" chip inside the menu. */
@@ -31,6 +37,7 @@ export function ProfileMenu({
   const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [switching, setSwitching] = useState(false);
   // Anchor the (portalled) menu to the trigger. Fixed-positioned so no
   // overflow:auto/hidden ancestor — like the scrolling <main> — can clip it.
   const [coords, setCoords] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
@@ -73,6 +80,22 @@ export function ProfileMenu({
   function requestLogout() {
     setOpen(false);
     setConfirmOpen(true);
+  }
+
+  async function switchView() {
+    setSwitching(true);
+    try {
+      await fetch("/api/auth/view-mode", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: adminMode ? "default" : "admin" }),
+      });
+    } catch {
+      /* fall through to the reload — it shows whichever view actually applies */
+    }
+    // A full load, not router.refresh(): the sidebar, the data wall and every
+    // open page were computed for the other view.
+    window.location.href = "/dashboard";
   }
 
   async function doLogout() {
@@ -150,6 +173,17 @@ export function ProfileMenu({
               <MenuLink href="/dashboard/settings/firm-profile" icon={Building2} label="Firm profile" onClick={() => setOpen(false)} />
             </div>
             <div className="border-t border-border p-1.5">
+              {canSwitchAdmin && (
+                <button
+                  type="button"
+                  onClick={switchView}
+                  disabled={switching}
+                  className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-foreground/80 hover:bg-secondary hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  {switching ? <Loader2 className="size-4 animate-spin" /> : <Repeat className="size-4 text-muted-foreground" />}
+                  {adminMode ? "Switch to my sub-branch view" : "Switch to admin view"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={requestLogout}

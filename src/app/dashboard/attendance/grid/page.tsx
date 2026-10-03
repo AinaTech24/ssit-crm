@@ -5,6 +5,7 @@ import { withTenant } from "@/db/client";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
+import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
 import { ATTENDANCE_STATUS_SHORT, ATTENDANCE_STATUS_TONE, ATTENDANCE_STATUS_LABELS } from "@/lib/attendance/policy";
 import { DownloadButton } from "@/components/common/SecureLinkButtons";
 
@@ -39,13 +40,26 @@ export default async function AttendanceGridPage({
   const label = new Date(y, m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
 
   const { employees, cells } = await withTenant(session.tenantId, async (tx) => {
+    // Walled like the attendance list: a sub-branch head's grid is their own
+    // sub-branch's people, not the firm's.
+    const scope = await resolveDataScope(tx, session);
+    const walled = dataScopeSqlViaOwnerBranch(scope, "attendance.employee_user_id");
+    const peopleInScope =
+      scope.kind === "all"
+        ? sql`TRUE`
+        : scope.kind === "desks"
+          ? sql`desk_id IN (${sql.join(scope.deskIds.map((d) => sql`${d}::uuid`), sql`, `)})`
+          : scope.kind === "branches"
+            ? sql`branch_id IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`
+            : sql`id = ${scope.userId}::uuid`;
     const emp = await tx.execute(sql`
-      SELECT id, name FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' ORDER BY name
+      SELECT id, name FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND ${peopleInScope} ORDER BY name
     `);
     const att = await tx.execute(sql`
       SELECT employee_user_id, EXTRACT(DAY FROM attendance_date)::int AS day, status
       FROM attendance
       WHERE tenant_id = ${session.tenantId}::uuid
+        AND ${walled}
         AND attendance_date >= ${monthStart}::date AND attendance_date < ${monthEnd}::date
     `);
     return { employees: emp.rows as any[], cells: att.rows as any[] };

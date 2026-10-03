@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { ModuleKpis } from "@/components/modules/ModuleKpis";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
@@ -203,7 +204,17 @@ export default async function ReviewMeetingsPage({
               )})`;
               return delegatedSql ? sql`(${branches} OR ${delegatedSql})` : branches;
             })()
-          : delegatedSql;
+          : meetingScope.scope.kind === "desks"
+            ? (() => {
+                // A sub-branch head's RM filter is their own desk's people — without
+                // this case it fell through to "delegates only" and was empty.
+                const desk = sql`desk_id IN (${sql.join(
+                  meetingScope.scope.deskIds.map((d) => sql`${d}::uuid`),
+                  sql`, `
+                )})`;
+                return delegatedSql ? sql`(${desk} OR ${delegatedSql})` : desk;
+              })()
+            : delegatedSql;
     const rmRows =
       rmFilterSql === null
         ? { rows: [] }
@@ -266,6 +277,17 @@ export default async function ReviewMeetingsPage({
           <AddMeetingButton />
         </div>
       </div>
+
+      {/* Computed under the same wall as the list; these were being queried and
+          never shown. */}
+      <ModuleKpis
+        items={[
+          { label: "Upcoming", value: Number(data.stats?.upcoming ?? 0), icon: Calendar },
+          { label: "This week", value: Number(data.stats?.this_week ?? 0), icon: Clock },
+          { label: "Completed this month", value: Number(data.stats?.completed_mtd ?? 0), icon: CheckCircle2, tone: "emerald" },
+          { label: "Overdue", value: Number(data.stats?.overdue ?? 0), icon: AlertTriangle, tone: "rose" },
+        ]}
+      />
 
       {todays.length > 0 && (
         <div className="card-surface p-4">

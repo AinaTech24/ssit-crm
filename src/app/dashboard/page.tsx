@@ -31,6 +31,7 @@ import { DashboardViewSwitch } from "@/components/dashboards/DashboardViewSwitch
 import { ReviewMeetingsOverdue } from "@/components/dashboards/ReviewMeetingsOverdue";
 import { BranchCockpit } from "@/components/dashboards/BranchCockpit";
 import { primaryRoleNode } from "@/lib/auth/role-tree";
+import { confinedDeskId } from "@/lib/scope/view-filter";
 import { ROLE_LABELS } from "@/lib/auth/rbac";
 import { getDefaultBoard } from "@/lib/dashboards/service";
 import { DashboardView } from "@/components/dashboards/custom/DashboardView";
@@ -60,15 +61,21 @@ export default async function DashboardPage({
   const dateTo = (sp.date_to ?? "").slice(0, 10);
   const rmParam = (sp.rm ?? "").trim();
   // "b:<branchId>" or "d:<deskId>" — one param for both levels of the org.
-  // ?as=rm — a firm admin looking at their OWN book instead of the firm.
-  const asPersonal = (sp.as ?? "") === "rm";
+  // ?as=ra — a firm admin looking at the research dashboard instead of the firm.
+  const asResearch = (sp.as ?? "") === "ra";
   let unitParam = (sp.unit ?? "").trim();
   // A branch head landing on /dashboard cold (no ?unit= yet — that's every
   // normal login) fell through every "is a unit selected?" check below to
   // OwnerCockpit, the FIRM-WIDE view — the exact bug this default closes. A
   // branch head must default to THEIR branch, never to "no unit chosen".
   const isBranchHeadSession = !roles.includes("owner") && roles.includes("branch_head") && !!session.branchId;
-  if (!unitParam && isBranchHeadSession) unitParam = `b:${session.branchId}`;
+  // A head confined to one sub-branch defaults to THAT desk, not the whole
+  // registered office (which also holds every sibling sub-branch).
+  const confinedDesk = isBranchHeadSession
+    ? await withTenant(session.tenantId, (tx) => confinedDeskId(tx, session))
+    : null;
+  if (confinedDesk) unitParam = `d:${confinedDesk}`;
+  else if (!unitParam && isBranchHeadSession) unitParam = `b:${session.branchId}`;
 
   // ── Custom default board ─────────────────────────────────────────────────
   // If the user has set one of their "My Dashboards" as default, render it here
@@ -157,13 +164,19 @@ export default async function DashboardPage({
         const branchIds = new Set(branches.map((b) => b.id));
         const desks = (deskRes.rows as { id: string; name: string; branch_id: string }[])
           .filter((d) => branchIds.has(String(d.branch_id)))
+          // A sub-branch head sees their own sub-branch and no sibling.
+          .filter((d) => !confinedDesk || String(d.id) === confinedDesk)
           .map((d) => ({ id: String(d.id), name: d.name ?? "—", branchId: String(d.branch_id) }));
 
         const units: ScopeUnit[] = [];
-        for (const b of branches) {
-          units.push({ value: `b:${b.id}`, label: b.name, depth: 0 });
-          for (const d of desks.filter((x) => x.branchId === b.id)) {
-            units.push({ value: `d:${d.id}`, label: d.name, depth: 1 });
+        if (confinedDesk) {
+          for (const d of desks) units.push({ value: `d:${d.id}`, label: d.name, depth: 0 });
+        } else {
+          for (const b of branches) {
+            units.push({ value: `b:${b.id}`, label: b.name, depth: 0 });
+            for (const d of desks.filter((x) => x.branchId === b.id)) {
+              units.push({ value: `d:${d.id}`, label: d.name, depth: 1 });
+            }
           }
         }
 
@@ -174,7 +187,7 @@ export default async function DashboardPage({
             ? branches.find((b) => b.id === unitParam.slice(2))
             : undefined;
         if (!branch) {
-          return { units, branch: undefined, desk: undefined, members: [] as ScopeMember[] };
+          return { units, branch: undefined, desk: undefined, members: [] as ScopeMember[], memberRoles: {} as Record<string, string[]> };
         }
 
         const memberRes = await tx.execute(sql`
@@ -197,13 +210,17 @@ export default async function DashboardPage({
           roleLabel:
             primaryRoleNode(u.roles)?.label ?? ROLE_LABELS[(u.roles ?? [])[0] ?? ""] ?? "Team member",
         }));
-        return { units, branch, desk, members };
+        const memberRoles: Record<string, string[]> = {};
+        for (const u of memberRes.rows as { id: string; roles: string[] | null }[]) {
+          memberRoles[String(u.id)] = u.roles ?? [];
+        }
+        return { units, branch, desk, members, memberRoles };
       });
 
       const selected = rmParam ? scope.members.find((m) => m.id === rmParam) : undefined;
       memberBar = (
         <div className="flex flex-wrap items-center gap-2">
-          <DashboardViewSwitch current={asPersonal ? "rm" : "admin"} />
+          {roles.includes("owner") && <DashboardViewSwitch current={asResearch ? "ra" : "admin"} />}
           <DashboardScopeFilter
             units={scope.units}
             members={scope.members}
@@ -211,14 +228,21 @@ export default async function DashboardPage({
             selectedMember={selected ? rmParam : ""}
             dateFrom={dateFrom}
             dateTo={dateTo}
+            confined={!!confinedDesk}
           />
         </div>
       );
       // Whole firm → firm cockpit. Branch or desk → that team. Person → their own.
+      const selectedRoles = selected ? scope.memberRoles[selected.id] ?? [] : [];
+      // A research analyst has no book — no SIP, no net sales — so picking one
+      // must open THEIR dashboard, not the RM one that is all about those.
+      const selectedIsRa = selectedRoles.some((r) => r === "ra_research" || r === "ra_sales");
       dash = selected
-        ? await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
-        : asPersonal
-          ? await RmDashboard({ session, from: dateFrom, to: dateTo })
+        ? selectedIsRa
+          ? await RaDashboard({ session, rmId: rmParam || undefined, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
+          : await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
+        : asResearch
+          ? await RaDashboard({ session, asAdmin: true, rmId: rmParam || undefined })
           : scope.branch
           ? await BranchCockpit({
               session,
@@ -228,7 +252,7 @@ export default async function DashboardPage({
               deskName: scope.desk?.name,
             })
           : await OwnerCockpit({ session, period, customStart: pstart, customFrom: pfrom, customTo: pto });
-      showReviewOverdue = !selected && !scope.branch && !asPersonal;
+      showReviewOverdue = !selected && !scope.branch && !asResearch;
       if (!selected && !scope.branch) {
         headerControls = <DashboardHeaderBar period={period} currentLabel={periodLabel} variant="light" />;
       }

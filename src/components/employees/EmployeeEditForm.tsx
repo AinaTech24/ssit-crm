@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Save,
@@ -104,6 +104,7 @@ export type EmployeeFormValues = {
   /** Per-user BRANCH data grant. null / [] = own records only. */
   allowedBranches: string[] | null;
   allowedClientTags: string[] | null;
+  canSwitchAdmin: boolean;
   delegatesFor: string[] | null;
   restrictToOwnRecords: boolean;
   dataScopeOverride: "all" | "branch" | "own" | null;
@@ -150,6 +151,15 @@ export function EmployeeEditForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // The form as loaded; each successful save moves it forward.
+  const initialRef = useRef({
+    v: { ...employee, permissions: employee.permissions || [] } as EmployeeFormValues,
+    customActive: !!employee.permissions,
+    moduleAccessActive: !!employee.enabledModules,
+    branchAccess: employee.allowedBranches ?? ([] as string[]),
+    bookTags: employee.allowedClientTags ?? ([] as string[]),
+    delegatesFor: employee.delegatesFor ?? ([] as string[]),
+  });
 
   function toggleRole(k: string) {
     setV((p) => ({ ...p, roles: p.roles.includes(k) ? p.roles.filter((r) => r !== k) : [...p.roles, k] }));
@@ -363,10 +373,19 @@ export function EmployeeEditForm({
     setSaved(false);
     setSaved(false);
     try {
-      const r = await fetch(`/api/employees/${employee.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      // Send only what this save changed. The whole form used to go in one
+      // PATCH, so a legacy value in an UNTOUCHED field (an EUIN or ARN saved
+      // before the format rule) failed validation and blocked a sidebar toggle
+      // that had nothing to do with it — access saved for some team members
+      // and errored for others.
+      const buildBody = (
+        v: EmployeeFormValues,
+        customActive: boolean,
+        moduleAccessActive: boolean,
+        branchAccess: string[],
+        bookTags: string[],
+        delegatesFor: string[]
+      ) => ({
           name: v.name,
           phone: v.phone || null,
           roles: v.roles,
@@ -376,6 +395,7 @@ export function EmployeeEditForm({
           // would be a stored no-op that looks meaningful on screen.
           allowedBranches: seesAllBranchesByRole ? null : branchAccess,
           allowedClientTags: bookTags,
+          canSwitchAdmin: !!v.canSwitchAdmin,
           delegatesFor,
           restrictToOwnRecords: v.dataScopeOverride === "own",
           dataScopeOverride: v.dataScopeOverride,
@@ -401,7 +421,25 @@ export function EmployeeEditForm({
           dscExpiryAt: v.dscExpiryAt || null,
           status: v.status,
           customLeaveEntitlements: v.customLeaveEntitlements,
-        }),
+        });
+      const next = buildBody(v, customActive, moduleAccessActive, branchAccess, bookTags, delegatesFor);
+      const init = initialRef.current;
+      const prev = buildBody(
+        init.v,
+        init.customActive,
+        init.moduleAccessActive,
+        init.branchAccess,
+        init.bookTags,
+        init.delegatesFor
+      );
+      const body: Record<string, unknown> = {};
+      for (const k of Object.keys(next) as (keyof typeof next)[]) {
+        if (JSON.stringify(next[k]) !== JSON.stringify(prev[k])) body[k] = next[k];
+      }
+      const r = await fetch(`/api/employees/${employee.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
@@ -416,6 +454,7 @@ export function EmployeeEditForm({
         const base = data?.error ?? `Save failed (HTTP ${r.status})`;
         throw new Error(fields ? `${base} — check: ${fields}` : base);
       }
+      initialRef.current = { v, customActive, moduleAccessActive, branchAccess, bookTags, delegatesFor };
       setSaved(true);
       router.refresh();
     } catch (err: any) {
@@ -712,6 +751,28 @@ export function EmployeeEditForm({
                 because a firm's back office splits by book, not by geography:
                 one person runs Motilal Oswal, another Mutual Fund, and
                 back_office is firm-wide in the wall so both saw everything. */}
+            {/* Opt-in firm-admin view for someone walled to their sub-branch day
+                to day — a profile-menu switch, not a role change. */}
+            {!isOwnerRole && (
+              <label className="flex items-start gap-2 border rounded-md p-2.5 bg-card cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={!!v.canSwitchAdmin}
+                  onChange={(e) => {
+                    setV((p) => ({ ...p, canSwitchAdmin: e.target.checked }));
+                    setSaved(false);
+                  }}
+                />
+                <span>
+                  <span className="text-xs font-medium block">Can switch to admin view</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Adds a "Switch to admin view" option to their profile menu. They keep their own sub-branch view by default and get full firm-admin access — every module and sub-branch — only while switched.
+                  </span>
+                </span>
+              </label>
+            )}
+
             {!isOwnerRole && (
               <div className="border rounded-md p-2.5 bg-card space-y-1.5">
                 <div className="text-xs font-medium">Client books</div>

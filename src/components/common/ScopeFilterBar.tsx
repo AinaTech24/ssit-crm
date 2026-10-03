@@ -57,9 +57,14 @@ export function ScopeFilterBar({
   }
 
   if (units.length === 0) return null;
+  // One unit means a sub-branch head confined to their own: there is nothing
+  // to choose between, so the sub-branch dropdown is the firm admin's control,
+  // not theirs. They still get the team-member picker for their own people.
+  const confined = units.length === 1;
 
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+      {!confined && (
       <div className="inline-flex items-center gap-1.5">
         <Building2 className="size-3.5 text-muted-foreground" />
         <select
@@ -76,6 +81,7 @@ export function ScopeFilterBar({
           ))}
         </select>
       </div>
+      )}
 
       <div className="inline-flex items-center gap-1.5">
         <User className="size-3.5 text-muted-foreground" />
@@ -88,7 +94,7 @@ export function ScopeFilterBar({
           title={members.length === 0 ? `Pick a ${unitLabel.toLowerCase()} first` : undefined}
         >
           <option value="">
-            {members.length === 0 ? `Pick a ${unitLabel.toLowerCase()} first` : "Everyone in it"}
+            {members.length === 0 ? `Pick a ${unitLabel.toLowerCase()} first` : confined ? "Everyone" : "Everyone in it"}
           </option>
           {members.map((m) => (
             <option key={m.id} value={m.id}>
@@ -98,7 +104,7 @@ export function ScopeFilterBar({
         </select>
       </div>
 
-      {(selectedUnit || selectedMember) && (
+      {((!confined && selectedUnit) || selectedMember) && (
         <button
           type="button"
           onClick={() => go("", "")}

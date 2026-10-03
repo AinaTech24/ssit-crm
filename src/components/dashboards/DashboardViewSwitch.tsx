@@ -1,29 +1,24 @@
 "use client";
 
 /**
- * "Admin view" ⇄ "My RM view" for someone who is both.
+ * "Admin view" ⇄ "Research view" for the firm admin.
  *
- * A firm admin's dashboard is the firm cockpit — totals, every branch, the
- * whole book. That is the right default and the wrong thing when the same
- * person also carries clients and wants their own day: their tasks, their
- * reviews, their SIPs.
- *
- * Picking a person from the scope dropdowns already shows that person's RM
- * dashboard; this is the shortcut to one's OWN, without hunting for yourself
- * in a roster. Switching clears any desk or person that was selected, because
- * "my view" and "that desk's view" are different questions.
+ * The firm cockpit is the default; the research view is the same dashboard the
+ * research analysts see — meetings and portfolio reviews by RM — so an admin
+ * can check it without logging in as one. Switching clears any desk or person
+ * that was selected, because those are different questions.
  */
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Building2, UserRound } from "lucide-react";
+import { Building2, FlaskConical } from "lucide-react";
 
-export function DashboardViewSwitch({ current }: { current: "admin" | "rm" }) {
+export function DashboardViewSwitch({ current }: { current: "admin" | "ra" }) {
   const router = useRouter();
   const sp = useSearchParams();
 
-  function go(next: "admin" | "rm") {
+  function go(next: "admin" | "ra") {
     const params = new URLSearchParams(sp?.toString() ?? "");
-    if (next === "rm") params.set("as", "rm");
+    if (next === "ra") params.set("as", "ra");
     else params.delete("as");
     // A scope chosen for the firm view means nothing in a personal one.
     params.delete("unit");
@@ -45,10 +40,10 @@ export function DashboardViewSwitch({ current }: { current: "admin" | "rm" }) {
       </button>
       <button
         type="button"
-        onClick={() => go("rm")}
-        className={`${base} ${current === "rm" ? "bg-brand-cyan text-white" : "text-muted-foreground hover:bg-accent"}`}
+        onClick={() => go("ra")}
+        className={`${base} ${current === "ra" ? "bg-brand-cyan text-white" : "text-muted-foreground hover:bg-accent"}`}
       >
-        <UserRound className="size-3.5" /> My RM view
+        <FlaskConical className="size-3.5" /> Research view
       </button>
     </div>
   );

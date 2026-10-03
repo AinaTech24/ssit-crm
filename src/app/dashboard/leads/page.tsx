@@ -30,6 +30,7 @@ import { LeadsViewPersist } from "@/components/leads/LeadsViewPersist";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
 import { ScopeBreakdownCards } from "@/components/common/ScopeBreakdownCards";
+import { usersInScopeSql } from "@/lib/auth/data-scope";
 import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { Pager } from "@/components/common/Pager";
 import { dateRangeCond, dateRangeFilter } from "@/lib/filters/date-range";
@@ -268,6 +269,7 @@ export default async function LeadsPage({
     const rmRows = await tx.execute(sql`
       SELECT id, name FROM users
       WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+        AND ${await usersInScopeSql(tx, session)}
       ORDER BY name ASC
     `);
     // Headline counts. Deliberately NOT filtered by the list's stage/search
