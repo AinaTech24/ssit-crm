@@ -21,7 +21,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth/session";
 import { ROLE_LABELS } from "@/lib/auth/rbac";
-import { explainDataScope } from "@/lib/auth/data-scope";
+import { explainDataScope, loadScopeRow } from "@/lib/auth/data-scope";
 
 export type ScopeUnit = {
   /** "b:<branchId>" or "d:<deskId>". */
@@ -113,8 +113,14 @@ export function scopeFilterSql(
  * and anyone with a wider grant get null.
  */
 export async function confinedDeskId(tx: any, session: SessionUser): Promise<string | null> {
+  // Only the firm admin sees every sub-branch. Everyone else is held to their
+  // own desk for the PICKERS, whatever their data wall happens to allow — a
+  // wide grant should not turn the dropdown into a list of other teams.
+  if (session.roles.includes("owner")) return null;
   const { scope } = await explainDataScope(tx, session);
-  return scope.kind === "desks" && scope.deskIds.length === 1 ? scope.deskIds[0] : null;
+  if (scope.kind === "desks" && scope.deskIds.length === 1) return scope.deskIds[0];
+  const row = await loadScopeRow(tx, session.tenantId, session.userId);
+  return row.deskId;
 }
 
 /**
@@ -128,6 +134,8 @@ export async function loadScopeUnits(
   session: SessionUser
 ): Promise<{ units: ScopeUnit[]; branchIds: string[] }> {
   const confined = await confinedDeskId(tx, session);
+  // Not the firm admin and no sub-branch of their own: nothing to pick from.
+  if (!confined && !session.roles.includes("owner")) return { units: [], branchIds: [] };
   const [branchRes, deskRes] = await Promise.all([
     tx.execute(sql`
       SELECT id, name FROM branches
