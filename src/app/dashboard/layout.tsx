@@ -90,7 +90,6 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import ProductTour from "@/components/layout/ProductTour";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { ProfileMenu } from "@/components/layout/ProfileMenu";
-import { canSwitchAdmin } from "@/lib/auth/view-mode";
 import { ToastProvider } from "@/components/ui/Toast";
 import { buildTenantThemeCss } from "@/lib/branding/theme";
 
@@ -572,7 +571,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const roleLabel = primaryRoleLabel(session.roles);
   // Sub-branch heads an admin has given the admin-view switch to.
   const adminMode = session.viewMode === "admin";
-  const switchAdminAvailable = adminMode || (await canSwitchAdmin(session.tenantId, session.userId));
 
   const initials = session.name
     .split(" ")
@@ -714,8 +712,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
               roleLabel={adminMode ? `${roleLabel} · Admin view` : roleLabel}
               initials={initials}
               avatarUrl={avatarUrl}
-              canSwitchAdmin={switchAdminAvailable}
-              adminMode={adminMode}
             />
           </div>
         </div>

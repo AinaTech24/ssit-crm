@@ -32,6 +32,8 @@ import { ReviewMeetingsOverdue } from "@/components/dashboards/ReviewMeetingsOve
 import { BranchCockpit } from "@/components/dashboards/BranchCockpit";
 import { primaryRoleNode } from "@/lib/auth/role-tree";
 import { confinedDeskId } from "@/lib/scope/view-filter";
+import { AdminViewToggle } from "@/components/dashboards/AdminViewToggle";
+import { canSwitchAdmin } from "@/lib/auth/view-mode";
 import { ROLE_LABELS } from "@/lib/auth/rbac";
 import { getDefaultBoard } from "@/lib/dashboards/service";
 import { DashboardView } from "@/components/dashboards/custom/DashboardView";
@@ -60,6 +62,14 @@ export default async function DashboardPage({
   const dateFrom = (sp.date_from ?? "").slice(0, 10);
   const dateTo = (sp.date_to ?? "").slice(0, 10);
   const rmParam = (sp.rm ?? "").trim();
+  // Sub-branch heads an admin has given the admin-view switch to.
+  const adminMode = session.viewMode === "admin";
+  const showAdminToggle = adminMode || (await canSwitchAdmin(session.tenantId, session.userId));
+  const adminToggle = showAdminToggle ? (
+    <div className="mb-3">
+      <AdminViewToggle adminMode={adminMode} />
+    </div>
+  ) : null;
   // "b:<branchId>" or "d:<deskId>" — one param for both levels of the org.
   // ?as=ra — a firm admin looking at the research dashboard instead of the firm.
   const asResearch = (sp.as ?? "") === "ra";
@@ -97,6 +107,7 @@ export default async function DashboardPage({
               never self-updated until they reloaded the page. */}
           <AutoRefresh intervalMs={30000} />
           <AnnouncementsStrip session={session} />
+          {adminToggle}
           <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
             <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
               <Star className="size-4 text-amber-500" /> {board.name}
@@ -312,6 +323,7 @@ export default async function DashboardPage({
           Conservative interval — pauses when the tab is hidden. */}
       <AutoRefresh intervalMs={30000} />
       <AnnouncementsStrip session={session} />
+      {adminToggle}
       {memberBar && (
         <div className="mb-5 mt-1 flex items-center justify-between gap-3 flex-wrap">
           {memberBar}
