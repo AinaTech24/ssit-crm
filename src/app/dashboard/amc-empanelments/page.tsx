@@ -11,7 +11,7 @@ import { Plus, Phone, Mail, FileUp } from "lucide-react";
 import { and, eq, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap, requireAny } from "@/lib/auth/rbac";
+import { can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { amcEmpanelments, EMPANELMENT_CATEGORIES, EMPANELMENT_CATEGORY_LABEL } from "@/db/schema";
 
@@ -34,7 +34,18 @@ export default async function AmcEmpanelmentsListPage({
   // AMC escalation tree — are commercial relationship data, not something every
   // desk needs. `owner` still passes via the short-circuit in can(), and an
   // owner can delegate to a specific person with the capability tick.
-  requireAny(session.roles, ["amc_empanelment.view"], session.permissions);
+  // A missing capability is an expected state, not a crash: say so instead of
+  // dropping the user on the generic error page.
+  if (!can(session.roles, "amc_empanelment.view", session.permissions)) {
+    return (
+      <div className="card-surface p-8 text-center max-w-xl mx-auto mt-10">
+        <h1 className="text-lg font-semibold">AMC empanelments</h1>
+        <p className="text-sm text-muted-foreground mt-2">
+          You do not have access to this page. Ask your firm admin to enable “AMC empanelments” on your employee record.
+        </p>
+      </div>
+    );
+  }
   await assertActiveLicense(session.tenantId, session.roles);
   const sp = await searchParams;
   const statusFilter = sp.status ?? "empanelled";
