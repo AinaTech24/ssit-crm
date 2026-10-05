@@ -38,6 +38,9 @@ const PatchBody = z.object({
   escalationName: z.string().max(120).nullable().optional(),
   escalationEmail: z.string().email().nullable().optional().or(z.literal("")),
   escalationPhone: z.string().max(40).nullable().optional(),
+  billingName: z.string().max(120).nullable().optional(),
+  billingEmail: z.string().email().nullable().optional().or(z.literal("")),
+  billingPhone: z.string().max(40).nullable().optional(),
   additionalContacts: z
     .array(
       z.object({

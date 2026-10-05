@@ -103,6 +103,9 @@ export const amcEmpanelments = pgTable(
     escalationName: text("escalation_name"),
     escalationEmail: text("escalation_email"),
     escalationPhone: text("escalation_phone"),
+    billingName: text("billing_name"),
+    billingEmail: text("billing_email"),
+    billingPhone: text("billing_phone"),
 
     /**
      * Anything beyond the 3 primaries — Marketing / Product / Branch

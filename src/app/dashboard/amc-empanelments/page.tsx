@@ -181,7 +181,7 @@ export default async function AmcEmpanelmentsListPage({
         </div>
       ) : (
         <div className="card-surface table-scroll">
-          <table className="w-full text-xs min-w-[900px]">
+          <table className="w-full text-xs min-w-[1000px]">
             <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 text-left">AMC</th>
@@ -190,6 +190,7 @@ export default async function AmcEmpanelmentsListPage({
                 <th className="px-3 py-2 text-left">RM contact</th>
                 <th className="px-3 py-2 text-left">Ops contact</th>
                 <th className="px-3 py-2 text-left">Escalation</th>
+                <th className="px-3 py-2 text-left">Billing</th>
                 <th className="px-3 py-2 text-left">Status</th>
               </tr>
             </thead>
@@ -239,6 +240,11 @@ export default async function AmcEmpanelmentsListPage({
                     name={r.escalationName}
                     email={r.escalationEmail}
                     phone={r.escalationPhone}
+                  />
+                  <ContactCell
+                    name={r.billingName}
+                    email={r.billingEmail}
+                    phone={r.billingPhone}
                   />
                   <td className="px-3 py-2">
                     <span

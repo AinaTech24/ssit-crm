@@ -20,7 +20,7 @@ import { can } from "@/lib/auth/rbac";
 import { withTenant } from "@/db/client";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
 import { usersInScopeSql } from "@/lib/auth/data-scope";
-import { parseScope, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
+import { parseScope, loadScopeUnits, loadScopeMembers, canPickScope, resolveQueueOwners } from "@/lib/scope/view-filter";
 import { buildCommandQueue, type ActionGroup, type ActionItem, type Severity } from "@/lib/command-center/queue";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -77,12 +77,19 @@ export default async function CommandCenterPage({
   const { allGroups, userOptions, clientName, scopeUnits, scopeMembers } = await withTenant(
     session.tenantId,
     async (tx) => {
+      // Managers' worklist covers a SET of people: their wall, narrowed by the
+      // sub-branch / RM dropdowns. null means the whole firm (the firm admin
+      // who has not narrowed it). Everyone else keeps the personal queue.
+      const owners = firmWide
+        ? await resolveQueueOwners(tx, session, { ...scopeSel, rm: scopeSel.rm || userParam })
+        : undefined;
       const groups = await buildCommandQueue(
         tx as any,
-        {
-          ...(userParam ? { userId: userParam, firmWide: false } : { userId: session.userId, firmWide }),
-          clientId,
-        }
+        owners === undefined
+          ? { userId: session.userId, firmWide, clientId }
+          : owners === null
+            ? { userId: session.userId, firmWide: true, clientId }
+            : { userId: session.userId, firmWide: false, userIds: owners, clientId }
       );
       // Resolve the selected client's name for the picker chip.
       let clientName = "";

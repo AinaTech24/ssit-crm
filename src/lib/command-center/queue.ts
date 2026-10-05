@@ -73,8 +73,15 @@ type Tx = { execute: (q: any) => Promise<{ rows: any[] }> };
  * firm-wide. The column is a hardcoded constant from the call sites below
  * (never user input) so sql.raw is safe; the userId is bound as a parameter.
  */
-function scope(col: string, userId: string, firmWide: boolean) {
-  return firmWide ? sql`` : sql` AND ${sql.raw(col)} = ${userId}`;
+function scope(col: string, owners: string | string[], firmWide: boolean) {
+  if (firmWide) return sql``;
+  if (Array.isArray(owners)) {
+    // A set of people (a sub-branch, or a head's own team). An empty set is
+    // "nobody", never "everybody".
+    if (owners.length === 0) return sql` AND FALSE`;
+    return sql` AND ${sql.raw(col)} IN (${sql.join(owners.map((o) => sql`${o}::uuid`), sql`, `)})`;
+  }
+  return sql` AND ${sql.raw(col)} = ${owners}`;
 }
 
 /** Append mine=1 to a personal-scoped deep link so the module lands pre-filtered. */
@@ -85,9 +92,21 @@ function href(base: string, firmWide: boolean, extra = "") {
 
 export async function buildCommandQueue(
   tx: Tx,
-  opts: { userId: string; firmWide: boolean; clientId?: string }
+  opts: {
+    userId: string;
+    firmWide: boolean;
+    clientId?: string;
+    /**
+     * Scope the queue to this SET of people instead of one user or the whole
+     * firm — a sub-branch head's team, or one sub-branch picked from the
+     * dropdown. Takes precedence over firmWide (callers pass firmWide: false).
+     */
+    userIds?: string[] | null;
+  }
 ): Promise<ActionGroup[]> {
   const { userId, firmWide, clientId } = opts;
+  const owners: string | string[] = opts.userIds ?? userId;
+  const ownerList: string[] | null = Array.isArray(owners) ? owners : null;
   const groups: ActionGroup[] = [];
 
   // Per-user snooze/dismiss set — items the user deferred or dismissed are
@@ -119,7 +138,7 @@ export async function buildCommandQueue(
       WHERE status IN ('open','in_progress','waiting_customer','escalated')
         AND sla_resolution_at IS NOT NULL
         AND sla_resolution_at < now()
-        ${scope("assigned_to_user_id", userId, firmWide)}${cscope("investor_id")}
+        ${scope("assigned_to_user_id", owners, firmWide)}${cscope("investor_id")}
       ORDER BY sla_resolution_at ASC
       LIMIT 5
     `);
@@ -152,7 +171,7 @@ export async function buildCommandQueue(
       JOIN investors i ON i.id = s.investor_id
       WHERE (s.status = 'rejected' OR COALESCE(NULLIF(s.consecutive_failures,''),'0')::int > 0)
         AND s.status <> 'stopped'
-        ${scope("s.rm_id", userId, firmWide)}${cscope("s.investor_id")}
+        ${scope("s.rm_id", owners, firmWide)}${cscope("s.investor_id")}
       ORDER BY COALESCE(NULLIF(s.consecutive_failures,''),'0')::int DESC, s.amount DESC NULLS LAST
       LIMIT 5
     `);
@@ -184,7 +203,7 @@ export async function buildCommandQueue(
       FROM investors
       WHERE (status = 'redemption_risk' OR redemption_risk_flagged_at IS NOT NULL)
         AND deleted_at IS NULL
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY aum DESC NULLS LAST, redemption_risk_flagged_at DESC NULLS LAST
       LIMIT 5
     `);
@@ -218,7 +237,7 @@ export async function buildCommandQueue(
         AND deleted_at IS NULL
         AND next_review_at IS NOT NULL
         AND next_review_at < now()
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY aum DESC NULLS LAST, next_review_at ASC
       LIMIT 5
     `);
@@ -230,7 +249,7 @@ export async function buildCommandQueue(
         severity: "today",
         tone: "amber",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide, "reviews_due=1"),
+        href: href("/dashboard/investors", firmWide || ownerList !== null, "reviews_due=1"),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -254,7 +273,7 @@ export async function buildCommandQueue(
       LEFT JOIN leads l ON l.id = m.lead_id
       WHERE m.status IN ('scheduled','confirmed')
         AND m.meeting_date::date = current_date
-        ${scope("m.rm_id", userId, firmWide)}${cscope("m.investor_id")}
+        ${scope("m.rm_id", owners, firmWide)}${cscope("m.investor_id")}
       ORDER BY m.meeting_date ASC
       LIMIT 5
     `);
@@ -279,13 +298,14 @@ export async function buildCommandQueue(
   }
 
   // ── 4c. Leave requests to approve (managers only) ────────────────────
-  if (firmWide && !clientId) {
+  if ((firmWide || (ownerList && ownerList.length > 1)) && !clientId) {
     const r = await tx.execute(sql`
       SELECT la.id, la.leave_type, la.from_date, la.to_date, la.no_of_days,
              u.name AS employee_name, count(*) OVER() AS total
       FROM leave_applications la
       LEFT JOIN users u ON u.id = la.employee_user_id
       WHERE la.status = 'requested'
+        ${ownerList ? scope("la.employee_user_id", ownerList, false) : sql``}
       ORDER BY la.created_at ASC
       LIMIT 5
     `);
@@ -347,7 +367,7 @@ export async function buildCommandQueue(
           OR (ckyc_expiry_at IS NOT NULL
               AND ckyc_expiry_at BETWEEN current_date AND current_date + interval '30 days')
         )
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY ckyc_expiry_at ASC NULLS FIRST
       LIMIT 5
     `);
@@ -359,7 +379,7 @@ export async function buildCommandQueue(
         severity: "today",
         tone: "amber",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide, "kyc_expiring=1"),
+        href: href("/dashboard/investors", firmWide || ownerList !== null, "kyc_expiring=1"),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -385,7 +405,7 @@ export async function buildCommandQueue(
         AND deleted_at IS NULL
         AND due_at IS NOT NULL
         AND due_at < now()
-        ${scope("assignee_id", userId, firmWide)}${cscope("related_investor_id")}
+        ${scope("assignee_id", owners, firmWide)}${cscope("related_investor_id")}
       ORDER BY due_at ASC
       LIMIT 5
     `);
@@ -436,7 +456,7 @@ export async function buildCommandQueue(
         AND stage NOT IN ('not_qualified','lost','not_interested','converted')
         AND next_follow_up_at IS NOT NULL
         AND next_follow_up_at < now()
-        ${scope("owner_id", userId, firmWide)}
+        ${scope("owner_id", owners, firmWide)}
       ORDER BY next_follow_up_at ASC
       LIMIT 5
     `);
@@ -448,7 +468,7 @@ export async function buildCommandQueue(
         severity: "today",
         tone: "amber",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/leads", firmWide),
+        href: href("/dashboard/leads", firmWide || ownerList !== null),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -468,7 +488,7 @@ export async function buildCommandQueue(
       WHERE status = 'active'
         AND deleted_at IS NULL
         AND (risk_profile_signed_at IS NULL OR risk_profile_signed_at < now() - interval '365 days')
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY risk_profile_signed_at ASC NULLS FIRST
       LIMIT 5
     `);
@@ -480,7 +500,7 @@ export async function buildCommandQueue(
         severity: "soon",
         tone: "sky",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide, "rp_stale=1"),
+        href: href("/dashboard/investors", firmWide || ownerList !== null, "rp_stale=1"),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -500,7 +520,7 @@ export async function buildCommandQueue(
         AND deleted_at IS NULL
         AND dob IS NOT NULL
         AND to_char(dob, 'MM-DD') = to_char(current_date, 'MM-DD')
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY name ASC
       LIMIT 5
     `);
@@ -512,7 +532,7 @@ export async function buildCommandQueue(
         severity: "today",
         tone: "violet",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide, "birthday_today=1"),
+        href: href("/dashboard/investors", firmWide || ownerList !== null, "birthday_today=1"),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -536,7 +556,7 @@ export async function buildCommandQueue(
         AND dob IS NOT NULL
         AND to_char(dob, 'MM-DD') BETWEEN to_char(current_date + interval '1 day', 'MM-DD')
                                       AND to_char(current_date + interval '7 days', 'MM-DD')
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY to_char(dob, 'MM-DD') ASC
       LIMIT 5
     `);
@@ -548,7 +568,7 @@ export async function buildCommandQueue(
         severity: "soon",
         tone: "violet",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide, "birthday_week=1"),
+        href: href("/dashboard/investors", firmWide || ownerList !== null, "birthday_week=1"),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -566,7 +586,7 @@ export async function buildCommandQueue(
       FROM investors
       WHERE mandate_status = 'rejected'
         AND deleted_at IS NULL
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY updated_at DESC NULLS LAST
       LIMIT 5
     `);
@@ -578,7 +598,7 @@ export async function buildCommandQueue(
         severity: "now",
         tone: "rose",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide, "mandate_rejected=1"),
+        href: href("/dashboard/investors", firmWide || ownerList !== null, "mandate_rejected=1"),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -599,7 +619,7 @@ export async function buildCommandQueue(
         AND stage IN ('request_documents','documents_pending','docs_requested')
         AND stage_changed_at IS NOT NULL
         AND stage_changed_at < now() - interval '3 days'
-        ${scope("owner_id", userId, firmWide)}
+        ${scope("owner_id", owners, firmWide)}
       ORDER BY stage_changed_at ASC
       LIMIT 5
     `);
@@ -611,7 +631,7 @@ export async function buildCommandQueue(
         severity: "today",
         tone: "amber",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/leads", firmWide),
+        href: href("/dashboard/leads", firmWide || ownerList !== null),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,
@@ -627,7 +647,12 @@ export async function buildCommandQueue(
   {
     const propScope = firmWide
       ? sql``
-      : sql` AND (investor_id IN (SELECT id FROM investors WHERE rm_id = ${userId})
+      : ownerList
+        ? ownerList.length === 0
+          ? sql` AND FALSE`
+          : sql` AND (investor_id IN (SELECT id FROM investors WHERE rm_id IN (${sql.join(ownerList.map((o) => sql`${o}::uuid`), sql`, `)}))
+                  OR lead_id IN (SELECT id FROM leads WHERE owner_id IN (${sql.join(ownerList.map((o) => sql`${o}::uuid`), sql`, `)})))`
+        : sql` AND (investor_id IN (SELECT id FROM investors WHERE rm_id = ${userId})
                   OR lead_id IN (SELECT id FROM leads WHERE owner_id = ${userId}))`;
     const r = await tx.execute(sql`
       SELECT id, recipient_name, title, sent_at, count(*) OVER() AS total
@@ -662,7 +687,11 @@ export async function buildCommandQueue(
   {
     const inScope = firmWide
       ? sql``
-      : sql` AND (i.rm_id = ${userId} OR l.owner_id = ${userId})`;
+      : ownerList
+        ? ownerList.length === 0
+          ? sql` AND FALSE`
+          : sql` AND (i.rm_id IN (${sql.join(ownerList.map((o) => sql`${o}::uuid`), sql`, `)}) OR l.owner_id IN (${sql.join(ownerList.map((o) => sql`${o}::uuid`), sql`, `)}))`
+        : sql` AND (i.rm_id = ${userId} OR l.owner_id = ${userId})`;
     const r = await tx.execute(sql`
       SELECT c.id, c.channel, c.created_at,
              COALESCE(i.id, l.id) AS party_id,
@@ -716,7 +745,7 @@ export async function buildCommandQueue(
         AND deleted_at IS NULL
         AND anniversary_date IS NOT NULL
         AND to_char(anniversary_date, 'MM-DD') = to_char(current_date, 'MM-DD')
-        ${scope("rm_id", userId, firmWide)}${cscope("id")}
+        ${scope("rm_id", owners, firmWide)}${cscope("id")}
       ORDER BY name ASC
       LIMIT 5
     `);
@@ -728,7 +757,7 @@ export async function buildCommandQueue(
         severity: "today",
         tone: "violet",
         count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide),
+        href: href("/dashboard/investors", firmWide || ownerList !== null),
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.name,

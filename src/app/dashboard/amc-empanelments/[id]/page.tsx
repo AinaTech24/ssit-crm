@@ -82,6 +82,9 @@ export default async function AmcEmpanelmentDetailPage({
           escalationName: row.escalationName,
           escalationEmail: row.escalationEmail,
           escalationPhone: row.escalationPhone,
+          billingName: row.billingName,
+          billingEmail: row.billingEmail,
+          billingPhone: row.billingPhone,
           additionalContacts: (row.additionalContacts ?? []) as any[],
           portalUrl: row.portalUrl,
           trailRateOverridePct:

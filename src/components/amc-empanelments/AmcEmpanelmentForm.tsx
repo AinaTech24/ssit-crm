@@ -62,6 +62,9 @@ type FormValues = {
   escalationName: string | null;
   escalationEmail: string | null;
   escalationPhone: string | null;
+  billingName: string | null;
+  billingEmail: string | null;
+  billingPhone: string | null;
   additionalContacts: Contact[];
   portalUrl: string | null;
   trailRateOverridePct: number | null;
@@ -88,6 +91,9 @@ const EMPTY: FormValues = {
   escalationName: null,
   escalationEmail: null,
   escalationPhone: null,
+  billingName: null,
+  billingEmail: null,
+  billingPhone: null,
   additionalContacts: [],
   portalUrl: null,
   trailRateOverridePct: null,
@@ -340,6 +346,22 @@ export function AmcEmpanelmentForm({
                 : k === "email"
                   ? "escalationEmail"
                   : "escalationPhone",
+              val
+            )
+          }
+        />
+        <ContactRow
+          label="Billing contact"
+          name={v.billingName}
+          email={v.billingEmail}
+          phone={v.billingPhone}
+          onChange={(k, val) =>
+            field(
+              k === "name"
+                ? "billingName"
+                : k === "email"
+                  ? "billingEmail"
+                  : "billingPhone",
               val
             )
           }

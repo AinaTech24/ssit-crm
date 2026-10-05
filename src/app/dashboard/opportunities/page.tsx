@@ -5,6 +5,10 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import { formatINR } from "@/lib/utils";
+import { investorScopeSql } from "@/lib/investors/access";
+import { usersInScopeSql } from "@/lib/auth/data-scope";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { Avatar } from "@/components/ui/Avatar";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -77,6 +81,8 @@ export default async function OpportunitiesPage({
     .split(",")
     .filter((v) => (CROSS_SELL_OPPORTUNITY_STATUSES as readonly string[]).includes(v));
   const rmFilter = (sp.rm ?? "").split(",").filter(Boolean);
+  const scopeSel = parseScope(sp);
+  const showScopePicker = canPickScope(session);
   const sort = ["score", "clients_az", "aum"].includes(sp.sort ?? "") ? (sp.sort as string) : "score";
   const page = Math.max(1, Number(sp.page) || 1);
   const offset = (page - 1) * PAGE_SIZE;
@@ -100,7 +106,10 @@ export default async function OpportunitiesPage({
       // JSONB column — guard before unnesting it.
       sql`jsonb_typeof(i.cross_sell) = 'object'`,
     ];
-    if (!viewAll) baseConds.push(sql`i.rm_id = ${session.userId}::uuid`);
+    // The client data wall, not "investor.view.all ⇒ the whole firm": a
+    // sub-branch head holding view-all was reading every other desk's clients.
+    baseConds.push(await investorScopeSql(tx, session, "i"));
+    baseConds.push(scopeFilterSql(scopeSel, session.tenantId, ["i.rm_id", "i.service_rm_id"]));
     if (q) baseConds.push(sql`(i.name ILIKE ${`%${q}%`} OR i.pan ILIKE ${`%${q}%`} OR i.email ILIKE ${`%${q}%`})`);
     if (rmFilter.length) {
       baseConds.push(sql`i.rm_id IN (${sql.join(rmFilter.map((r) => sql`${r}::uuid`), sql`, `)})`);
@@ -180,6 +189,7 @@ export default async function OpportunitiesPage({
           SELECT DISTINCT u.id, u.name
           FROM users u
           WHERE u.tenant_id = ${session.tenantId}::uuid AND u.status = 'active'
+            AND ${await usersInScopeSql(tx, session, "u")}
           ORDER BY u.name
         `)
       : { rows: [] };
@@ -189,7 +199,11 @@ export default async function OpportunitiesPage({
       | { interested?: number; held_elsewhere?: number; not_held?: number }
       | undefined;
 
+    const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
+    const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
     return {
+      scopeUnits,
+      scopeMembers,
       rows: rowsRes.rows as unknown as OpportunityRow[],
       total: Number(totals?.total ?? 0),
       aum: Number(totals?.aum ?? 0),
@@ -226,6 +240,16 @@ export default async function OpportunitiesPage({
           {!viewAll && " Showing your book only."}
         </p>
       </div>
+
+      {showScopePicker && (
+        <ScopeFilterBar
+          basePath="/dashboard/opportunities"
+          units={data.scopeUnits}
+          members={data.scopeMembers}
+          selectedUnit={scopeSel.unit}
+          selectedMember={scopeSel.rm}
+        />
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Stat

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { ModuleKpis } from "@/components/modules/ModuleKpis";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
@@ -73,6 +75,8 @@ export default async function ReviewMeetingsPage({
   const modeFilter = (sp.mode ?? "").split(",").filter(Boolean);
   const typeFilter = (sp.type ?? "").split(",").filter(Boolean);
   const rmFilter = (sp.rm ?? "").split(",").filter(Boolean);
+  const scopeSel = parseScope(sp);
+  const showScopePicker = canPickScope(session);
   // Sort the (past) list by meeting date — newest or oldest first. The upcoming
   // list always leads with the soonest meeting, so this drives the past list.
   const sortKey = sp.sort === "meeting_asc" ? "meeting_asc" : "meeting_desc";
@@ -97,6 +101,8 @@ export default async function ReviewMeetingsPage({
     const filters: any[] = [
       sql`m.tenant_id = ${session.tenantId}::uuid`,
       meetingScopeSql(meetingScope, "m.rm_id"),
+      // Sub-branch view filter, layered ON the wall (never instead of it).
+      scopeFilterSql(scopeSel, session.tenantId, ["m.created_by_id", "m.rm_id"]),
     ];
     if (q) {
       filters.push(
@@ -222,9 +228,12 @@ export default async function ReviewMeetingsPage({
           SELECT id, name FROM users
           WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
             AND ${rmFilterSql}
+            AND (${session.roles.includes("owner") ? sql`TRUE` : sql`roles && ARRAY['rm','sub_broker','ra_sales','ria','insurance','branch_head','ra_research']::text[]`})
           ORDER BY name ASC
         `);
-    return { rows: meetings.rows as any[], stats: s, rms: rmRows.rows as any[] };
+    const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
+    const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
+    return { rows: meetings.rows as any[], stats: s, rms: rmRows.rows as any[], scopeUnits, scopeMembers };
   });
 
   const rmOptions = (data.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -288,6 +297,16 @@ export default async function ReviewMeetingsPage({
           { label: "Overdue", value: Number(data.stats?.overdue ?? 0), icon: AlertTriangle, tone: "rose" },
         ]}
       />
+
+      {showScopePicker && (
+        <ScopeFilterBar
+          basePath="/dashboard/review-meetings"
+          units={data.scopeUnits}
+          members={data.scopeMembers}
+          selectedUnit={scopeSel.unit}
+          selectedMember={scopeSel.rm}
+        />
+      )}
 
       {todays.length > 0 && (
         <div className="card-surface p-4">

@@ -4,6 +4,8 @@ import { Users, TrendingUp, Heart, CheckCircle2 } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
+import { investorScopeSql } from "@/lib/investors/access";
+import { confinedDeskId } from "@/lib/scope/view-filter";
 import { formatINR, formatDate } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -16,17 +18,20 @@ export default async function ReferralsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
-  // Every query below is firm-wide — there is no per-RM scoping — so this needs
-  // the firm-wide client capability. It matters now that the page is reachable
-  // from the sidebar: an RM opening it would otherwise see colleagues' books.
-  requireAny(session.roles, ["investor.view.all"], session.permissions);
+  // Open to anyone who can see clients; WHAT they see is cut down by the client
+  // data wall inside every query below. This used to demand the firm-wide
+  // capability and throw for everyone else — so the sidebar item was there and
+  // the page crashed for a sub-branch head.
+  requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const minOnly = sp.min === "2";
 
   const data = await withTenant(session.tenantId, async (tx) => {
+    const wall = await investorScopeSql(tx, session, "i");
+    const deskOnly = await confinedDeskId(tx, session);
     // Aggregate referrals per existing investor.
-    const conds: any[] = [sql`i.deleted_at IS NULL`];
+    const conds: any[] = [sql`i.deleted_at IS NULL`, wall];
     if (q) conds.push(sql`i.name ILIKE ${`%${q}%`}`);
     const whereSql = conds.length ? sql` WHERE ${sql.join(conds, sql` AND `)}` : sql``;
     const minSql = minOnly ? sql` HAVING COUNT(l.id) >= 2 ` : sql``;
@@ -71,7 +76,7 @@ export default async function ReferralsPage({
       FROM investors i
       JOIN leads l ON l.referred_by_investor_id = i.id
       LEFT JOIN investors inv ON inv.id = l.converted_investor_id
-      WHERE i.deleted_at IS NULL
+      WHERE i.deleted_at IS NULL AND ${wall}
     `);
     // ── Breakdowns ──────────────────────────────────────────────────────
     // Credited to the REFERRING CLIENT'S RM, not the lead's owner: the referral
@@ -86,7 +91,7 @@ export default async function ReferralsPage({
         FROM leads l
         JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
         LEFT JOIN users u ON u.id = i.rm_id
-       WHERE i.deleted_at IS NULL
+       WHERE i.deleted_at IS NULL AND ${wall}
        GROUP BY u.id, u.name
        ORDER BY referrals DESC
     `);
@@ -117,10 +122,12 @@ export default async function ReferralsPage({
                ON i.rm_id = du.id
               AND i.tenant_id = d.tenant_id
               AND i.deleted_at IS NULL
+              AND ${wall}
         LEFT JOIN leads l
                ON l.referred_by_investor_id = i.id
               AND l.tenant_id = d.tenant_id
        WHERE d.tenant_id = ${session.tenantId}::uuid
+         AND ${deskOnly ? sql`d.id = ${deskOnly}::uuid` : sql`TRUE`}
        GROUP BY d.id, d.name
        ORDER BY referrals DESC, d.name ASC
     `);
@@ -135,7 +142,7 @@ export default async function ReferralsPage({
         FROM leads l
         JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
         LEFT JOIN users u ON u.id = i.rm_id
-       WHERE i.deleted_at IS NULL
+       WHERE i.deleted_at IS NULL AND ${wall}
          AND (u.id IS NULL OR u.desk_id IS NULL)
     `);
 
@@ -150,7 +157,7 @@ export default async function ReferralsPage({
           CASE WHEN jsonb_typeof(l.interest_products) = 'array'
                THEN l.interest_products ELSE '[]'::jsonb END
         ) AS p(product)
-       WHERE i.deleted_at IS NULL
+       WHERE i.deleted_at IS NULL AND ${wall}
        GROUP BY p.product
        ORDER BY referrals DESC
     `);
@@ -163,6 +170,7 @@ export default async function ReferralsPage({
              COUNT(DISTINCT e.investor_id)::int AS clients
         FROM business_entries e
        WHERE e.status <> 'cancelled'
+         AND e.investor_id IN (SELECT i.id FROM investors i WHERE ${wall})
          AND e.investor_id IN (
            SELECT l.converted_investor_id FROM leads l
             WHERE l.referred_by_investor_id IS NOT NULL

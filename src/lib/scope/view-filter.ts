@@ -20,8 +20,8 @@
 
 import { sql, type SQL } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth/session";
-import { ROLE_LABELS } from "@/lib/auth/rbac";
-import { explainDataScope, loadScopeRow } from "@/lib/auth/data-scope";
+import { ROLE_LABELS, CLIENT_OWNING_ROLES } from "@/lib/auth/rbac";
+import { explainDataScope, loadScopeRow, resolveDataScope } from "@/lib/auth/data-scope";
 
 export type ScopeUnit = {
   /** "b:<branchId>" or "d:<deskId>". */
@@ -206,11 +206,19 @@ export async function loadScopeMembers(
   const where = deskId
     ? sql`desk_id = ${deskId}::uuid`
     : sql`branch_id = ${branchId}::uuid`;
+  // Only the firm admin gets every role in the list. A sub-branch head picks
+  // from the people who actually carry clients, leads and meetings — not the
+  // back-office, compliance and admin staff who happen to share the desk.
+  const roleList = [...CLIENT_OWNING_ROLES, "branch_head", "ra_research"];
+  const peopleOnly = session.roles.includes("owner")
+    ? sql``
+    : sql`AND roles && ARRAY[${sql.join(roleList.map((r) => sql`${r}`), sql`, `)}]::text[]`;
   const r = await tx.execute(sql`
     SELECT id, name, roles FROM users
     WHERE tenant_id = ${session.tenantId}::uuid
       AND status = 'active'
       AND ${where}
+      ${peopleOnly}
     ORDER BY name ASC
   `);
   return (r.rows as { id: string; name: string | null; roles: string[] | null }[]).map((u) => ({
@@ -218,6 +226,55 @@ export async function loadScopeMembers(
     name: u.name ?? "—",
     roleLabel: ROLE_LABELS[(u.roles ?? [])[0] ?? ""] ?? "Team member",
   }));
+}
+
+/**
+ * WHOSE records a "worklist" page (My Day) should cover, as a set of user ids.
+ *
+ * Returns null for "the whole firm" — only a session whose wall is the whole
+ * firm AND who has not narrowed it. Otherwise the people:
+ *   - the wall's own people (a desk head's desk, a branch's staff, just me),
+ *   - narrowed by ?rm= (one person) or ?unit= (one sub-branch), but only ever to
+ *     people already inside the wall, so a crafted URL cannot widen it.
+ *
+ * Exists because the My Day queue treated "branch head" as "whole firm" and
+ * ignored the sub-branch dropdown entirely: choosing a desk changed the
+ * dropdown and nothing else.
+ */
+export async function resolveQueueOwners(
+  tx: any,
+  session: SessionUser,
+  sel: ScopeSelection
+): Promise<string[] | null> {
+  const scope = await resolveDataScope(tx, session);
+  let base: string[] | null;
+  if (scope.kind === "all") base = null;
+  else if (scope.kind === "own") base = [scope.userId];
+  else {
+    const where =
+      scope.kind === "desks"
+        ? sql`desk_id IN (${sql.join(scope.deskIds.map((d) => sql`${d}::uuid`), sql`, `)})`
+        : sql`branch_id IN (${sql.join(scope.branchIds.map((b) => sql`${b}::uuid`), sql`, `)})`;
+    const r = await tx.execute(sql`
+      SELECT id FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND ${where}
+    `);
+    base = (r.rows as { id: string }[]).map((u) => String(u.id));
+    // A head is part of their own team even if their desk column is unset.
+    if (!base.includes(session.userId)) base.push(session.userId);
+  }
+
+  const inBase = (ids: string[]) => (base === null ? ids : ids.filter((i) => base!.includes(i)));
+
+  if (sel.rm && UUID_RE.test(sel.rm)) return inBase([sel.rm]);
+
+  if ((sel.deskId && UUID_RE.test(sel.deskId)) || (sel.branchId && UUID_RE.test(sel.branchId))) {
+    const where = sel.deskId ? sql`desk_id = ${sel.deskId}::uuid` : sql`branch_id = ${sel.branchId}::uuid`;
+    const r = await tx.execute(sql`
+      SELECT id FROM users WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND ${where}
+    `);
+    return inBase((r.rows as { id: string }[]).map((u) => String(u.id)));
+  }
+  return base;
 }
 
 /**

@@ -3,6 +3,8 @@ import { sql } from "drizzle-orm";
 import { Plus, HeartHandshake } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { dataScopeSqlFor } from "@/lib/auth/data-scope";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny, can } from "@/lib/auth/rbac";
 import { formatINR, formatRelative } from "@/lib/utils";
@@ -60,10 +62,13 @@ export default async function FamiliesPage({
     red_health: sp.red_health === "1",
   };
 
+  const scopeSel = parseScope(sp);
+  const showScopePicker = canPickScope(session);
+
   // Row counts for the quick-filter dropdown (one grouped query).
   const quickFilterOptions = await familyQuickFilterOptions(session);
 
-  const { rows, total, bandCounts } = await withTenant(session.tenantId, async (tx) => {
+  const { rows, total, bandCounts, scopeUnits, scopeMembers } = await withTenant(session.tenantId, async (tx) => {
     // Translate quick-filter flags into HAVING / WHERE fragments. We compose
     // additive WHERE conditions on the family row + a HAVING on member-level
     // aggregates after the LEFT JOIN.
@@ -74,6 +79,9 @@ export default async function FamiliesPage({
     // "which records" is now decided by branch grant, not by role.
     const scope = await dataScopeSqlFor(tx, session, { branch: "f.branch_id", owner: "f.rm_id" });
     where.push(scope);
+    // Sub-branch / RM view filter, layered on the wall. A family belongs to the
+    // desk of its RM.
+    where.push(scopeFilterSql(scopeSel, session.tenantId, "f.rm_id"));
     if (q) {
       where.push(sql`(
         f.head_name ILIKE ${`%${q}%`}
@@ -175,10 +183,14 @@ export default async function FamiliesPage({
       ) b GROUP BY band
     `);
 
+    const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
+    const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
     return {
       rows: r.rows as any[],
       total: Number((c.rows[0] as any)?.c ?? 0),
       bandCounts: bandCounts.rows as Array<{ band: string; c: number }>,
+      scopeUnits,
+      scopeMembers,
     };
   });
 
@@ -202,6 +214,15 @@ export default async function FamiliesPage({
 
   return (
     <div className="space-y-6 max-w-7xl">
+      {showScopePicker && (
+        <ScopeFilterBar
+          basePath="/dashboard/families"
+          units={scopeUnits}
+          members={scopeMembers}
+          selectedUnit={scopeSel.unit}
+          selectedMember={scopeSel.rm}
+        />
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Family mapping</h1>
