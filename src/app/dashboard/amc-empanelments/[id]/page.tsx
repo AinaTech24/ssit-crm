@@ -4,7 +4,7 @@ import { ChevronLeft } from "lucide-react";
 import { eq, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { amcEmpanelments } from "@/db/schema";
 import { AmcEmpanelmentForm } from "@/components/amc-empanelments/AmcEmpanelmentForm";
 import { AmcRecords } from "@/components/amc-empanelments/AmcRecords";
@@ -18,7 +18,7 @@ export default async function AmcEmpanelmentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await requireSession();
-  requireCap(session.roles, "compliance.edit", session.permissions);
+  requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
   const { id } = await params;
 
   const row = await withTenant(session.tenantId, async (tx) => {

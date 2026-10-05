@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { amcCodeFromName, normaliseAmcName } from "@/lib/amc/standard-list";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ const Body = z.object({ name: z.string().trim().min(2).max(120) });
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {

@@ -12,6 +12,7 @@ import { SelectField } from "@/components/ui/SelectField";
 import { ThemeDate } from "@/components/ui/ThemeDate";
 import { CustomFieldsSection, missingRequired, type CustomFieldDef } from "@/components/common/CustomFieldInputs";
 import { EventSelect } from "@/components/leads/EventSelect";
+import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES } from "@/lib/subscriptions";
 
 type DupMatch = {
   id: string;
@@ -75,7 +76,14 @@ export default function NewLeadPage() {
     ownerId: "" as string | null | "",
     subDistributorId: "" as string | null | "",
     subDistributorName: "" as string | null | "",
+    // RA sales: where this lead is in the subscription journey.
+    subscriptionCategory: "non_subscribed",
+    subscriptionFrequency: "",
   });
+  // RA sales sell a research subscription, not mutual-fund products, so their
+  // lead form drops the MF-pipeline fields and gains a subscription category.
+  // Null until /api/me answers, so the full form never flashes for them.
+  const [raSales, setRaSales] = useState<boolean | null>(null);
   const [customFields, setCustomFields] = useState<Record<string, any>>({});
   const [cfDefs, setCfDefs] = useState<CustomFieldDef[]>([]);
   const [busy, setBusy] = useState(false);
@@ -102,6 +110,7 @@ export default function NewLeadPage() {
       .then((j) => {
         const meId = j?.user?.id;
         if (alive && meId) setForm((f) => (f.ownerId ? f : { ...f, ownerId: meId }));
+        if (alive) setRaSales(Array.isArray(j?.user?.roles) && j.user.roles.includes("ra_sales"));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -250,13 +259,13 @@ export default function NewLeadPage() {
         sourceCampaign: form.source === "event" && form.eventName ? form.eventName : undefined,
         notes: form.notes || undefined,
         leadType: form.leadType || undefined,
-        aumPotential: form.aumPotential || undefined,
+        aumPotential: raSales ? undefined : form.aumPotential || undefined,
         occupation: form.occupation || undefined,
         altPhone: form.altPhone || undefined,
         altEmail: form.altEmail || undefined,
-        interestProducts: form.interestProducts.length ? form.interestProducts : undefined,
-        currentInvestments: form.currentInvestments.length ? form.currentInvestments : undefined,
-        expectedBusinessAmount: form.expectedBusinessAmount
+        interestProducts: !raSales && form.interestProducts.length ? form.interestProducts : undefined,
+        currentInvestments: !raSales && form.currentInvestments.length ? form.currentInvestments : undefined,
+        expectedBusinessAmount: !raSales && form.expectedBusinessAmount
           ? Number(form.expectedBusinessAmount)
           : undefined,
         // datetime-local is local + tz-naive; send a proper ISO instant.
@@ -267,7 +276,11 @@ export default function NewLeadPage() {
         payload.referredByName = form.referredByName;
       }
       if (form.ownerId) payload.ownerId = form.ownerId;
-      if (form.subDistributorId) payload.subDistributorId = form.subDistributorId;
+      if (!raSales && form.subDistributorId) payload.subDistributorId = form.subDistributorId;
+      if (raSales) {
+        payload.subscriptionCategory = form.subscriptionCategory;
+        if (form.subscriptionCategory === "subscribed") payload.subscriptionFrequency = form.subscriptionFrequency;
+      }
       if (Object.keys(customFields).length) payload.customFields = customFields;
       const res = await fetch("/api/leads", {
         method: "POST",
@@ -279,7 +292,9 @@ export default function NewLeadPage() {
         setErr(j.error ?? "Create failed");
         return;
       }
-      router.push("/dashboard/leads");
+      // A subscribed lead is converted on the server; take them to the client.
+      if (j.converted && j.investorId) router.push(`/dashboard/investors/${j.investorId}`);
+      else router.push("/dashboard/leads");
     } finally {
       setBusy(false);
     }
@@ -517,7 +532,7 @@ export default function NewLeadPage() {
           </div>
         )}
 
-        <div className={showAll ? "sm:col-span-2" : "hidden"}>
+        <div className={showAll && !raSales ? "sm:col-span-2" : "hidden"}>
           <div className="text-xs font-medium mb-1">
             Sub-distributor
             <span className="ml-1 text-[10px] text-muted-foreground font-normal">
@@ -561,6 +576,45 @@ export default function NewLeadPage() {
           </p>
         </div>
 
+        {/* RA sales: subscription category. Subscribing converts the lead to a
+            client at once, and the frequency sets the renewal date. */}
+        {raSales && (
+          <div className="sm:col-span-2 rounded-xl border border-brand-cyan/20 bg-brand-cyan-light/30 p-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block">
+              <div className="text-xs font-medium mb-1">Category</div>
+              <SelectField
+                value={form.subscriptionCategory}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((s) => ({ ...s, subscriptionCategory: v, subscriptionFrequency: v === "subscribed" ? s.subscriptionFrequency : "" }));
+                }}
+              >
+                {SUBSCRIPTION_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </SelectField>
+            </label>
+            {form.subscriptionCategory === "subscribed" && (
+              <label className="block animate-fade-in">
+                <div className="text-xs font-medium mb-1">
+                  Subscription<span className="text-rose-600 ml-0.5">*</span>
+                </div>
+                <SelectField value={form.subscriptionFrequency} onChange={(e) => set("subscriptionFrequency", e.target.value)}>
+                  <option value="">Select…</option>
+                  {SUBSCRIPTION_FREQUENCIES.map((f) => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </SelectField>
+              </label>
+            )}
+            {form.subscriptionCategory === "subscribed" && (
+              <p className="sm:col-span-2 text-[11px] text-muted-foreground">
+                Subscribed leads become clients automatically. The renewal date is worked out from the subscription period.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Essential: "call me next week" is the whole job half the time. */}
         <div className="sm:col-span-2">
           <div className="text-xs font-medium mb-1">Follow-up date</div>
@@ -598,6 +652,7 @@ export default function NewLeadPage() {
               ))}
             </SelectField>
           </label>
+          {!raSales && (
           <label className="block">
             <div className="text-xs font-medium mb-1">AUM potential</div>
             <SelectField value={form.aumPotential} onChange={(e) => set("aumPotential", e.target.value)}>
@@ -606,25 +661,30 @@ export default function NewLeadPage() {
               ))}
             </SelectField>
           </label>
+          )}
         </div>
 
-        <div className="sm:col-span-2">
-          <div className="text-xs font-medium mb-1">Products of interest</div>
-          <Chips
-            options={PRODUCT_OPTIONS}
-            selected={form.interestProducts}
-            onToggle={(v) => toggleArr("interestProducts", v)}
-          />
-        </div>
+        {!raSales && (
+          <>
+            <div className="sm:col-span-2">
+              <div className="text-xs font-medium mb-1">Products of interest</div>
+              <Chips
+                options={PRODUCT_OPTIONS}
+                selected={form.interestProducts}
+                onToggle={(v) => toggleArr("interestProducts", v)}
+              />
+            </div>
 
-        <div className="sm:col-span-2 grid grid-cols-2 gap-3">
-          <Row
-            label="Expected business (₹)"
-            value={form.expectedBusinessAmount}
-            setValue={(v) => set("expectedBusinessAmount", v)}
-            type="number"
-          />
-        </div>
+            <div className="sm:col-span-2 grid grid-cols-2 gap-3">
+              <Row
+                label="Expected business (₹)"
+                value={form.expectedBusinessAmount}
+                setValue={(v) => set("expectedBusinessAmount", v)}
+                type="number"
+              />
+            </div>
+          </>
+        )}
 
         <Row label="Occupation" value={form.occupation} setValue={(v) => set("occupation", v)} />
         <div className="sm:col-span-2 grid grid-cols-2 gap-3">
@@ -632,17 +692,19 @@ export default function NewLeadPage() {
           <Row label="Alternate email" value={form.altEmail} setValue={(v) => set("altEmail", v)} type="email" placeholder="Secondary email" />
         </div>
 
-        <div className="sm:col-span-2">
-          <div className="text-xs font-medium mb-1">
-            Current investments
-            <span className="ml-1 text-[10px] text-muted-foreground font-normal">· what they already hold elsewhere</span>
+        {!raSales && (
+          <div className="sm:col-span-2">
+            <div className="text-xs font-medium mb-1">
+              Current investments
+              <span className="ml-1 text-[10px] text-muted-foreground font-normal">· what they already hold elsewhere</span>
+            </div>
+            <Chips
+              options={PRODUCT_OPTIONS}
+              selected={form.currentInvestments}
+              onToggle={(v) => toggleArr("currentInvestments", v)}
+            />
           </div>
-          <Chips
-            options={PRODUCT_OPTIONS}
-            selected={form.currentInvestments}
-            onToggle={(v) => toggleArr("currentInvestments", v)}
-          />
-        </div>
+        )}
 
         <div className="sm:col-span-2">
           <div className="text-xs font-medium mb-1">Notes</div>
@@ -677,7 +739,8 @@ export default function NewLeadPage() {
               busy ||
               !form.name ||
               (showReferrerLookup && !form.referredByInvestorId) ||
-              (form.source === "event" && !form.eventName)
+              (form.source === "event" && !form.eventName) ||
+              (!!raSales && form.subscriptionCategory === "subscribed" && !form.subscriptionFrequency)
             }
             className="btn-primary"
           >

@@ -21,6 +21,8 @@ import {
 } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { formatINR, formatDate, formatRelative, formatPhone, isValidIndianMobile } from "@/lib/utils";
+import { RenewSubscriptionButton } from "@/components/investors/RenewSubscriptionButton";
+import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES } from "@/lib/subscriptions";
 import { CheckInButton, LogActivityButton } from "@/components/activities/ActivityLogger";
 import { ChangeLogButton } from "@/components/common/ChangeLog";
 import { RecordProvenance } from "@/components/common/RecordProvenance";
@@ -1063,6 +1065,29 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
           {showAddress && <KV label="Pincode" value={(inv.address as any)?.pincode ?? "—"} edit={{ id: inv.id, field: "address", addressKey: "pincode", address: (inv.address as any) ?? {}, value: (inv.address as any)?.pincode ?? "" }} />}
           {showAddress && <KV label="Country" value={(inv.address as any)?.country ?? "—"} edit={{ id: inv.id, field: "address", addressKey: "country", address: (inv.address as any) ?? {}, value: (inv.address as any)?.country ?? "" }} />}
         </Group>
+
+        {(inv.subscriptionCategory || inv.arnNo) && (
+          <Group title="Subscription">
+            {inv.arnNo && <KV label="ARN no" value={inv.arnNo} mono />}
+            <KV label="Category" value={SUBSCRIPTION_CATEGORIES.find((c) => c.value === inv.subscriptionCategory)?.label ?? "—"} />
+            {inv.subscriptionFrequency && (
+              <KV label="Subscription" value={SUBSCRIPTION_FREQUENCIES.find((f) => f.value === inv.subscriptionFrequency)?.label ?? "—"} />
+            )}
+            {inv.subscriptionStartedAt && <KV label="Subscribed on" value={formatDate(inv.subscriptionStartedAt)} />}
+            {inv.subscriptionRenewalAt && (
+              <KV
+                label="Renews on"
+                value={formatDate(inv.subscriptionRenewalAt)}
+                highlight={inv.subscriptionRenewalAt <= new Date().toISOString().slice(0, 10)}
+              />
+            )}
+            {inv.subscriptionCategory === "subscribed" && (
+              <div className="col-span-full pt-1">
+                <RenewSubscriptionButton investorId={inv.id} />
+              </div>
+            )}
+          </Group>
+        )}
 
         <Group title="Profile">
           <KV label="Occupation" value={inv.occupation ?? "—"} edit={{ id: inv.id, field: "occupation", value: inv.occupation ?? "", nullable: true }} />

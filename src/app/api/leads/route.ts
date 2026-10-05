@@ -25,6 +25,8 @@ import {
 import { leads, eventsOutbox, tasks } from "@/db/schema";
 import { scoreFields } from "@/lib/leads/score";
 import { loadCustomFieldDefs, sanitizeCustomFields } from "@/lib/custom-fields/values";
+import { autoConvertLead } from "@/lib/leads/auto-convert";
+import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES, renewalFrom, todayISO } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +71,9 @@ const CreateBody = z.object({
   subDistributorId: z.string().uuid().optional(),
   /** MFD-defined custom fields — sanitized against the firm's definitions. */
   customFields: z.record(z.string(), z.any()).optional(),
+  /** RA sales: subscription category. "subscribed" needs a frequency and auto-converts. */
+  subscriptionCategory: z.enum(SUBSCRIPTION_CATEGORIES.map((c) => c.value) as [string, ...string[]]).optional(),
+  subscriptionFrequency: z.enum(SUBSCRIPTION_FREQUENCIES.map((f) => f.value) as [string, ...string[]]).optional(),
 });
 
 // Lead-phase blueprint stages (mirror of the web list page) — leads live here
@@ -166,6 +171,11 @@ export async function POST(req: NextRequest) {
     const parse = CreateBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
     const body = parse.data;
+    if (body.subscriptionCategory === "subscribed" && !body.subscriptionFrequency) {
+      return NextResponse.json({ error: "Choose how often they subscribe (quarterly, half-yearly or yearly)." }, { status: 400 });
+    }
+    const subscribed = body.subscriptionCategory === "subscribed";
+    const subStart = subscribed ? todayISO() : null;
 
     const id = uuid();
     const clientMeta = clientMetaFromHeaders(req.headers);
@@ -235,6 +245,10 @@ export async function POST(req: NextRequest) {
           referredByInvestorId: body.referredByInvestorId ?? null,
           referredByName: body.referredByName ?? null,
           subDistributorId: body.subDistributorId ?? null,
+          subscriptionCategory: body.subscriptionCategory ?? null,
+          subscriptionFrequency: subscribed ? body.subscriptionFrequency ?? null : null,
+          subscriptionStartedAt: subStart,
+          subscriptionRenewalAt: subStart ? renewalFrom(subStart, body.subscriptionFrequency) : null,
           customFields: Object.keys(customFields).length ? customFields : null,
           // Deterministic initial score from the captured signals.
           ...scoreFields({
@@ -289,7 +303,13 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    return NextResponse.json({ id, ownerId: assignedOwnerId, assignedVia }, { status: 201 });
+    // Subscribed means a paying client: convert straight away.
+    const conv = subscribed ? await autoConvertLead(req, id) : null;
+
+    return NextResponse.json(
+      { id, ownerId: assignedOwnerId, assignedVia, converted: conv?.converted ?? false, investorId: conv?.investorId, convertError: conv?.error },
+      { status: 201 }
+    );
   } catch (err: any) {
     return handleApiError(err);
   }

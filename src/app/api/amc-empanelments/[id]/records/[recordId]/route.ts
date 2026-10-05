@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { amcMeetings, amcNotes } from "@/db/schema";
 
@@ -24,7 +24,7 @@ export async function DELETE(
   const { id, recordId } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
     const kind = req.nextUrl.searchParams.get("kind") === "note" ? "note" : "meeting";
     const meta = clientMetaFromHeaders(req.headers);
 

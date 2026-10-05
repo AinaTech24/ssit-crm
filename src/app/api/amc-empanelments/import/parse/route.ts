@@ -11,7 +11,7 @@ import { handleApiError } from "@/lib/api/error-handler";
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +72,7 @@ function suggestMapping(headers: string[]): Record<string, string> {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
 
     const form = await req.formData();
     const file = form.get("file");

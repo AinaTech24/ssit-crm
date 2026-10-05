@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { amcEmpanelments, EMPANELMENT_CATEGORY_VALUES } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 
@@ -76,7 +76,7 @@ export async function GET(
 ) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
     const { id } = await params;
     const row = await withTenant(session.tenantId, async (tx) => {
       const [r] = await tx
@@ -99,7 +99,7 @@ export async function PATCH(
 ) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
     const { id } = await params;
     const parse = PatchBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {
@@ -167,7 +167,7 @@ export async function DELETE(
 ) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
     const { id } = await params;
     const meta = clientMetaFromHeaders(req.headers);
     const result = await withTenant(session.tenantId, async (tx) => {

@@ -11,7 +11,7 @@ import { eq, and, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { amcEmpanelments, EMPANELMENT_CATEGORY_VALUES } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
@@ -70,7 +70,7 @@ const PostBody = z.object({
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const sp = req.nextUrl.searchParams;
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireCap(session.roles, "compliance.edit", session.permissions);
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const parse = PostBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {

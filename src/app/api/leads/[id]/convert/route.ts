@@ -131,6 +131,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         } as any)
         .where(eq(leads.id, leadId));
 
+      // A research subscription follows the person across conversion: category,
+      // frequency and the renewal date already worked out on the lead.
+      await tx.execute(sql`
+        UPDATE investors i
+           SET subscription_category = l.subscription_category,
+               subscription_frequency = l.subscription_frequency,
+               subscription_started_at = l.subscription_started_at,
+               subscription_renewal_at = l.subscription_renewal_at
+          FROM leads l
+         WHERE l.id = ${leadId}::uuid AND i.id = ${investorId}::uuid
+      `);
+
       // ─── DATA CARRYOVER ──────────────────────────────────────────────
       // Per the spec: no data should be lost on conversion. We re-point
       // every related record from the lead onto the new investor.

@@ -322,6 +322,13 @@ export const investors = pgTable(
     maritalStatus: text("marital_status"),
     modeOfHolding: text("mode_of_holding"), // single | joint | anyone_or_survivor
     anniversaryDate: date("anniversary_date"),
+    /** RA sales: carried over from the lead on conversion (migration 0236). */
+    subscriptionCategory: text("subscription_category"),
+    subscriptionFrequency: text("subscription_frequency"),
+    subscriptionStartedAt: date("subscription_started_at"),
+    subscriptionRenewalAt: date("subscription_renewal_at"),
+    /** ARN number shown on an RA client. */
+    arnNo: text("arn_no"),
     taxStatus: text("tax_status"),
     birthPlace: text("birth_place"),
     motherName: text("mother_name"),

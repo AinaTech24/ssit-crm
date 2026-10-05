@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { AmcEmpanelmentForm } from "@/components/amc-empanelments/AmcEmpanelmentForm";
 import { sql } from "drizzle-orm";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NewAmcEmpanelmentPage() {
   const session = await requireSession();
-  requireCap(session.roles, "compliance.edit", session.permissions);
+  requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
 
   // Load AMC catalog (amc_master) for the dropdown — display name +
   // code. Tenant-scoped query in case some tenants prune the catalog.

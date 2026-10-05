@@ -25,9 +25,14 @@ import {
   normalizePhoneLast10,
 } from "@/lib/leads/normalize";
 
+import { autoConvertLead } from "@/lib/leads/auto-convert";
+import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES, renewalFrom, todayISO } from "@/lib/subscriptions";
+
 export const dynamic = "force-dynamic";
 
 const Patch = z.object({
+  subscriptionCategory: z.enum(SUBSCRIPTION_CATEGORIES.map((c) => c.value) as [string, ...string[]]).optional(),
+  subscriptionFrequency: z.enum(SUBSCRIPTION_FREQUENCIES.map((f) => f.value) as [string, ...string[]]).optional(),
   name: z.string().min(2).max(120).optional(),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
@@ -106,6 +111,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // amount / contact fields; recompute from the merged row so an edit moves
       // the hot/warm/cold band immediately (previously only create + the stage
       // route re-scored, so editing the intended amount left the score stale).
+      // Subscription: the renewal is worked out here, never trusted from the
+      // client. Subscribing stamps the start date and needs a frequency; any
+      // other category clears the schedule.
+      if (patch.subscriptionCategory !== undefined || patch.subscriptionFrequency !== undefined) {
+        const cat = patch.subscriptionCategory ?? before.subscriptionCategory;
+        const freq = patch.subscriptionFrequency ?? before.subscriptionFrequency;
+        if (cat === "subscribed") {
+          if (!freq) return "need_frequency" as const;
+          const start =
+            before.subscriptionCategory === "subscribed" && before.subscriptionStartedAt
+              ? before.subscriptionStartedAt
+              : todayISO();
+          patch.subscriptionFrequency = freq;
+          patch.subscriptionStartedAt = start;
+          patch.subscriptionRenewalAt = renewalFrom(start, freq);
+        } else {
+          patch.subscriptionFrequency = null;
+          patch.subscriptionStartedAt = null;
+          patch.subscriptionRenewalAt = null;
+        }
+      }
       const merged: any = { ...before, ...patch };
       const scored = scoreFields({
         source: merged.source,
@@ -150,9 +176,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       });
       return after[0];
     });
+    if (result === "need_frequency") return NextResponse.json({ error: "Choose how often they subscribe (quarterly, half-yearly or yearly)." }, { status: 400 });
     if (result === "bad_owner") return NextResponse.json({ error: "selected owner is not a user in this firm" }, { status: 400 });
     if (!result) return NextResponse.json({ error: "not found" }, { status: 404 });
-    return NextResponse.json(result);
+    // Just moved to subscribed (and not yet a client): convert now.
+    const conv =
+      result.subscriptionCategory === "subscribed" && !result.convertedInvestorId
+        ? await autoConvertLead(req, id)
+        : null;
+    return NextResponse.json(
+      conv ? { ...result, converted: conv.converted, investorId: conv.investorId, convertError: conv.error } : result
+    );
   } catch (err: any) {
     return handleApiError(err);
   }

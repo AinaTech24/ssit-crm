@@ -17,6 +17,7 @@ import { cleanUccCodes } from "@/lib/investors/ucc";
 import { ClientTagsField } from "@/components/investors/ClientTagsField";
 import { CLIENT_CODE_FIELDS } from "@/lib/investors/client-tags";
 import { CustomFieldsSection, missingRequired, type CustomFieldDef } from "@/components/common/CustomFieldInputs";
+import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES } from "@/lib/subscriptions";
 
 function NewInvestorPageInner() {
   const router = useRouter();
@@ -85,7 +86,28 @@ function NewInvestorPageInner() {
     reviewFrequency: "",
     // Notes
     notes: "",
+    // RA sales
+    arnNo: "",
+    subscriptionCategory: "subscribed",
+    subscriptionFrequency: "",
   });
+  // RA sales clients are research subscribers, not mutual-fund investors, so
+  // their form drops the MF-onboarding fields (KYC, nominees, UCC, risk
+  // profile…) and carries an ARN number and a subscription category instead.
+  const [raSales, setRaSales] = useState<boolean | null>(null);
+  const full = raSales !== true;
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/me")
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive) setRaSales(Array.isArray(j?.user?.roles) && j.user.roles.includes("ra_sales"));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [nominees, setNominees] = useState<Nominee[]>([]);
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, any>>({});
@@ -199,6 +221,15 @@ function NewInvestorPageInner() {
           reviewFrequency: form.reviewFrequency || undefined,
           notes: u(form.notes),
           customFields: Object.keys(customFields).length ? customFields : undefined,
+          ...(raSales
+            ? {
+                arnNo: u(form.arnNo),
+                subscriptionCategory: form.subscriptionCategory,
+                ...(form.subscriptionCategory === "subscribed"
+                  ? { subscriptionFrequency: form.subscriptionFrequency }
+                  : {}),
+              }
+            : {}),
         }),
       });
       if (!res.ok) {
@@ -259,13 +290,13 @@ function NewInvestorPageInner() {
               Age: <span className="font-medium text-foreground">{age ?? "—"}</span>
             </div>
           </div>
-          <SelectField label="Gender" value={form.gender} onChange={(v) => set("gender", v)} options={[{ value: "", label: "Select" }, { value: "M", label: "Male" }, { value: "F", label: "Female" }, { value: "O", label: "Other" }]} />
-          <Field label="Birth place" value={form.birthPlace} onChange={(v) => set("birthPlace", v)} />
+          {full && <SelectField label="Gender" value={form.gender} onChange={(v) => set("gender", v)} options={[{ value: "", label: "Select" }, { value: "M", label: "Male" }, { value: "F", label: "Female" }, { value: "O", label: "Other" }]} />}
+          {full && <Field label="Birth place" value={form.birthPlace} onChange={(v) => set("birthPlace", v)} />}
           <Field label="Mother's name" value={form.motherName} onChange={(v) => set("motherName", v)} />
-          <SelectField label="Marital status" value={form.maritalStatus} onChange={(v) => set("maritalStatus", v)} options={["", "Single", "Married", "Divorced", "Widowed"]} />
-          <Field label="Profession" value={form.occupation} onChange={(v) => set("occupation", v)} />
+          {full && <SelectField label="Marital status" value={form.maritalStatus} onChange={(v) => set("maritalStatus", v)} options={["", "Single", "Married", "Divorced", "Widowed"]} />}
+          {full && <Field label="Profession" value={form.occupation} onChange={(v) => set("occupation", v)} />}
           <Field label="Company name" value={form.employerName} onChange={(v) => set("employerName", v)} />
-          <Field label="Aadhaar card (last 4)" value={form.aadhaarLast4} onChange={(v) => set("aadhaarLast4", v.replace(/\D/g, "").slice(0, 4))} placeholder="last 4 digits only" />
+          {full && <Field label="Aadhaar card (last 4)" value={form.aadhaarLast4} onChange={(v) => set("aadhaarLast4", v.replace(/\D/g, "").slice(0, 4))} placeholder="last 4 digits only" />}
         </Section>
 
         {/* Contact */}
@@ -290,24 +321,28 @@ function NewInvestorPageInner() {
 
         {/* Classification */}
         <Section title="Classification & compliance">
-          <SelectField label="Family or individual" value={form.householdType} onChange={(v) => set("householdType", v)} options={["", "Individual", "Family", "Family head", "Family member"]} />
-          <Field label="Family owner" value={form.familyOwnerName} onChange={(v) => set("familyOwnerName", v)} placeholder="head of family (if part of one)" />
+          {full && <SelectField label="Family or individual" value={form.householdType} onChange={(v) => set("householdType", v)} options={["", "Individual", "Family", "Family head", "Family member"]} />}
+          {full && <Field label="Family owner" value={form.familyOwnerName} onChange={(v) => set("familyOwnerName", v)} placeholder="head of family (if part of one)" />}
           <SelectField label="Category" value={form.investorCategory} onChange={(v) => set("investorCategory", v)} options={["individual", "huf", "corporate", "trust", "nri", "minor", "other"]} />
-          <SelectField label="Segment" value={form.segmentTag} onChange={(v) => set("segmentTag", v)} options={["HNI", "Affluent", "Retail", "NRI", "Corporate"]} />
-          <SelectField label="Client category" value={form.clientCategory} onChange={(v) => set("clientCategory", v)} options={[{ value: "", label: "Select" }, { value: "A", label: "A" }, { value: "B", label: "B" }, { value: "C", label: "C" }, { value: "D", label: "D" }]} />
+          {full && <SelectField label="Segment" value={form.segmentTag} onChange={(v) => set("segmentTag", v)} options={["HNI", "Affluent", "Retail", "NRI", "Corporate"]} />}
+          {full && <SelectField label="Client category" value={form.clientCategory} onChange={(v) => set("clientCategory", v)} options={[{ value: "", label: "Select" }, { value: "A", label: "A" }, { value: "B", label: "B" }, { value: "C", label: "C" }, { value: "D", label: "D" }]} />}
           <Field label="Referral client name" value={form.referralClientName} onChange={(v) => set("referralClientName", v)} />
-          <SelectField label="Mode of holding" value={form.modeOfHolding} onChange={(v) => set("modeOfHolding", v)} options={["", "Single", "Joint", "Anyone or Survivor"]} />
-          <Field label="UCC no" value={form.bseUccCode} onChange={(v) => set("bseUccCode", v)} />
-          <div className="sm:col-span-2">
-            <UccCodesField value={form.uccCodes} onChange={(v) => setForm((p) => ({ ...p, uccCodes: v }))} label="Other UCC codes" />
-          </div>
-          <div className="sm:col-span-2">
-            <ClientTagsField
-              value={form.tags}
-              onChange={(v) => setForm((p) => ({ ...p, tags: v }))}
-            />
-          </div>
-          {CLIENT_CODE_FIELDS.map((c) => (
+          {full && <SelectField label="Mode of holding" value={form.modeOfHolding} onChange={(v) => set("modeOfHolding", v)} options={["", "Single", "Joint", "Anyone or Survivor"]} />}
+          {full && <Field label="UCC no" value={form.bseUccCode} onChange={(v) => set("bseUccCode", v)} />}
+          {full && (
+            <div className="sm:col-span-2">
+              <UccCodesField value={form.uccCodes} onChange={(v) => setForm((p) => ({ ...p, uccCodes: v }))} label="Other UCC codes" />
+            </div>
+          )}
+          {full && (
+            <div className="sm:col-span-2">
+              <ClientTagsField
+                value={form.tags}
+                onChange={(v) => setForm((p) => ({ ...p, tags: v }))}
+              />
+            </div>
+          )}
+          {full && CLIENT_CODE_FIELDS.map((c) => (
             <Field
               key={c.key}
               label={c.label}
@@ -316,13 +351,14 @@ function NewInvestorPageInner() {
               placeholder={c.placeholder}
             />
           ))}
-          <Field label="Tax status" value={form.taxStatus} onChange={(v) => set("taxStatus", v)} placeholder="e.g. Resident Individual" />
-          <SelectField label="Residential status" value={form.residencyStatus} onChange={(v) => set("residencyStatus", v)} options={[{ value: "", label: "Select" }, { value: "indian_resident", label: "Indian resident" }, { value: "nri", label: "NRI" }, { value: "oci", label: "OCI" }, { value: "pio", label: "PIO" }, { value: "foreign_national", label: "Foreign national" }]} />
-          <SelectField label="KYC status" value={form.kycStatus} onChange={(v) => set("kycStatus", v)} options={[{ value: "pending", label: "Pending" }, { value: "registered", label: "Registered" }, { value: "verified", label: "Verified" }, { value: "hold", label: "Hold" }, { value: "rejected", label: "Rejected" }, { value: "expired", label: "Expired" }, { value: "re_kyc_required", label: "Re-KYC required" }]} />
-          <SelectField label="Risk profile" value={form.riskProfile} onChange={(v) => set("riskProfile", v)} options={[{ value: "", label: "Select" }, { value: "conservative", label: "Conservative" }, { value: "moderate", label: "Moderate" }, { value: "aggressive", label: "Aggressive" }, { value: "very_aggressive", label: "Very aggressive" }]} />
+          {full && <Field label="Tax status" value={form.taxStatus} onChange={(v) => set("taxStatus", v)} placeholder="e.g. Resident Individual" />}
+          {full && <SelectField label="Residential status" value={form.residencyStatus} onChange={(v) => set("residencyStatus", v)} options={[{ value: "", label: "Select" }, { value: "indian_resident", label: "Indian resident" }, { value: "nri", label: "NRI" }, { value: "oci", label: "OCI" }, { value: "pio", label: "PIO" }, { value: "foreign_national", label: "Foreign national" }]} />}
+          {full && <SelectField label="KYC status" value={form.kycStatus} onChange={(v) => set("kycStatus", v)} options={[{ value: "pending", label: "Pending" }, { value: "registered", label: "Registered" }, { value: "verified", label: "Verified" }, { value: "hold", label: "Hold" }, { value: "rejected", label: "Rejected" }, { value: "expired", label: "Expired" }, { value: "re_kyc_required", label: "Re-KYC required" }]} />}
+          {full && <SelectField label="Risk profile" value={form.riskProfile} onChange={(v) => set("riskProfile", v)} options={[{ value: "", label: "Select" }, { value: "conservative", label: "Conservative" }, { value: "moderate", label: "Moderate" }, { value: "aggressive", label: "Aggressive" }, { value: "very_aggressive", label: "Very aggressive" }]} />}
         </Section>
 
         {/* Second / joint holder */}
+        {full && (
         <Section title="Second / joint holder (optional)">
           <Field label="First name" value={form.secondHolderFirstName} onChange={(v) => set("secondHolderFirstName", v)} />
           <Field label="Last name" value={form.secondHolderLastName} onChange={(v) => set("secondHolderLastName", v)} />
@@ -332,11 +368,35 @@ function NewInvestorPageInner() {
           <Field label="Mother's name" value={form.secondHolderMotherName} onChange={(v) => set("secondHolderMotherName", v)} />
           <SelectField label="Marital status" value={form.secondHolderMaritalStatus} onChange={(v) => set("secondHolderMaritalStatus", v)} options={["", "Single", "Married", "Divorced", "Widowed"]} />
         </Section>
+        )}
 
         {/* Nominees */}
+        {full && (
         <Section title="Nominees" cols={1}>
           <NomineesField value={nominees} onChange={setNominees} />
         </Section>
+        )}
+
+        {/* RA sales: ARN number + subscription */}
+        {raSales && (
+          <Section title="Subscription">
+            <Field label="ARN no" value={form.arnNo} onChange={(v) => set("arnNo", v)} placeholder="ARN-123456" />
+            <SelectField
+              label="Category"
+              value={form.subscriptionCategory}
+              onChange={(v) => setForm((p) => ({ ...p, subscriptionCategory: v, subscriptionFrequency: v === "subscribed" ? p.subscriptionFrequency : "" }))}
+              options={SUBSCRIPTION_CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+            />
+            {form.subscriptionCategory === "subscribed" && (
+              <SelectField
+                label="Subscription"
+                value={form.subscriptionFrequency}
+                onChange={(v) => set("subscriptionFrequency", v)}
+                options={[{ value: "", label: "Select" }, ...SUBSCRIPTION_FREQUENCIES.map((x) => ({ value: x.value, label: x.label }))]}
+              />
+            )}
+          </Section>
+        )}
 
         {/* Referrals */}
         <Section title="Referrals" cols={1}>
@@ -352,22 +412,24 @@ function NewInvestorPageInner() {
             </label>
             <RmSelector value={form.rmId || null} onChange={(id) => setForm((s) => ({ ...s, rmId: id ?? "" }))} role={OWNING_ROLES} placeholder="— Use firm default (owner) —" />
           </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs font-medium block mb-1">
-              Service RM
-              <span className="ml-1 text-[10px] text-muted-foreground font-normal">
-                · who handles day-to-day servicing, if different from the owner
-              </span>
-            </label>
-            <RmSelector
-              value={form.serviceRmId || null}
-              onChange={(id) => setForm((s) => ({ ...s, serviceRmId: id ?? "" }))}
-              role={OWNING_ROLES}
-              placeholder="— Same as assigned RM —"
-            />
-          </div>
+          {full && (
+            <div className="sm:col-span-2">
+              <label className="text-xs font-medium block mb-1">
+                Service RM
+                <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+                  · who handles day-to-day servicing, if different from the owner
+                </span>
+              </label>
+              <RmSelector
+                value={form.serviceRmId || null}
+                onChange={(id) => setForm((s) => ({ ...s, serviceRmId: id ?? "" }))}
+                role={OWNING_ROLES}
+                placeholder="— Same as assigned RM —"
+              />
+            </div>
+          )}
           <Field label="Date of onboarding" type="date" value={form.onboardedAt} onChange={(v) => set("onboardedAt", v)} />
-          <Field label="Anniversary date" type="date" value={form.anniversaryDate} onChange={(v) => set("anniversaryDate", v)} />
+          {full && <Field label="Anniversary date" type="date" value={form.anniversaryDate} onChange={(v) => set("anniversaryDate", v)} />}
           <Field label="Last meeting date" type="date" value={form.lastReviewAt} onChange={(v) => set("lastReviewAt", v)} />
           <Field label="Next meeting date" type="date" value={form.nextReviewAt} onChange={(v) => set("nextReviewAt", v)} />
           <SelectField label="Review frequency" value={form.reviewFrequency} onChange={(v) => set("reviewFrequency", v)} options={[{ value: "", label: "Select" }, { value: "monthly", label: "Monthly" }, { value: "quarterly", label: "Quarterly" }, { value: "half_yearly", label: "Half-yearly" }, { value: "annual", label: "Annual" }]} />
@@ -393,7 +455,7 @@ function NewInvestorPageInner() {
             Cancel
           </Link>
           <button
-            disabled={busy}
+            disabled={busy || (!!raSales && form.subscriptionCategory === "subscribed" && !form.subscriptionFrequency)}
             className="rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium disabled:opacity-50"
           >
             {busy ? "Creating…" : "Create client"}

@@ -25,6 +25,7 @@ import { loadCustomFieldDefs, sanitizeCustomFields } from "@/lib/custom-fields/v
 import { applyRiskCategory, RISK_CATEGORIES } from "@/lib/risk-profile/apply";
 import { cleanUccCodes } from "@/lib/investors/ucc";
 import { normaliseTags } from "@/lib/investors/client-tags";
+import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES, renewalFrom, todayISO } from "@/lib/subscriptions";
 import { investors, eventsOutbox } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +89,10 @@ const CreateBody = z.object({
   maritalStatus: z.string().optional(),
   modeOfHolding: z.string().optional(),
   anniversaryDate: z.string().optional(),
+  /** RA clients: their ARN number and subscription (migration 0236). */
+  arnNo: z.string().max(40).optional(),
+  subscriptionCategory: z.enum(SUBSCRIPTION_CATEGORIES.map((c) => c.value) as [string, ...string[]]).optional(),
+  subscriptionFrequency: z.enum(SUBSCRIPTION_FREQUENCIES.map((f) => f.value) as [string, ...string[]]).optional(),
   birthPlace: z.string().optional(),
   motherName: z.string().optional(),
   mobileRelation: z.string().optional(),
@@ -276,6 +281,15 @@ export async function POST(req: NextRequest) {
           maritalStatus: body.maritalStatus || null,
           modeOfHolding: body.modeOfHolding || null,
           anniversaryDate: body.anniversaryDate || null,
+          arnNo: body.arnNo?.trim() || null,
+          subscriptionCategory: body.subscriptionCategory ?? null,
+          subscriptionFrequency:
+            body.subscriptionCategory === "subscribed" ? body.subscriptionFrequency ?? null : null,
+          subscriptionStartedAt: body.subscriptionCategory === "subscribed" ? todayISO() : null,
+          subscriptionRenewalAt:
+            body.subscriptionCategory === "subscribed"
+              ? renewalFrom(todayISO(), body.subscriptionFrequency)
+              : null,
           birthPlace: body.birthPlace || null,
           motherName: body.motherName || null,
           mobileRelation: body.mobileRelation || null,

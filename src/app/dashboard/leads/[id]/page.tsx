@@ -29,6 +29,7 @@ import { RowActions } from "@/components/common/RowActions";
 import { RecordAutomations } from "@/components/sales-ops/RecordAutomations";
 import { SignalScoreCard } from "@/components/leads/SignalScoreCard";
 import { LeadEditPanel } from "@/components/leads/LeadEditPanel";
+import { LeadSubscriptionCard } from "@/components/leads/LeadSubscriptionCard";
 import { CustomFieldsCard } from "@/components/common/CustomFieldsCard";
 import { LeadScoreButton } from "@/components/leads/LeadScoreButton";
 import { stageBadgeClass, stageLabel } from "@/lib/leads/stages";
@@ -361,6 +362,17 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
             </span>
           </div>
         </RelatedListSection>
+      )}
+
+      {/* RA sales: subscription category + renewal. Subscribing converts the
+          lead to a client, so it is only offered while it is still a lead. */}
+      {!l.convertedInvestorId && (session.roles.includes("ra_sales") || l.subscriptionCategory) && (
+        <LeadSubscriptionCard
+          leadId={l.id}
+          category={l.subscriptionCategory ?? null}
+          frequency={l.subscriptionFrequency ?? null}
+          renewalAt={l.subscriptionRenewalAt ?? null}
+        />
       )}
 
       {/* Editable record — every spec field, inline edit */}

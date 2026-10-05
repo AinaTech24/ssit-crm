@@ -1,4 +1,4 @@
-import { index, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { date, index, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { id, tenantId, timestamps } from "./_shared";
 import { tenants } from "./tenants";
 import { users } from "./users";
@@ -181,6 +181,13 @@ export const leads = pgTable(
      * migration 0019.
      */
     subDistributorId: uuid("sub_distributor_id"),
+
+    /** RA sales: non_subscribed | signed_up | subscribed (migration 0236). */
+    subscriptionCategory: text("subscription_category"),
+    /** quarterly | half_yearly | yearly — drives the renewal date. */
+    subscriptionFrequency: text("subscription_frequency"),
+    subscriptionStartedAt: date("subscription_started_at"),
+    subscriptionRenewalAt: date("subscription_renewal_at"),
 
     ownerId: uuid("owner_id").references(() => users.id),
     /** Soft delete — the source of truth. See migration 0213. */
