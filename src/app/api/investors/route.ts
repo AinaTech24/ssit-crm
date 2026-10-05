@@ -93,6 +93,9 @@ const CreateBody = z.object({
   arnNo: z.string().max(40).optional(),
   subscriptionCategory: z.enum(SUBSCRIPTION_CATEGORIES.map((c) => c.value) as [string, ...string[]]).optional(),
   subscriptionFrequency: z.enum(SUBSCRIPTION_FREQUENCIES.map((f) => f.value) as [string, ...string[]]).optional(),
+  /** Optional overrides (YYYY-MM-DD). Start defaults to today; renewal to start + one period. */
+  subscriptionStartedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  subscriptionRenewalAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   birthPlace: z.string().optional(),
   motherName: z.string().optional(),
   mobileRelation: z.string().optional(),
@@ -285,10 +288,12 @@ export async function POST(req: NextRequest) {
           subscriptionCategory: body.subscriptionCategory ?? null,
           subscriptionFrequency:
             body.subscriptionCategory === "subscribed" ? body.subscriptionFrequency ?? null : null,
-          subscriptionStartedAt: body.subscriptionCategory === "subscribed" ? todayISO() : null,
+          subscriptionStartedAt:
+            body.subscriptionCategory === "subscribed" ? body.subscriptionStartedAt ?? todayISO() : null,
           subscriptionRenewalAt:
             body.subscriptionCategory === "subscribed"
-              ? renewalFrom(todayISO(), body.subscriptionFrequency)
+              ? body.subscriptionRenewalAt ??
+                renewalFrom(body.subscriptionStartedAt ?? todayISO(), body.subscriptionFrequency)
               : null,
           birthPlace: body.birthPlace || null,
           motherName: body.motherName || null,

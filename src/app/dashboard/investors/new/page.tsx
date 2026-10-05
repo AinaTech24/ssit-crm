@@ -17,7 +17,7 @@ import { cleanUccCodes } from "@/lib/investors/ucc";
 import { ClientTagsField } from "@/components/investors/ClientTagsField";
 import { CLIENT_CODE_FIELDS } from "@/lib/investors/client-tags";
 import { CustomFieldsSection, missingRequired, type CustomFieldDef } from "@/components/common/CustomFieldInputs";
-import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES } from "@/lib/subscriptions";
+import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES, renewalFrom, todayISO } from "@/lib/subscriptions";
 
 function NewInvestorPageInner() {
   const router = useRouter();
@@ -90,7 +90,19 @@ function NewInvestorPageInner() {
     arnNo: "",
     subscriptionCategory: "subscribed",
     subscriptionFrequency: "",
+    subscriptionStartedAt: todayISO(),
+    subscriptionRenewalAt: "",
   });
+  // Renewal follows start + frequency until someone types a date of their own.
+  const [renewalTouched, setRenewalTouched] = useState(false);
+  useEffect(() => {
+    if (renewalTouched) return;
+    const next =
+      form.subscriptionStartedAt && form.subscriptionFrequency
+        ? renewalFrom(form.subscriptionStartedAt, form.subscriptionFrequency) ?? ""
+        : "";
+    setForm((s) => (s.subscriptionRenewalAt === next ? s : { ...s, subscriptionRenewalAt: next }));
+  }, [form.subscriptionStartedAt, form.subscriptionFrequency, renewalTouched]);
   // RA sales clients are research subscribers, not mutual-fund investors, so
   // their form drops the MF-onboarding fields (KYC, nominees, UCC, risk
   // profile…) and carries an ARN number and a subscription category instead.
@@ -226,7 +238,11 @@ function NewInvestorPageInner() {
                 arnNo: u(form.arnNo),
                 subscriptionCategory: form.subscriptionCategory,
                 ...(form.subscriptionCategory === "subscribed"
-                  ? { subscriptionFrequency: form.subscriptionFrequency }
+                  ? {
+                      subscriptionFrequency: form.subscriptionFrequency,
+                      subscriptionStartedAt: u(form.subscriptionStartedAt),
+                      subscriptionRenewalAt: u(form.subscriptionRenewalAt),
+                    }
                   : {}),
               }
             : {}),
@@ -394,6 +410,32 @@ function NewInvestorPageInner() {
                 onChange={(v) => set("subscriptionFrequency", v)}
                 options={[{ value: "", label: "Select" }, ...SUBSCRIPTION_FREQUENCIES.map((x) => ({ value: x.value, label: x.label }))]}
               />
+            )}
+            {form.subscriptionCategory === "subscribed" && (
+              <>
+                <label className="block">
+                  <div className="text-xs font-medium mb-1">Subscription start date</div>
+                  <DateField
+                    value={form.subscriptionStartedAt}
+                    onChange={(e) => set("subscriptionStartedAt", e.target.value)}
+                    className="w-full"
+                  />
+                </label>
+                <label className="block">
+                  <div className="text-xs font-medium mb-1">
+                    Subscription renewal date
+                    <span className="ml-1 text-[10px] text-muted-foreground font-normal">· from start + subscription period</span>
+                  </div>
+                  <DateField
+                    value={form.subscriptionRenewalAt}
+                    onChange={(e) => {
+                      setRenewalTouched(true);
+                      set("subscriptionRenewalAt", e.target.value);
+                    }}
+                    className="w-full"
+                  />
+                </label>
+              </>
             )}
           </Section>
         )}
