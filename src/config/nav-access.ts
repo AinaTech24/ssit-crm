@@ -74,6 +74,7 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
     title: "Operations",
     items: [
       { key: "/dashboard/business-entries", label: "Transactions", module: "business_entries" },
+      { key: "/dashboard/expected-inflows", label: "Expected Inflows" },
       { key: "/dashboard/transactions", label: "MF Transactions", module: "transactions" },
       { key: "/dashboard/rta-imports", label: "RTA File Imports", module: "transactions" },
       { key: "/dashboard/reconciliation", label: "Reconciliation", module: "transactions" },
@@ -110,6 +111,7 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
       { key: "/dashboard/duplicates", label: "Find Duplicates" },
       { key: "/dashboard/employees", label: "Employees / Team", module: "employees" },
       { key: "/dashboard/leave-applications", label: "Leave Applications" },
+      { key: "/dashboard/induction", label: "Induction" },
       { key: "/dashboard/sub-distributors", label: "Sub-Distributors" },
       { key: "/dashboard/legal-registrations", label: "Legal Registrations" },
       { key: "/dashboard/amc-empanelments", label: "AMC Empanelments" },
