@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { clientBookSql } from "@/lib/investors/access";
 import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { Plus, Briefcase, LayoutDashboard, Droplets } from "lucide-react";
 import { withTenant } from "@/db/client";
@@ -45,6 +46,9 @@ export default async function BusinessEntriesPage({
   const { rows, kpi, rms } = await withTenant(session.tenantId, async (tx) => {
     const conds: any[] = [eq(businessEntries.tenantId, session.tenantId)];
     if (!seesAll) conds.push(eq(businessEntries.rmId, session.userId));
+    // A user limited to the Motilal Oswal / Mutual Fund book sees only that book's entries.
+    const bookSql = await clientBookSql(tx, session, "business_entries.investor_id");
+    conds.push(bookSql);
     if (q) conds.push(or(ilike(businessEntries.clientName, `%${q}%`), ilike(businessEntries.amcName, `%${q}%`))!);
     if (statusFilter.length) conds.push(inArray(businessEntries.status, statusFilter as any));
     if (productFilter.length) conds.push(inArray(businessEntries.productType, productFilter as any));
@@ -82,6 +86,7 @@ export default async function BusinessEntriesPage({
         COALESCE(SUM(total_amount) FILTER (WHERE date_trunc('month', business_date) = date_trunc('month', current_date)), 0)::numeric AS mtd_gross
       FROM business_entries
       WHERE tenant_id = ${session.tenantId}::uuid AND status <> 'cancelled'${seesAll ? sql`` : sql` AND rm_id = ${session.userId}::uuid`}
+        AND ${bookSql}
     `);
     const kpi = (kpiRes.rows[0] as any) ?? { entries: 0, fy_gross: 0, mtd_gross: 0 };
 

@@ -140,6 +140,24 @@ function clientTagSql(tags: string[], alias: string): SQL {
   )`;
 }
 
+/**
+ * The client-BOOK restriction alone, for a table that points at a client
+ * (business entries, SIPs, SIP rejections…) rather than being one.
+ *
+ * Those modules have their own ownership rules, so this is not the whole wall —
+ * only "this client is in one of my books". TRUE when the user has no book
+ * restriction, so it can be ANDed unconditionally. A row with no client at all
+ * cannot be shown to someone restricted to specific books.
+ */
+export async function clientBookSql(tx: any, session: SessionUser, investorIdCol: string): Promise<SQL> {
+  const tags = await allowedClientTags(tx, session);
+  if (tags.length === 0) return sql`TRUE`;
+  return sql`EXISTS (
+    SELECT 1 FROM investors bk
+    WHERE bk.id = ${sql.raw(investorIdCol)} AND ${clientTagSql(tags, "bk")}
+  )`;
+}
+
 /** Same rule as raw SQL, for queries built with sql`` fragments. */
 export async function investorScopeSql(tx: any, session: SessionUser, alias = "investors") {
   requireInvestorView(session);

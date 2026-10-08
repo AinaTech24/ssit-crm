@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { clientBookSql } from "@/lib/investors/access";
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { TrendingUp, AlertTriangle, CheckCircle2, Calendar, ShieldAlert, Plus } from "lucide-react";
 import { withTenant } from "@/db/client";
@@ -102,6 +103,7 @@ export default async function SipsPage({
       FROM sips
       WHERE tenant_id = ${session.tenantId}::uuid
         AND investor_id IN (SELECT id FROM investors WHERE deleted_at IS NULL)${statsScope}
+        AND ${await clientBookSql(tx, session, "sips.investor_id")}
     `);
     const s = stats.rows[0] as any;
 
@@ -109,6 +111,7 @@ export default async function SipsPage({
     // Exclude SIPs whose client is soft-deleted (in Trash) — they were showing
     // here with investor links that 404'd on the deleted client.
     conds.push(isNull(investors.deletedAt));
+    conds.push(await clientBookSql(tx, session, "sips.investor_id"));
     if (!seesAll) conds.push(or(eq(sips.rmId, session.userId), eq(investors.rmId, session.userId))!);
     if (q) {
       conds.push(

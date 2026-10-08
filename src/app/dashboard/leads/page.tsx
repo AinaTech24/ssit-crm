@@ -317,19 +317,19 @@ export default async function LeadsPage({
       tx.execute(sql`
         SELECT COALESCE(d.name, 'No sub-branch') AS label, d.id AS desk_id, COUNT(*)::int AS n
         FROM leads
-        LEFT JOIN users u ON u.id = leads.owner_id
-        LEFT JOIN desks d ON d.id = u.desk_id
+        LEFT JOIN users ON users.id = leads.owner_id
+        LEFT JOIN desks d ON d.id = users.desk_id
         WHERE ${breakdownWhere}
         GROUP BY d.id, d.name
         ORDER BY n DESC
         LIMIT 12
       `),
       tx.execute(sql`
-        SELECT COALESCE(u.name, 'Unassigned') AS label, u.id AS rm_id, COUNT(*)::int AS n
+        SELECT COALESCE(users.name, 'Unassigned') AS label, users.id AS rm_id, COUNT(*)::int AS n
         FROM leads
-        LEFT JOIN users u ON u.id = leads.owner_id
+        LEFT JOIN users ON users.id = leads.owner_id
         WHERE ${breakdownWhere}
-        GROUP BY u.id, u.name
+        GROUP BY users.id, users.name
         ORDER BY n DESC
         LIMIT 12
       `),

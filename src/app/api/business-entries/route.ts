@@ -12,6 +12,7 @@ import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { clientBookSql } from "@/lib/investors/access";
 import { can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
@@ -63,6 +64,7 @@ export async function GET(req: NextRequest) {
       const conds: any[] = [eq(businessEntries.tenantId, session.tenantId)];
       // RMs see only the entries they booked; managers/ops see the whole firm.
       if (!seesAllEntries(session)) conds.push(eq(businessEntries.rmId, session.userId));
+      conds.push(await clientBookSql(tx, session, "business_entries.investor_id"));
       if (q) conds.push(or(ilike(businessEntries.clientName, `%${q}%`), ilike(businessEntries.amcName, `%${q}%`))!);
       if (productType.length) conds.push(inArray(businessEntries.productType, productType as any));
       if (status.length) conds.push(inArray(businessEntries.status, status as any));

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
+import { clientBookSql } from "@/lib/investors/access";
 import { XOctagon, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -65,6 +66,8 @@ export default async function SipRejectionsPage({
     }
     const dr = dateRangeCond(sp, "rej", "r.rejection_date");
     if (dr) filters.push(dr);
+    // Limited to the user's client books, when they have any.
+    filters.push(await clientBookSql(tx, session, "r.investor_id"));
     const whereSql = filters.length ? sql` WHERE ${sql.join(filters, sql` AND `)}` : sql``;
 
     const rows = await tx.execute(sql`
@@ -117,6 +120,7 @@ export default async function SipRejectionsPage({
           AND (now() - status_changed_at) > interval '7 days')::int AS age_7p
       FROM sip_rejections
       WHERE tenant_id = ${session.tenantId}::uuid
+        AND ${await clientBookSql(tx, session, "sip_rejections.investor_id")}
     `);
     const s = stats.rows[0] as any;
 
@@ -129,6 +133,7 @@ export default async function SipRejectionsPage({
       FROM sip_rejections r
       LEFT JOIN users u ON u.id = r.assigned_rm_id
       WHERE r.tenant_id = ${session.tenantId}::uuid
+        AND ${await clientBookSql(tx, session, "r.investor_id")}
         AND r.recovery_status IN ('pending','client_contacted','bank_issue','mandate_issue')
       GROUP BY COALESCE(u.name, '— Unassigned —')
       ORDER BY overdue_count DESC, open_count DESC
