@@ -143,10 +143,10 @@ const NAV: NavSection[] = [
         roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance", "sub_broker"] },
       { href: "/dashboard/families", label: "Family Mapping", icon: HeartHandshake, module: "family_mapping",
         roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
-      // No "rm": the page is firm-wide with no per-RM scoping (see its
-      // requireAny), so an RM would only get a locked door.
+      // Open to RMs: every number on the page is cut down by the client data
+      // wall, so an RM sees only their own book's referrals.
       { href: "/dashboard/referrals", label: "Referrals", icon: Share2, module: "client_master",
-        roles: ["owner", "branch_head", "back_office", "ops", "compliance"] },
+        roles: ["owner", "rm", "sub_broker", "ra_sales", "ria", "insurance", "branch_head", "back_office", "ops", "compliance"] },
       // Cross-sell whitespace, inverted: the client page records one product
       // status per client, this reads the whole book at once. Scoped per-RM
       // inside the page, so unlike Referrals an RM gets a useful view, not a
