@@ -134,6 +134,16 @@ export function DatePicker({
   const maxD = fromISO(max);
   const todayISO = toISO(new Date());
 
+  // Jump straight to any month / year instead of paging month by month — a date
+  // of birth is decades back. Bounded by min/max when given, otherwise a wide
+  // default; always includes the year currently in view so it can never be
+  // missing from its own dropdown.
+  const nowY = new Date().getFullYear();
+  const yFrom = Math.min(minD ? minD.getFullYear() : nowY - 100, y);
+  const yTo = Math.max(maxD ? maxD.getFullYear() : nowY + 30, y);
+  const years: number[] = [];
+  for (let yy = yTo; yy >= yFrom; yy--) years.push(yy);
+
   const grid: Array<{ date: Date; inMonth: boolean }> = [];
   const prevDays = new Date(y, m, 0).getDate();
   for (let i = firstDow - 1; i >= 0; i--) grid.push({ date: new Date(y, m - 1, prevDays - i), inMonth: false });
@@ -183,7 +193,28 @@ export function DatePicker({
               <button type="button" onClick={() => setView(new Date(y, m - 1, 1))} className="size-7 grid place-items-center rounded-md hover:bg-secondary" aria-label="Previous month">
                 <ChevronLeft className="size-4" />
               </button>
-              <div className="text-sm font-semibold">{MONTHS[m]} {y}</div>
+              <div className="flex items-center gap-1">
+                <select
+                  value={m}
+                  onChange={(e) => setView(new Date(y, Number(e.target.value), 1))}
+                  className="text-sm font-semibold bg-transparent rounded-md px-1 py-0.5 hover:bg-secondary cursor-pointer focus:outline-none"
+                  aria-label="Month"
+                >
+                  {MONTHS.map((name, idx) => (
+                    <option key={name} value={idx}>{name}</option>
+                  ))}
+                </select>
+                <select
+                  value={y}
+                  onChange={(e) => setView(new Date(Number(e.target.value), m, 1))}
+                  className="text-sm font-semibold bg-transparent rounded-md px-1 py-0.5 hover:bg-secondary cursor-pointer focus:outline-none"
+                  aria-label="Year"
+                >
+                  {years.map((yy) => (
+                    <option key={yy} value={yy}>{yy}</option>
+                  ))}
+                </select>
+              </div>
               <button type="button" onClick={() => setView(new Date(y, m + 1, 1))} className="size-7 grid place-items-center rounded-md hover:bg-secondary" aria-label="Next month">
                 <ChevronRight className="size-4" />
               </button>
