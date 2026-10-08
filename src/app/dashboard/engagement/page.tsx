@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Gift, FileUp } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
-import { requireAny, can } from "@/lib/auth/rbac";
+import { can } from "@/lib/auth/rbac";
+import { withTenant } from "@/db/client";
+import { requireAnyOrNavGrant } from "@/lib/auth/nav-grant";
 import { EngagementBoard } from "@/components/engagement/EngagementBoard";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +22,8 @@ export default async function EngagementPage() {
   // An RM opens this for their OWN clients — the board's queries are walled by
   // the client data scope, so "can see the module" no longer means "can see the
   // firm's whole gift log".
-  requireAny(
-    session.roles,
-    ["investor.view.all", "investor.view.assigned", "gifting.manage"],
-    session.permissions
+  await withTenant(session.tenantId, (tx) =>
+    requireAnyOrNavGrant(tx, session, ["investor.view.all", "investor.view.assigned", "gifting.manage"], "/dashboard/engagement")
   );
   const canLog =
     can(session.roles, "investor.edit.all", session.permissions) ||

@@ -158,6 +158,21 @@ export async function clientBookSql(tx: any, session: SessionUser, investorIdCol
   )`;
 }
 
+/**
+ * The wall for a session that may have been let in by an explicit sidebar grant
+ * rather than a client-view capability. A role with no client visibility gets
+ * only the clients that are theirs (relationship or servicing RM) — the grant
+ * opens the page, it does not widen the data.
+ */
+export async function investorScopeSqlOrOwn(tx: any, session: SessionUser, alias = "investors") {
+  try {
+    return await investorScopeSql(tx, session, alias);
+  } catch (err) {
+    if ((err as { status?: number })?.status !== 403) throw err;
+    return sql`(${sql.raw(alias)}.rm_id = ${session.userId}::uuid OR ${sql.raw(alias)}.service_rm_id = ${session.userId}::uuid)`;
+  }
+}
+
 /** Same rule as raw SQL, for queries built with sql`` fragments. */
 export async function investorScopeSql(tx: any, session: SessionUser, alias = "investors") {
   requireInvestorView(session);

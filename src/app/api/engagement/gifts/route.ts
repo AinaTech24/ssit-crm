@@ -22,7 +22,8 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
-import { investorScopeSql } from "@/lib/investors/access";
+import { investorScopeSqlOrOwn } from "@/lib/investors/access";
+import { requireAnyOrNavGrant } from "@/lib/auth/nav-grant";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { notifyGiftDelivered, notifyGiftLogged } from "@/lib/gifts/notify";
@@ -89,10 +90,8 @@ export async function GET(req: NextRequest) {
     // Engagement is a management view of the whole firm's gifting.
     // An RM sees their OWN clients' engagement — the queries below are walled,
     // so opening the board no longer means seeing the firm's whole gift log.
-    requireAny(
-      session.roles,
-      ["investor.view.all", "investor.view.assigned", "gifting.manage"],
-      session.permissions
+    await withTenant(session.tenantId, (tx) =>
+      requireAnyOrNavGrant(tx, session, ["investor.view.all", "investor.view.assigned", "gifting.manage"], "/dashboard/engagement")
     );
 
     const monthParse = MonthStr.safeParse(req.nextUrl.searchParams.get("month") ?? "");
@@ -105,7 +104,7 @@ export async function GET(req: NextRequest) {
       // the clients that session may see — firm-wide roles resolve to TRUE and
       // are unaffected. Derived from the CLIENT the gift is for, so a gift
       // logged by back office on an RM's client still shows to that RM.
-      const giftScope = await investorScopeSql(tx, session, "gi");
+      const giftScope = await investorScopeSqlOrOwn(tx, session, "gi");
       const scoped = sql`EXISTS (SELECT 1 FROM investors gi WHERE gi.id = client_gifts.investor_id AND ${giftScope})`;
       const scopedG = sql`EXISTS (SELECT 1 FROM investors gi WHERE gi.id = g.investor_id AND ${giftScope})`;
       // One month of gifts, for the calendar and the recent-activity list.

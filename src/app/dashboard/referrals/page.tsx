@@ -4,7 +4,8 @@ import { Users, TrendingUp, Heart, CheckCircle2 } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
-import { investorScopeSql } from "@/lib/investors/access";
+import { investorScopeSqlOrOwn } from "@/lib/investors/access";
+import { requireAnyOrNavGrant } from "@/lib/auth/nav-grant";
 import { confinedDeskId } from "@/lib/scope/view-filter";
 import { formatINR, formatDate } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
@@ -22,13 +23,15 @@ export default async function ReferralsPage({
   // data wall inside every query below. This used to demand the firm-wide
   // capability and throw for everyone else — so the sidebar item was there and
   // the page crashed for a sub-branch head.
-  requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
+  await withTenant(session.tenantId, (tx) =>
+    requireAnyOrNavGrant(tx, session, ["investor.view.all", "investor.view.assigned"], "/dashboard/referrals")
+  );
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const minOnly = sp.min === "2";
 
   const data = await withTenant(session.tenantId, async (tx) => {
-    const wall = await investorScopeSql(tx, session, "i");
+    const wall = await investorScopeSqlOrOwn(tx, session, "i");
     const deskOnly = await confinedDeskId(tx, session);
     // Aggregate referrals per existing investor.
     const conds: any[] = [sql`i.deleted_at IS NULL`, wall];

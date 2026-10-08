@@ -5,7 +5,8 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import { formatINR } from "@/lib/utils";
-import { investorScopeSql } from "@/lib/investors/access";
+import { investorScopeSqlOrOwn } from "@/lib/investors/access";
+import { requireAnyOrNavGrant } from "@/lib/auth/nav-grant";
 import { usersInScopeSql } from "@/lib/auth/data-scope";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
 import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
@@ -70,7 +71,9 @@ export default async function OpportunitiesPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
-  requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
+  await withTenant(session.tenantId, (tx) =>
+    requireAnyOrNavGrant(tx, session, ["investor.view.all", "investor.view.assigned"], "/dashboard/opportunities")
+  );
   const viewAll = can(session.roles, "investor.view.all", session.permissions);
 
   const sp = await searchParams;
@@ -108,7 +111,7 @@ export default async function OpportunitiesPage({
     ];
     // The client data wall, not "investor.view.all ⇒ the whole firm": a
     // sub-branch head holding view-all was reading every other desk's clients.
-    baseConds.push(await investorScopeSql(tx, session, "i"));
+    baseConds.push(await investorScopeSqlOrOwn(tx, session, "i"));
     baseConds.push(scopeFilterSql(scopeSel, session.tenantId, ["i.rm_id", "i.service_rm_id"]));
     if (q) baseConds.push(sql`(i.name ILIKE ${`%${q}%`} OR i.pan ILIKE ${`%${q}%`} OR i.email ILIKE ${`%${q}%`})`);
     if (rmFilter.length) {
