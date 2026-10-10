@@ -12,6 +12,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useNavAllowed } from "@/components/layout/NavAccess";
 
 export type ModuleTab = {
   href: string;
@@ -20,8 +21,12 @@ export type ModuleTab = {
   exact?: boolean;
 };
 
-export function ModuleTabs({ tabs }: { tabs: ModuleTab[] }) {
+export function ModuleTabs({ tabs: allTabs }: { tabs: ModuleTab[] }) {
   const pathname = usePathname() ?? "";
+  const allowed = useNavAllowed();
+  // A tab for a view this person has not been granted would open the "no access"
+  // screen, so it is not offered. The tab they are on always stays.
+  const tabs = allTabs.filter((t) => pathname === t.href || pathname.startsWith(t.href + "/") || allowed(t.href));
 
   const isActive = (t: ModuleTab) => {
     if (t.exact === false) return pathname === t.href || pathname.startsWith(t.href + "/");

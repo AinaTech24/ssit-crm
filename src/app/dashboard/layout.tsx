@@ -67,6 +67,14 @@ import {
   Network,
   LifeBuoy,
   IndianRupee,
+  MessageSquareWarning,
+  XOctagon,
+  TrendingDown,
+  CalendarClock,
+  Scissors,
+  Shuffle,
+  LineChart,
+  CalendarDays,
 } from "lucide-react";
 import { eq, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
@@ -74,7 +82,8 @@ import { tenants, users, tenantUiLayouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { primaryRoleLabel, can } from "@/lib/auth/rbac";
 import { loadTenantLicense } from "@/lib/auth/license";
-import { tenantAccessibleNavKeys, isGatableNav, gatedNavKeyForPath, roleDefaultNavKeys } from "@/config/nav-access";
+import { tenantAccessibleNavKeys, isGatableNav, gatedNavKeyForPath, roleDefaultNavKeys, ALL_NAV_KEYS } from "@/config/nav-access";
+import { NavAccessProvider } from "@/components/layout/NavAccess";
 import { pickLogo } from "@/lib/branding/logo";
 import type { Metadata } from "next";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
@@ -266,6 +275,32 @@ const NAV: NavSection[] = [
       { href: "/dashboard/audit-log", label: "Audit Log", icon: ClipboardCheck, module: "audit_log", roles: ["owner", "compliance"] },
     ],
   },
+];
+
+/**
+ * Catalogue items that live INSIDE another module (as tabs or a switcher)
+ * rather than having a sidebar entry of their own. Ticking one for a person is
+ * a decision that they should be able to open it — but if they cannot reach the
+ * module it lives in, there would be no way in. So when the hub is not in their
+ * sidebar, the item gets one of its own.
+ */
+const EXTRA_NAV: { href: string; label: string; icon: any; parents: string[] }[] = [
+  { href: "/dashboard/complaints", label: "Complaints", icon: MessageSquareWarning, parents: ["/dashboard/service-requests", "/dashboard/tasks"] },
+  { href: "/dashboard/sip-rejections", label: "SIP Rejections", icon: XOctagon, parents: ["/dashboard/sips"] },
+  { href: "/dashboard/sips/at-risk", label: "SIP At-Risk", icon: TrendingDown, parents: ["/dashboard/sips"] },
+  { href: "/dashboard/insurance-claims", label: "Insurance Claims", icon: ClipboardList, parents: ["/dashboard/insurance"] },
+  { href: "/dashboard/insurance/renewals", label: "Insurance Renewals", icon: CalendarClock, parents: ["/dashboard/insurance"] },
+  { href: "/dashboard/insurance/protection-gap", label: "Protection-Gap Radar", icon: ShieldAlert, parents: ["/dashboard/insurance"] },
+  { href: "/dashboard/insurance/commission", label: "Insurance Commission", icon: IndianRupee, parents: ["/dashboard/insurance"] },
+  { href: "/dashboard/calendar", label: "Calendar", icon: Calendar, parents: ["/dashboard/command-center"] },
+  { href: "/dashboard/next-best-action", label: "Next Best Action", icon: Sparkles, parents: ["/dashboard/command-center"] },
+  { href: "/dashboard/pipeline-board", label: "Pipeline Board", icon: Network, parents: ["/dashboard/leads"] },
+  { href: "/dashboard/reports/nomination-tracker", label: "Nomination Tracker", icon: FileCheck, parents: ["/dashboard/reports"] },
+  { href: "/dashboard/reports/trail-forecast", label: "Trail Forecast", icon: LineChart, parents: ["/dashboard/reports"] },
+  { href: "/dashboard/reports/churn-risk", label: "Churn-risk Radar", icon: AlertTriangle, parents: ["/dashboard/reports"] },
+  { href: "/dashboard/reports/tax-harvesting", label: "Tax-Harvesting", icon: Scissors, parents: ["/dashboard/reports"] },
+  { href: "/dashboard/reports/cross-sell", label: "Cross-sell Radar", icon: Shuffle, parents: ["/dashboard/reports"] },
+  { href: "/dashboard/finances/expenses", label: "Staff Expense Tracker", icon: Wallet, parents: ["/dashboard/finances"] },
 ];
 
 function NavBlockedNotice() {
@@ -531,7 +566,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // can reorder/regroup. Pass the icon by NAME (lucide displayName) — a string —
   // not a pre-rendered element, so React never tries to serialize a lucide
   // component across the RSC boundary. The section title is the default group.
-  const flatNavItems: NavItemData[] = visible.flatMap((section) =>
+  // Hub-less catalogue items the person was granted (see EXTRA_NAV).
+  const visibleHrefs = new Set(visible.flatMap((s) => s.items.map((i) => i.href)));
+  const extraItems = EXTRA_NAV.filter(
+    (e) =>
+      moduleControls[e.href] !== "disabled" &&
+      tenantAllowedSet.has(e.href) &&
+      !isOwnerUser &&
+      !!effectiveUserModules &&
+      effectiveUserModules.includes(e.href) &&
+      !e.parents.some((p) => visibleHrefs.has(p))
+  );
+  // Everything gated that this person can NOT open — handed to the client tab
+  // bars so they stop offering locked views.
+  const blockedKeys = ALL_NAV_KEYS.filter(
+    (k) =>
+      moduleControls[k] === "disabled" ||
+      !tenantAllowedSet.has(k) ||
+      (!isOwnerUser && effectiveUserModules !== null && !effectiveUserModules.includes(k))
+  );
+
+  const flatNavItems: NavItemData[] = [...visible.flatMap((section) =>
     section.items.map((item) => ({
       href: item.href,
       label: item.label,
@@ -540,7 +595,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
       badge: item.href === "/dashboard/announcements" && announcementCount > 0 ? announcementCount : undefined,
       beta: moduleControls[item.href] === "beta",
     }))
-  );
+  ), ...extraItems.map((e) => ({
+    href: e.href,
+    label: e.label,
+    iconName: (e.icon?.displayName || e.icon?.name || "") as string,
+    defaultGroup: "More",
+    badge: undefined,
+    beta: false,
+  }))];
 
   // Sub-items for the top "Dashboards" dropdown. The main /dashboard is the core
   // landing (always present). The rest (My Dashboards, Team Dashboard, Team
@@ -720,10 +782,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           {navBlocked ? (
             <NavBlockedNotice />
           ) : (
-            <>
+            <NavAccessProvider blocked={blockedKeys}>
               {children}
               <SessionRegister />
-            </>
+            </NavAccessProvider>
           )}
         </div>
       </main>

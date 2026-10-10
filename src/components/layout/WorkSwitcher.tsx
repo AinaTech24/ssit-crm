@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Select } from "@/components/ui/Select";
+import { useNavAllowed } from "./NavAccess";
 
 /**
  * Module switcher for the unified "Work" area — Tasks, Service Requests and
@@ -28,6 +29,9 @@ export function WorkSwitcher({
   label?: string;
 }) {
   const router = useRouter();
+  const allowed = useNavAllowed();
+  // Only offer views this person may open (the one they are on always stays).
+  const visible = options.filter((o) => o.value === current || allowed(o.value));
   return (
     <div className="inline-flex items-center gap-2 text-sm">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -36,7 +40,7 @@ export function WorkSwitcher({
           value={current}
           ariaLabel={label}
           size="sm"
-          options={options}
+          options={visible}
           onChange={(v) => { if (v) router.push(v); }}
         />
       </div>
