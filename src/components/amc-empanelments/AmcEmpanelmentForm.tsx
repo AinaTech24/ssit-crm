@@ -513,44 +513,6 @@ export function AmcEmpanelmentForm({
       )}
 
       {mode === "edit" && (
-      <Section title="Investment-committee due diligence">
-        <div className="space-y-3">
-          <Field label="Core investment philosophy">
-            <textarea
-              rows={2}
-              value={v.investmentPhilosophy ?? ""}
-              onChange={(e) =>
-                field("investmentPhilosophy", e.target.value || null)
-              }
-              className="input-base text-sm w-full"
-              placeholder="e.g. GARP equity, top-down macro, conservative credit"
-            />
-          </Field>
-          <Field label="Fund-house strengths">
-            <textarea
-              rows={2}
-              value={v.fundHouseStrengths ?? ""}
-              onChange={(e) =>
-                field("fundHouseStrengths", e.target.value || null)
-              }
-              className="input-base text-sm w-full"
-              placeholder="What this AMC is genuinely good at — research depth, debt fund track record, low-cost leadership, etc."
-            />
-          </Field>
-          <Field label="Red flags / concerns">
-            <textarea
-              rows={2}
-              value={v.redFlags ?? ""}
-              onChange={(e) => field("redFlags", e.target.value || null)}
-              className="input-base text-sm w-full"
-              placeholder="Key-man risk, AUM concentration, regulatory issues, fund-manager turnover, etc."
-            />
-          </Field>
-        </div>
-      </Section>
-      )}
-
-      {mode === "edit" && (
       <Section title="Remarks">
         <textarea
           rows={3}

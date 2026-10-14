@@ -173,8 +173,6 @@ const NAV: NavSection[] = [
       // their own book's engagement rather than a locked door or the firm's.
       { href: "/dashboard/engagement", label: "Client Engagement", icon: Gift, module: "client_master",
         roles: ["owner", "back_office", "ops", "compliance", "gifting_hr", "assistant", "rm"] },
-      { href: "/dashboard/risk-profiles", label: "Risk Profile", icon: Gauge, module: "risk_profile",
-        roles: ["owner", "compliance", "back_office", "ops", "rm"] },
       { href: "/dashboard/discovery", label: "Client Discovery", icon: ClipboardList,
         roles: ["owner", "rm", "branch_head", "back_office", "ops", "compliance"] },
       { href: "/dashboard/calculators", label: "Calculators", icon: Calculator },

@@ -1234,15 +1234,6 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
             <h2 className="font-semibold flex items-center gap-2 text-base">
               <ShieldCheck className="size-4 text-brand-cyan" /> Risk profile history
             </h2>
-            <div className="flex items-center gap-3">
-              <SendRiskProfileLinkButton investorId={inv.id} />
-              <Link
-                href={`/dashboard/risk-profiles/new?investorId=${inv.id}`}
-                className="text-xs font-semibold text-brand-cyan hover:underline"
-              >
-                + New Assessment
-              </Link>
-            </div>
           </div>
           {!data.riskHistory || data.riskHistory.length === 0 ? (
             <EmptyRow text="No risk profile history found." />

@@ -64,14 +64,6 @@ export function ClientReadinessStrip({
             {gaps} item{gaps === 1 ? "" : "s"} left before this client is fully transaction-ready (SEBI).
           </p>
         </div>
-        {riskNeedsAction && (
-          <Link
-            href={`/dashboard/risk-profiles/new?investorId=${investorId}`}
-            className="shrink-0 inline-flex items-center gap-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded px-3 py-1.5 transition-colors shadow-sm"
-          >
-            <ShieldCheck className="size-3.5" /> {risk === "expired" ? "Renew risk profile" : "Start risk assessment"}
-          </Link>
-        )}
       </div>
 
       {/* thin progress bar */}
