@@ -480,36 +480,7 @@ export async function buildCommandQueue(
     }
   }
 
-  // ── 8. Risk profile stale (>365d) — SEBI annual refresh ──────────────
-  {
-    const r = await tx.execute(sql`
-      SELECT id, name, risk_profile_signed_at, count(*) OVER() AS total
-      FROM investors
-      WHERE status = 'active'
-        AND deleted_at IS NULL
-        AND (risk_profile_signed_at IS NULL OR risk_profile_signed_at < now() - interval '365 days')
-        ${scope("rm_id", owners, firmWide)}${cscope("id")}
-      ORDER BY risk_profile_signed_at ASC NULLS FIRST
-      LIMIT 5
-    `);
-    if (r.rows.length) {
-      groups.push({
-        key: "rp_stale",
-        label: "Risk profiles to refresh",
-        icon: "ShieldCheck",
-        severity: "soon",
-        tone: "sky",
-        count: Number(r.rows[0].total ?? r.rows.length),
-        href: href("/dashboard/investors", firmWide || ownerList !== null, "rp_stale=1"),
-        items: r.rows.map((x: any) => ({
-          id: x.id,
-          title: x.name,
-          detail: x.risk_profile_signed_at ? `Signed ${fmt(x.risk_profile_signed_at)}` : "Never assessed",
-          href: `/dashboard/investors/${x.id}`,
-        })),
-      });
-    }
-  }
+  // ── 8. (Risk-profile refresh queue removed — Risk Profile is retired.) ──
 
   // ── 9. Birthdays TODAY (wish them — a do-it-today touchpoint) ────────
   {
