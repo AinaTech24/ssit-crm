@@ -201,16 +201,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       let namedApproverId = ((before.meta as Record<string, unknown> | null)?.approverId as string | undefined) ?? null;
       const isMarketing = before.department === "marketing";
       const metaPatch: Record<string, unknown> = {};
-      const isApprover = namedApproverId
-        ? canEditAll || namedApproverId === session.userId
-        : canEditAll || before.createdById === session.userId;
+      // The marketing role holds task.edit.all, so "edit all" must NOT make a
+      // marketing person the approver of marketing content — least of all their
+      // own. Sign-off on a marketing task is the named approver's (Bhargavi) or
+      // an admin who is neither the assignee nor in the marketing role.
+      const isMarketingUser = (session.roles as string[]).includes("marketing");
+      const adminMayApprove = canEditAll && !(isMarketing && (before.assigneeId === session.userId || isMarketingUser));
+      const isApprover = isMarketing
+        ? namedApproverId
+          ? namedApproverId === session.userId || adminMayApprove
+          : adminMayApprove || (before.createdById === session.userId && before.assigneeId !== session.userId)
+        : namedApproverId
+          ? canEditAll || namedApproverId === session.userId
+          : canEditAll || before.createdById === session.userId;
       let approvalNotif:
         | null
         | { userId: string; kind: string; title: string; body: string; severity: any; linkUrl: string } = null;
       // Assignee marking a requires-approval task "completed" is re-routed to a
       // submit-for-approval (can't self-complete past the gate).
       const assigneeTriedToComplete =
-        patch.status === "completed" && before.requiresApproval && before.approvalStatus !== "approved" && !isApprover;
+        patch.status === "completed" && (before.requiresApproval || isMarketing) && before.approvalStatus !== "approved" && !isApprover;
       const approvalHandled = !!approvalAction || assigneeTriedToComplete || !!markUploaded;
 
       if (approvalAction === "submit" || assigneeTriedToComplete) {

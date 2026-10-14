@@ -68,9 +68,16 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
   const isMarketing = (task as any).department === "marketing";
   const [uploaded, setUploaded] = useState(!!taskMeta.uploadedAt);
   // A named approver (marketing content) signs off, not the creator.
-  const isApprover = taskMeta.approverId
-    ? taskMeta.approverId === currentUserId || !!canManageAll
-    : task.createdById === currentUserId || !!canManageAll;
+  // Marketing content is signed off by the named approver only; the marketing
+  // person who made it never sees Approve / Reject (the marketing role holds
+  // "manage all", so that flag must not grant it here).
+  const isApprover = (task as any).department === "marketing"
+    ? taskMeta.approverId
+      ? taskMeta.approverId === currentUserId
+      : task.createdById === currentUserId && task.assigneeId !== currentUserId
+    : taskMeta.approverId
+      ? taskMeta.approverId === currentUserId || !!canManageAll
+      : task.createdById === currentUserId || !!canManageAll;
 
   // Per-task reminder state. Default to "custom" (pre-filled) when one is set so
   // saving preserves it; otherwise "none".
@@ -598,7 +605,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
               <h4 className="text-[10px] uppercase font-bold text-slate-500 flex items-center gap-1.5">
                 <ShieldCheck className="size-3.5" /> Approval
               </h4>
-              {isApprover && (
+              {isApprover && !isMarketing && (
                 <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
                   <input
                     type="checkbox"
