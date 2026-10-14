@@ -97,12 +97,11 @@ export default async function TasksPage({
     // status=open from a stat-card click collapses the board to one column).
     // List: an explicit filter wins, else default to open.
     if (!isKanban) {
+      // An explicit status filter wins; with none, the list shows EVERY status —
+      // the same set the Kanban shows. Defaulting to "open" hid in-progress and
+      // completed tasks, so a firm with one completed task saw "all caught up".
       if (statusFilter.length) {
         conds.push(inArray(tasks.status, statusFilter as any));
-      } else if (!approval) {
-        // Default to open — unless filtering by approval, where pending tasks
-        // are usually in_progress and would be hidden by the default-open rule.
-        conds.push(eq(tasks.status, "open"));
       }
     }
     // Awaiting sign-off. 'pending' = any; 'mine' = ones this user approves.

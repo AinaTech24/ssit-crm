@@ -131,8 +131,8 @@ export async function GET(req: NextRequest) {
         // filter — UNLESS an approval filter is active (pending-approval tasks
         // are usually in_progress and would be hidden by the default-open rule).
         if (!isKanban) {
+          // No status filter = every status, matching the Kanban.
           if (statusFilter.length) conds.push(inArray(tasks.status, statusFilter as any));
-          else if (!approval) conds.push(eq(tasks.status, "open"));
         } else if (statusFilter.length) conds.push(inArray(tasks.status, statusFilter as any));
         // Awaiting sign-off. `pending` = any task awaiting approval; `mine` =
         // ones this user is the approver for (its creator, or any if view-all).
