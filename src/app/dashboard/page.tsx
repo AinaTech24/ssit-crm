@@ -62,6 +62,8 @@ export default async function DashboardPage({
   const dateFrom = (sp.date_from ?? "").slice(0, 10);
   const dateTo = (sp.date_to ?? "").slice(0, 10);
   const rmParam = (sp.rm ?? "").trim();
+  // ?unit=d:<deskId> — the research dashboard's sub-branch filter.
+  const scopeDeskId = (sp.unit ?? "").startsWith("d:") ? (sp.unit ?? "").slice(2) : undefined;
   // Sub-branch heads an admin has given the admin-view switch to.
   const adminMode = session.viewMode === "admin";
   const showAdminToggle = adminMode || (await canSwitchAdmin(session.tenantId, session.userId));
@@ -250,10 +252,10 @@ export default async function DashboardPage({
       const selectedIsRa = selectedRoles.some((r) => r === "ra_research" || r === "ra_sales");
       dash = selected
         ? selectedIsRa
-          ? await RaDashboard({ session, rmId: rmParam || undefined, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
+          ? await RaDashboard({ session, deskId: scopeDeskId, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
           : await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
         : asResearch
-          ? await RaDashboard({ session, asAdmin: true, rmId: rmParam || undefined })
+          ? await RaDashboard({ session, asAdmin: true, deskId: scopeDeskId })
           : scope.branch
           ? await BranchCockpit({
               session,
@@ -278,7 +280,7 @@ export default async function DashboardPage({
     } else if (can(roles, "dashboard.view.ra", perms)) {
       // ?rm= also drives the research coverage filter, the same param every
       // other module uses for "show me one person".
-      dash = await RaDashboard({ session, rmId: rmParam || undefined });
+      dash = await RaDashboard({ session, deskId: scopeDeskId });
     } else if (can(roles, "dashboard.view.rm", perms)) {
       dash = await RmDashboard({ session, from: dateFrom, to: dateTo });
     } else {

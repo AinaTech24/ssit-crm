@@ -1,203 +1,234 @@
 /**
- * The research view of the firm's book: meetings and portfolio reviews, RM by
- * RM.
+ * Research's meetings: the ones handed to them, and the ones they hand on.
  *
- * Research is asked "which RMs are actually meeting clients, and whose
- * portfolios have gone unreviewed" — questions about activity across the team
- * rather than any one client. Those answers lived in different modules, none of
- * which a research user could open.
+ * Research does not run a book, so this panel deliberately shows NO clients and
+ * none of their data — no names, AUM, counts or review status. It answers two
+ * questions only:
+ *   - what has an RM, back office or operations assigned to ME, and
+ *   - what have I assigned to someone else.
+ * Each row is the meeting itself (when, what, status) and the colleague on the
+ * other side, with their sub-branch. A sub-branch dropdown narrows both lists.
  *
- * Deliberately NOT a book-size panel: no AUM, SIP or client-count tiles. That
- * is a sales view and research does not run a book.
- *
- * Read-only by construction: it counts, it does not link into anything that
- * edits. A user without firm-wide client access counts only their own slice.
+ * A meeting is "assigned to" someone when they are one of its collaborators and
+ * did not book it; "assigned by" the person who booked it for others.
  */
 
 import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { PieChart, ArrowRight } from "lucide-react";
+import { CalendarCheck, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
-import { investorScopeSql } from "@/lib/investors/access";
-import { can } from "@/lib/auth/rbac";
-import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
-import { ResearchRmFilter } from "./ResearchRmFilter";
+import { ROLE_LABELS } from "@/lib/auth/rbac";
+import { ResearchUnitFilter } from "./ResearchUnitFilter";
 
-/** A review this far past due is the one research is being asked about. */
-const REVIEW_OVERDUE_DAYS = 100;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type RmRow = {
-  rm_id: string | null;
-  rm_name: string | null;
-  clients: number;
-  reviews_due: number;
-  meetings_held_90d: number;
-  meetings_upcoming: number;
-  reviews_done_90d: number;
+type MeetingRow = {
+  id: string;
+  meeting_date: string;
+  status: string;
+  meeting_type: string | null;
+  subject: string | null;
+  created_by_id: string | null;
+  collaborator_ids: string[] | null;
 };
+type Person = { id: string; name: string; roles: string[] | null; desk_id: string | null; desk_name: string | null };
+
+function fmt(d: string): string {
+  return new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+}
+const label = (s: string | null) => (s ?? "").replace(/_/g, " ");
+const roleOf = (p?: Person) => (p?.roles?.[0] ? ROLE_LABELS[p.roles[0]] ?? "" : "");
 
 export async function ResearchCoverageSection({
   session,
-  rmId,
+  deskId,
+  userId,
+  allResearch = false,
 }: {
   session: SessionUser;
-  /** ?rm= — narrows the table to one relationship manager. */
-  rmId?: string;
+  /** ?unit=d:<id> — narrows to meetings with someone on this sub-branch. */
+  deskId?: string;
+  /** Whose meetings: this person. Defaults to the signed-in user. */
+  userId?: string;
+  /** An admin looking at research as a whole: every research user's meetings. */
+  allResearch?: boolean;
 }) {
-  let byRm: RmRow[] = [];
-  // Roster for the filter. Loaded WITHOUT the rm filter applied, or selecting
-  // someone would leave a dropdown containing only them and no way back.
-  let rmOptions: { id: string; name: string }[] = [];
-  const validRm = rmId && /^[0-9a-f-]{36}$/i.test(rmId) ? rmId : undefined;
+  const uid = userId ?? session.userId;
+  const unit = deskId && UUID_RE.test(deskId) ? deskId : undefined;
+  const toMe: { m: MeetingRow; by?: Person }[] = [];
+  const byMe: { m: MeetingRow; to: Person[] }[] = [];
+  let desks: { id: string; name: string }[] = [];
 
   try {
     const data = await withTenant(session.tenantId, async (tx) => {
-      // Someone holding investor.view.all is entitled to the whole book, and
-      // these are aggregate counts over exactly that. Anyone without the
-      // capability still counts only their own — the wall enforces that.
-      const seesAll = can(session.roles, "investor.view.all", session.permissions);
-      const clientScope = seesAll ? sql`TRUE` : await investorScopeSql(tx, session, "investors");
-      const ms = await resolveMeetingScope(tx, session);
-      const meetingScope = seesAll ? sql`TRUE` : meetingScopeSql(ms, "m.rm_id");
+      const raRes = allResearch
+        ? await tx.execute(sql`
+            SELECT id FROM users
+             WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND 'ra_research' = ANY(roles)
+          `)
+        : { rows: [{ id: uid }] };
+      const raIds = (raRes.rows as { id: string }[]).map((r) => String(r.id));
+      const people = new Map<string, Person>();
+      if (raIds.length === 0) return { meetings: [] as MeetingRow[], people, desks: [] as { id: string; name: string }[], raIds };
+      const idList = sql`ARRAY[${sql.join(raIds.map((i) => sql`${i}`), sql`, `)}]::text[]`;
 
-      // Clients and meetings are aggregated SEPARATELY and joined on the person.
-      // Joining meetings onto a per-client row multiplies one figure by the
-      // other; and starting from clients dropped any RM who had meetings but
-      // no book — which is exactly the "meetings are not showing" report.
-      const res = await tx.execute(sql`
-        WITH per_client AS (
-          SELECT investors.rm_id AS uid,
-                 COUNT(*)::int AS clients,
-                 COUNT(*) FILTER (
-                   WHERE investors.next_review_at IS NOT NULL
-                     AND investors.next_review_at <= now() - (${REVIEW_OVERDUE_DAYS} || ' days')::interval
-                 )::int AS reviews_due,
-                 COUNT(*) FILTER (
-                   WHERE investors.last_review_at IS NOT NULL
-                     AND investors.last_review_at >= now() - interval '90 days'
-                 )::int AS reviews_done_90d
-            FROM investors
-           WHERE investors.deleted_at IS NULL
-             AND investors.status = 'active'
-             AND investors.rm_id IS NOT NULL
-             AND ${clientScope}
-           GROUP BY investors.rm_id
-        ),
-        per_meeting AS (
-          SELECT COALESCE(m.created_by_id, m.rm_id) AS uid,
-                 COUNT(*) FILTER (
-                   WHERE m.status = 'completed'
-                     AND m.meeting_date >= now() - interval '90 days'
-                     AND m.meeting_date <= now()
-                 )::int AS held_90d,
-                 COUNT(*) FILTER (
-                   WHERE m.status IN ('scheduled', 'confirmed', 'rescheduled')
-                     AND m.meeting_date >= now()
-                 )::int AS upcoming
-            FROM review_meetings m
-           WHERE m.tenant_id = ${session.tenantId}::uuid
-             AND COALESCE(m.created_by_id, m.rm_id) IS NOT NULL
-             AND ${meetingScope}
-           GROUP BY COALESCE(m.created_by_id, m.rm_id)
-        ),
-        roster AS (
-          SELECT u.id, u.name,
-                 COALESCE(c.clients, 0) AS clients,
-                 COALESCE(c.reviews_due, 0) AS reviews_due,
-                 COALESCE(c.reviews_done_90d, 0) AS reviews_done_90d,
-                 COALESCE(pm.held_90d, 0) AS meetings_held_90d,
-                 COALESCE(pm.upcoming, 0) AS meetings_upcoming
-            FROM users u
-            LEFT JOIN per_client c ON c.uid = u.id
-            LEFT JOIN per_meeting pm ON pm.uid = u.id
-           WHERE u.tenant_id = ${session.tenantId}::uuid
-             AND (c.uid IS NOT NULL OR COALESCE(pm.held_90d, 0) + COALESCE(pm.upcoming, 0) > 0)
-        )
-        SELECT id AS rm_id, name AS rm_name, clients, reviews_due, reviews_done_90d,
-               meetings_held_90d, meetings_upcoming,
-               (${validRm ? sql`id = ${validRm}::uuid` : sql`TRUE`}) AS in_filter
-          FROM roster
-         ORDER BY meetings_held_90d DESC, clients DESC, name ASC
-         LIMIT 100
+      const meetingsRes = await tx.execute(sql`
+        SELECT m.id, m.meeting_date, m.status, m.meeting_type, m.subject,
+               m.created_by_id, m.collaborator_ids
+          FROM review_meetings m
+         WHERE m.tenant_id = ${session.tenantId}::uuid
+           AND (m.created_by_id::text = ANY(${idList})
+                OR jsonb_exists_any(COALESCE(m.collaborator_ids, '[]'::jsonb), ${idList}))
+         ORDER BY m.meeting_date DESC
+         LIMIT 200
       `);
+      const meetings = meetingsRes.rows as unknown as MeetingRow[];
 
-      const all = res.rows as unknown as (RmRow & { in_filter: boolean })[];
-      return {
-        byRm: all.filter((r) => r.in_filter).slice(0, 50),
-        rmOptions: all
-          .filter((r) => r.rm_id)
-          .map((r) => ({ id: String(r.rm_id), name: r.rm_name ?? "—" }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      };
+      const ids = new Set<string>();
+      for (const m of meetings) {
+        if (m.created_by_id) ids.add(String(m.created_by_id));
+        for (const c of m.collaborator_ids ?? []) ids.add(String(c));
+      }
+      if (ids.size) {
+        const pr = await tx.execute(sql`
+          SELECT u.id, u.name, u.roles, u.desk_id, d.name AS desk_name
+            FROM users u LEFT JOIN desks d ON d.id = u.desk_id
+           WHERE u.tenant_id = ${session.tenantId}::uuid
+             AND u.id::text = ANY(ARRAY[${sql.join([...ids].map((i) => sql`${i}`), sql`, `)}]::text[])
+        `);
+        for (const p of pr.rows as unknown as Person[]) people.set(String(p.id), { ...p, id: String(p.id) });
+      }
+      const deskRes = await tx.execute(sql`
+        SELECT id, name FROM desks WHERE tenant_id = ${session.tenantId}::uuid ORDER BY name ASC
+      `);
+      return { meetings, people, desks: deskRes.rows as unknown as { id: string; name: string }[], raIds };
     });
-    byRm = data.byRm;
-    rmOptions = data.rmOptions;
+
+    desks = data.desks.map((d) => ({ id: String(d.id), name: d.name ?? "—" }));
+    const ra = new Set(data.raIds);
+    const inUnit = (p?: Person) => !unit || p?.desk_id === unit;
+
+    for (const m of data.meetings) {
+      const collabs = (m.collaborator_ids ?? []).map(String);
+      const creator = m.created_by_id ? String(m.created_by_id) : null;
+      // Handed to research by someone else.
+      if (collabs.some((c) => ra.has(c)) && creator && !ra.has(creator)) {
+        const by = data.people.get(creator);
+        if (inUnit(by)) toMe.push({ m, by });
+      }
+      // Booked by research for someone else.
+      if (creator && ra.has(creator)) {
+        const to = collabs
+          .filter((c) => !ra.has(c))
+          .map((c) => data.people.get(c))
+          .filter((p): p is Person => !!p);
+        if (to.length && (!unit || to.some((p) => p.desk_id === unit))) byMe.push({ m, to });
+      }
+    }
   } catch (err) {
-    // A dashboard panel must never take the whole page down — but say why, or
-    // an empty panel is indistinguishable from "no data".
-    console.error("[research-coverage] failed", err instanceof Error ? err.message : err);
+    console.error("[research-meetings] failed", err instanceof Error ? err.message : err);
     return null;
   }
 
   return (
-    <div className="border rounded-lg bg-card">
-      <div className="flex items-center justify-between gap-3 border-b px-4 py-2.5 flex-wrap">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <div className="size-7 rounded-lg bg-violet-50 grid place-items-center">
-            <PieChart className="size-3.5 text-violet-600" />
+            <CalendarCheck className="size-3.5 text-violet-600" />
           </div>
           <div>
-            <div className="font-medium text-sm">Meetings &amp; portfolio reviews by RM</div>
-            <div className="text-[11px] text-muted-foreground">
-              Meetings held, reviews done and reviews overdue, per relationship manager
-            </div>
+            <div className="font-medium text-sm">Meetings</div>
+            <div className="text-[11px] text-muted-foreground">Assigned to research, and assigned by research</div>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <ResearchRmFilter options={rmOptions} selected={validRm} />
-          <Link
-            href="/dashboard/review-meetings"
-            className="text-xs text-violet-700 hover:underline font-medium inline-flex items-center gap-1"
-          >
-            All meetings <ArrowRight className="size-3.5" />
+          <ResearchUnitFilter options={desks} selected={unit} />
+          <Link href="/dashboard/review-meetings" className="text-xs text-violet-700 hover:underline font-medium">
+            All meetings →
           </Link>
         </div>
+      </div>
+
+      <MeetingTable
+        title="Assigned to me"
+        icon={<ArrowDownLeft className="size-3.5 text-emerald-600" />}
+        who="Assigned by"
+        empty="Nothing has been assigned to you yet."
+        rows={toMe.map(({ m, by }) => ({ m, people: by ? [by] : [] }))}
+      />
+      <MeetingTable
+        title="Assigned by me"
+        icon={<ArrowUpRight className="size-3.5 text-sky-600" />}
+        who="Assigned to"
+        empty="You have not assigned a meeting to anyone yet."
+        rows={byMe.map(({ m, to }) => ({ m, people: to }))}
+      />
+    </div>
+  );
+}
+
+function MeetingTable({
+  title,
+  icon,
+  who,
+  empty,
+  rows,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  who: string;
+  empty: string;
+  rows: { m: MeetingRow; people: Person[] }[];
+}) {
+  return (
+    <div className="border rounded-lg bg-card">
+      <div className="flex items-center gap-2 border-b px-4 py-2.5 text-sm font-medium">
+        {icon} {title}
+        <span className="chip bg-secondary text-[10px] px-2 py-0.5">{rows.length}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs table-modern">
           <thead>
             <tr>
-              <th className="text-left py-1.5 px-3">RM</th>
-              <th className="text-right py-1.5 px-3">Meetings held (90d)</th>
-              <th className="text-right py-1.5 px-3">Upcoming</th>
-              <th className="text-right py-1.5 px-3">Clients</th>
-              <th className="text-right py-1.5 px-3">Reviews done (90d)</th>
-              <th className="text-right py-1.5 px-3">Reviews {REVIEW_OVERDUE_DAYS}d+ overdue</th>
+              <th className="text-left py-1.5 px-3">When</th>
+              <th className="text-left py-1.5 px-3">Meeting</th>
+              <th className="text-left py-1.5 px-3">{who}</th>
+              <th className="text-left py-1.5 px-3">Sub-branch</th>
+              <th className="text-left py-1.5 px-3">Status</th>
             </tr>
           </thead>
           <tbody>
-            {byRm.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-6 px-3 text-center text-muted-foreground">
-                  No meetings or reviews to show yet.
+                <td colSpan={5} className="py-6 px-3 text-center text-muted-foreground">
+                  {empty}
                 </td>
               </tr>
             ) : (
-              byRm.map((r) => (
-                <tr key={r.rm_id ?? "unassigned"}>
-                  <td className="py-2 px-3 font-medium">{r.rm_name ?? "Unassigned"}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{r.meetings_held_90d}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{r.meetings_upcoming}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{r.clients}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{r.reviews_done_90d}</td>
-                  <td
-                    className={`py-2 px-3 text-right tabular-nums ${
-                      Number(r.reviews_due) > 0 ? "text-rose-600 font-semibold" : ""
-                    }`}
-                  >
-                    {r.reviews_due}
+              rows.map(({ m, people }) => (
+                <tr key={m.id}>
+                  <td className="py-2 px-3 whitespace-nowrap">{fmt(m.meeting_date)}</td>
+                  <td className="py-2 px-3">
+                    <Link href={`/dashboard/review-meetings/${m.id}`} className="font-medium hover:underline capitalize">
+                      {m.subject || label(m.meeting_type) || "Meeting"}
+                    </Link>
                   </td>
+                  <td className="py-2 px-3">
+                    {people.length === 0
+                      ? "—"
+                      : people.map((p) => (
+                          <div key={p.id}>
+                            {p.name}
+                            {roleOf(p) && <span className="text-muted-foreground"> · {roleOf(p)}</span>}
+                          </div>
+                        ))}
+                  </td>
+                  <td className="py-2 px-3">
+                    {[...new Set(people.map((p) => p.desk_name).filter(Boolean))].join(", ") || "—"}
+                  </td>
+                  <td className="py-2 px-3 capitalize">{label(m.status)}</td>
                 </tr>
               ))
             )}

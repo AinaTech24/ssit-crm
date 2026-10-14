@@ -19,7 +19,7 @@ import { decrypt, encrypt } from "@/lib/crypto";
 import { imapFetchSince, type InboundEmail, type ImapConfig } from "@/lib/comms/imap";
 import { describeMailError } from "@/lib/comms/connection-error";
 import { tenantIntegrations } from "@/db/schema/tenant_integrations";
-import { communications, investors, leads } from "@/db/schema";
+import { communications, investors, leads, users } from "@/db/schema";
 import { maybeRouteEmailToTicket } from "@/lib/comms/email-to-ticket";
 import { refreshAccessToken, getProviderDef, type OAuthProvider } from "@/lib/comms/oauth";
 import { sql } from "drizzle-orm";
@@ -45,8 +45,42 @@ async function ingest(
         .limit(1);
       if (dup) continue;
 
-      // Best-effort match the sender to an existing investor, else a lead.
       const fromEmail = m.from?.toLowerCase().trim() ?? null;
+
+      // Not client mail: skip it entirely.
+      //  (a) It is the echo of a message WE sent. A copy of our own outbound can
+      //      come back into the inbox (sent to an address that forwards back, or
+      //      to the connected mailbox itself), and it was being ingested as the
+      //      client writing to us — which then opened a service request off the
+      //      wording of OUR email ("statement", "redeem"…).
+      //  (b) The sender is a team member. Internal mail is not a client request;
+      //      a team member's address matching a client record (testing a send to
+      //      yourself) must not raise tickets either.
+      if (m.messageId) {
+        const [ownSend] = await tx
+          .select({ id: communications.id })
+          .from(communications)
+          .where(
+            and(
+              eq(communications.tenantId, tenantId),
+              eq(communications.channel, "email"),
+              eq(communications.direction, "outbound"),
+              eq(communications.messageId, m.messageId)
+            )
+          )
+          .limit(1);
+        if (ownSend) continue;
+      }
+      if (fromEmail) {
+        const [staff] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.tenantId, tenantId), sql`lower(${users.email}) = ${fromEmail}`))
+          .limit(1);
+        if (staff) continue;
+      }
+
+      // Best-effort match the sender to an existing investor, else a lead.
       let investorId: string | null = null;
       let leadId: string | null = null;
       if (fromEmail) {

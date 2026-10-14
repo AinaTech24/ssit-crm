@@ -22,6 +22,8 @@ import {
 import { requireSession } from "@/lib/auth/session";
 import { formatINR, formatDate, formatRelative, formatPhone, isValidIndianMobile } from "@/lib/utils";
 import { RenewSubscriptionButton } from "@/components/investors/RenewSubscriptionButton";
+import { ClientCallLog } from "@/components/investors/ClientCallLog";
+import { ClientMeetingNotes } from "@/components/investors/ClientMeetingNotes";
 import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES } from "@/lib/subscriptions";
 import { CheckInButton, LogActivityButton } from "@/components/activities/ActivityLogger";
 import { ChangeLogButton } from "@/components/common/ChangeLog";
@@ -103,6 +105,8 @@ const INVESTOR_DETAIL_SECTIONS: RelatedListDef[] = [
   { key: "cross_sell", label: "Cross-sell / holdings" },
   { key: "expected_inflows", label: "Expected inflows" },
   { key: "notes", label: "Notes" },
+  { key: "calls", label: "Call log" },
+  { key: "meeting_notes", label: "Meeting notes" },
   { key: "documents", label: "Documents & attachments" },
   { key: "emails", label: "Emails" },
   { key: "whatsapp", label: "WhatsApp" },
@@ -123,7 +127,7 @@ const INVESTOR_DETAIL_TABS = [
   { key: "overview", label: "Overview", sections: ["health", "recommended", "summary"] },
   { key: "portfolio", label: "Portfolio", sections: ["valuation", "holdings", "churn", "allocation", "sip_health", "transactions", "expected_inflows", "cross_sell"] },
   { key: "profile", label: "KYC & Profile", sections: ["nominees", "referrals", "custom_fields", "master"] },
-  { key: "engagement", label: "Engagement", sections: ["family", "notes", "documents", "emails", "whatsapp", "gifts", "blueprint", "related"] },
+  { key: "engagement", label: "Engagement", sections: ["family", "notes", "calls", "meeting_notes", "documents", "emails", "whatsapp", "gifts", "blueprint", "related"] },
   // Rarely-opened detail — tucked behind "More" so the core tabs stay uncluttered.
   { key: "more", label: "More", sections: ["completeness", "kyc_data", "risk_history", "task_log", "sr_log", "meeting_log"] },
 ];
@@ -782,6 +786,14 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
           Self-fetching island, so it never blocks the page render. */}
       <RelatedListSection moduleKey="investors-detail" sectionKey="notes">
         <ClientNotes investorId={inv.id} />
+      </RelatedListSection>
+
+      <RelatedListSection moduleKey="investors-detail" sectionKey="calls">
+        <ClientCallLog investorId={inv.id} />
+      </RelatedListSection>
+
+      <RelatedListSection moduleKey="investors-detail" sectionKey="meeting_notes">
+        <ClientMeetingNotes investorId={inv.id} />
       </RelatedListSection>
 
       <RelatedListSection moduleKey="investors-detail" sectionKey="documents">

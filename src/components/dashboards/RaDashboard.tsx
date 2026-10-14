@@ -35,12 +35,13 @@ type TaskRow = { id: string; title: string; priority: string; due_at: string | n
 
 export async function RaDashboard({
   session,
-  rmId,
+  deskId,
   target,
   asAdmin = false,
 }: {
   session: SessionUser;
-  rmId?: string;
+  /** ?unit=d:<id> — narrows the meetings to one sub-branch. */
+  deskId?: string;
   /** An admin opening one research / sales analyst's dashboard. */
   target?: { userId: string; name: string; roles: string[] };
   /** An admin viewing the research dashboard as a whole (no one person picked). */
@@ -178,10 +179,11 @@ export async function RaDashboard({
         </div>
       </div>
 
-      {/* The book, as research is asked about it: how many clients are
-          covered, what has gone unreviewed, and how that splits by RM. Read
-          only — it counts, it does not link anywhere that edits. */}
-      {isResearch && <ResearchCoverageSection session={session} rmId={rmId} />}
+      {/* Research sees meetings only — the ones handed to them and the ones
+          they hand on. No clients, no client data. */}
+      {isResearch && (
+        <ResearchCoverageSection session={session} deskId={deskId} userId={uid} allResearch={asAdmin && !target} />
+      )}
 
       {isResearch && (
         <Section title="Recent research" count={data.research!.recent.length} icon={FlaskConical}>
