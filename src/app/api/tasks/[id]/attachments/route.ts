@@ -11,7 +11,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
@@ -27,8 +27,9 @@ const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
 // Bound on ONE request, not on a task. The client chunks a larger pick.
 const MAX_FILES_PER_REQUEST = 20;
 
-function ownsTask(t: { assigneeId: string | null; createdById: string | null }, userId: string): boolean {
-  return t.assigneeId === userId || t.createdById === userId;
+function ownsTask(t: { assigneeId: string | null; createdById: string | null; approverId?: string | null }, userId: string): boolean {
+  // The named sign-off approver (marketing content) is a participant too.
+  return t.assigneeId === userId || t.createdById === userId || t.approverId === userId;
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +40,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const canViewAll = can(session.roles, "task.view.all", session.permissions);
     const rows = await withTenant(session.tenantId, async (tx) => {
       const [t] = await tx
-        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById })
+        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById, approverId: sql<string | null>`${tasks.meta}->>'approverId'` })
         .from(tasks)
         .where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)))
         .limit(1);
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const [t] = await tx
-        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById })
+        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById, approverId: sql<string | null>`${tasks.meta}->>'approverId'` })
         .from(tasks)
         .where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)))
         .limit(1);

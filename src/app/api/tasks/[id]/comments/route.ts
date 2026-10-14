@@ -8,7 +8,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -21,8 +21,9 @@ import { notifyWatchers } from "@/lib/tasks/watchers";
 
 export const dynamic = "force-dynamic";
 
-function ownsTask(task: { assigneeId: string | null; createdById: string | null }, userId: string): boolean {
-  return task.assigneeId === userId || task.createdById === userId;
+function ownsTask(task: { assigneeId: string | null; createdById: string | null; approverId?: string | null }, userId: string): boolean {
+  // The named sign-off approver (marketing content) is a participant too.
+  return task.assigneeId === userId || task.createdById === userId || task.approverId === userId;
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -34,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const rows = await withTenant(session.tenantId, async (tx) => {
       const [task] = await tx
-        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById })
+        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById, approverId: sql<string | null>`${tasks.meta}->>'approverId'` })
         .from(tasks)
         .where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)))
         .limit(1);
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const [task] = await tx
-        .select({ title: tasks.title, assigneeId: tasks.assigneeId, createdById: tasks.createdById })
+        .select({ title: tasks.title, assigneeId: tasks.assigneeId, createdById: tasks.createdById, approverId: sql<string | null>`${tasks.meta}->>'approverId'` })
         .from(tasks)
         .where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)))
         .limit(1);

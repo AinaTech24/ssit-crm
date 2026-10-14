@@ -6,7 +6,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
@@ -25,12 +25,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const att = await withTenant(session.tenantId, async (tx) => {
       const [t] = await tx
-        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById })
+        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById, approverId: sql<string | null>`${tasks.meta}->>'approverId'` })
         .from(tasks)
         .where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)))
         .limit(1);
       if (!t) return null;
-      if (!canViewAll && t.assigneeId !== session.userId && t.createdById !== session.userId) return null;
+      if (!canViewAll && t.assigneeId !== session.userId && t.createdById !== session.userId && t.approverId !== session.userId) return null;
       const [a] = await tx
         .select()
         .from(taskAttachments)
