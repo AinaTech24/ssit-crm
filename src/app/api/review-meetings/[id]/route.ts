@@ -25,6 +25,8 @@ import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
 import { computeNextReview } from "@/lib/investors/review-cadence";
 import { propagateFamilyReview } from "@/lib/investors/family-review";
+import { notifyMeetingCollaborators } from "@/lib/meetings/notify-collaborators";
+import { requestBaseUrl } from "@/lib/url/request-base";
 import {
   reviewMeetings,
   investors,
@@ -518,11 +520,65 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...clientMeta,
       });
 
-      return { ok: true, completed: becomingCompleted };
+      // Collaborators added by this edit (not already on the meeting) have not
+      // been told about it yet.
+      const had = new Set(((before.collaboratorIds as string[] | null) ?? []).map(String));
+      const addedCollaborators = (body.collaboratorIds ?? []).filter((u) => !had.has(u));
+      let aboutName: string | null = null;
+      if (addedCollaborators.length > 0) {
+        const subjId = before.leadId ?? before.investorId;
+        if (subjId) {
+          const who = await tx.execute(
+            before.leadId
+              ? sql`SELECT name FROM leads WHERE id = ${subjId}::uuid LIMIT 1`
+              : sql`SELECT name FROM investors WHERE id = ${subjId}::uuid LIMIT 1`
+          );
+          aboutName = ((who.rows[0] as { name?: string } | undefined)?.name) ?? null;
+        }
+      }
+
+      return {
+        ok: true,
+        completed: becomingCompleted,
+        addedCollaborators,
+        aboutName,
+        notice: {
+          id,
+          subject: (body.subject ?? before.subject ?? null) as string | null,
+          meetingType: before.meetingType as string,
+          meetingDate: (patch.meetingDate ?? before.meetingDate) as Date,
+          durationMinutes: before.durationMinutes as string,
+          meetingMode: (body.meetingMode ?? before.meetingMode ?? null) as string | null,
+          locationOrLink: (body.locationOrLink ?? before.locationOrLink ?? null) as string | null,
+          discussionPoints: (body.discussionPoints ?? before.discussionPoints ?? null) as string | null,
+        },
+      };
     });
     if (!result) return NextResponse.json({ error: "not found" }, { status: 404 });
     if ("forbidden" in result) return NextResponse.json({ error: "you can only manage your own meetings" }, { status: 403 });
-    return NextResponse.json(result);
+
+    // Email newly added collaborators AFTER commit; best-effort, never fails the save.
+    let collaboratorsEmailed = 0;
+    if (result.addedCollaborators.length > 0) {
+      try {
+        const baseUrl = await requestBaseUrl();
+        const r = await withTenant(session.tenantId, async (tx) =>
+          notifyMeetingCollaborators(tx, {
+            tenantId: session.tenantId,
+            meeting: result.notice,
+            collaboratorIds: result.addedCollaborators,
+            createdById: session.userId,
+            organiserName: session.name,
+            aboutName: result.aboutName,
+            baseUrl,
+          })
+        );
+        collaboratorsEmailed = r.sent;
+      } catch (e) {
+        console.warn("[review_meeting] collaborator notice failed:", (e as Error)?.message);
+      }
+    }
+    return NextResponse.json({ ok: true, completed: result.completed, collaboratorsEmailed });
   } catch (err: any) {
     return handleApiError(err);
   }
