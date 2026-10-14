@@ -8,7 +8,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -66,6 +66,8 @@ const Patch = z.object({
   requiresApproval: z.boolean().optional(),
   approvalAction: z.enum(["submit", "approve", "reject"]).optional(),
   approvalNote: z.string().max(2000).optional(),
+  /** Marketing content: the assignee marks an APPROVED piece as posted on social media. */
+  markUploaded: z.boolean().optional(),
   /** Per-task reminder — absolute ISO time (null clears it). Editing it re-arms. */
   remindAt: z.string().nullable().optional(),
   /** Planned effort in minutes (time tracking). */
@@ -135,7 +137,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // checklist + approval verbs live outside the column patch — pull them out.
     // checklist is merged into meta inside the tx; the approval verbs drive the
     // lifecycle branch below.
-    const { checklist, approvalAction, approvalNote, ...rest } = parse.data;
+    const { checklist, approvalAction, approvalNote, markUploaded, ...rest } = parse.data;
     const patch: any = { ...rest, updatedAt: new Date() };
     if (parse.data.status === "completed" && !patch.completedAt) patch.completedAt = new Date();
     // Drizzle timestamp columns require Date objects — coerce the ISO strings
@@ -196,7 +198,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // notification below stand down (`approvalHandled`).
       // A task with a NAMED approver (marketing content → Bhargavi) is signed off
       // by that person (or an owner), not by whoever happened to create it.
-      const namedApproverId = ((before.meta as Record<string, unknown> | null)?.approverId as string | undefined) ?? null;
+      let namedApproverId = ((before.meta as Record<string, unknown> | null)?.approverId as string | undefined) ?? null;
+      const isMarketing = before.department === "marketing";
+      const metaPatch: Record<string, unknown> = {};
       const isApprover = namedApproverId
         ? canEditAll || namedApproverId === session.userId
         : canEditAll || before.createdById === session.userId;
@@ -207,13 +211,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // submit-for-approval (can't self-complete past the gate).
       const assigneeTriedToComplete =
         patch.status === "completed" && before.requiresApproval && before.approvalStatus !== "approved" && !isApprover;
-      const approvalHandled = !!approvalAction || assigneeTriedToComplete;
+      const approvalHandled = !!approvalAction || assigneeTriedToComplete || !!markUploaded;
 
       if (approvalAction === "submit" || assigneeTriedToComplete) {
         delete patch.status;
         delete patch.completedAt;
         patch.approvalStatus = "pending";
         patch.submittedAt = new Date();
+        // Marketing content always goes to the content approver (Bhargavi Patnaik),
+        // even when the task was created as an ordinary task.
+        if (isMarketing && !namedApproverId) {
+          const r = await tx.execute(sql`
+            SELECT id FROM users
+             WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+               AND name ILIKE '%bhargavi%' AND name ILIKE '%patnaik%'
+             ORDER BY created_at ASC LIMIT 1
+          `);
+          const found = ((r.rows[0] as { id?: string } | undefined)?.id) ?? null;
+          if (found) {
+            namedApproverId = found;
+            metaPatch.approverId = found;
+          }
+          patch.requiresApproval = true;
+        }
         const approvalTo = namedApproverId ?? before.createdById;
         if (approvalTo && approvalTo !== session.userId) {
           approvalNotif = {
@@ -230,15 +250,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         patch.approvalStatus = "approved";
         patch.approvedBy = session.userId;
         patch.approvedAt = new Date();
-        patch.status = "completed";
-        patch.completedAt = new Date();
+        if (isMarketing) {
+          // Content is approved but not yet posted — stays open until the
+          // assignee marks it Uploaded.
+          patch.status = "in_progress";
+        } else {
+          patch.status = "completed";
+          patch.completedAt = new Date();
+        }
         if (approvalNote) patch.approvalNote = approvalNote;
         if (before.assigneeId && before.assigneeId !== session.userId) {
           approvalNotif = {
             userId: before.assigneeId,
             kind: "task.approved",
             title: `Approved: ${before.title}`,
-            body: `${actorName} approved your completed task`,
+            body: isMarketing
+              ? `${actorName} approved your content — you can post it now`
+              : `${actorName} approved your completed task`,
             severity: "success",
             linkUrl: "/dashboard/tasks?view=assigned_to_me",
           };
@@ -254,12 +282,36 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           approvalNotif = {
             userId: before.assigneeId,
             kind: "task.rejected",
-            title: `Reopened: ${before.title}`,
-            body: approvalNote ? `${actorName} reopened your task: ${approvalNote}` : `${actorName} reopened your task for changes`,
+            title: `${isMarketing ? "Rejected" : "Reopened"}: ${before.title}`,
+            body: approvalNote ? `${actorName} ${isMarketing ? "rejected" : "reopened"} your task: ${approvalNote}` : `${actorName} ${isMarketing ? "rejected" : "reopened"} your task for changes`,
             severity: "warning",
             linkUrl: "/dashboard/tasks?view=assigned_to_me",
           };
         }
+      }
+
+      // Approved marketing content → the assignee marks it posted.
+      if (markUploaded) {
+        const mayMark = canEditAll || before.assigneeId === session.userId || namedApproverId === session.userId;
+        if (!isMarketing || before.approvalStatus !== "approved" || !mayMark) return { forbidden: true as const };
+        patch.status = "completed";
+        patch.completedAt = new Date();
+        metaPatch.uploadedAt = new Date().toISOString();
+        metaPatch.uploadedBy = session.userId;
+        const notifyUid = namedApproverId && namedApproverId !== session.userId ? namedApproverId : before.createdById;
+        if (notifyUid && notifyUid !== session.userId) {
+          approvalNotif = {
+            userId: notifyUid,
+            kind: "task.content_uploaded",
+            title: `Uploaded: ${before.title}`,
+            body: `${actorName} marked this content as uploaded`,
+            severity: "success",
+            linkUrl: "/dashboard/tasks",
+          };
+        }
+      }
+      if (Object.keys(metaPatch).length) {
+        patch.meta = { ...((patch.meta ?? before.meta ?? {}) as Record<string, unknown>), ...metaPatch };
       }
 
       const after = await tx

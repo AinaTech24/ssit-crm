@@ -63,7 +63,10 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
   const [rejectNote, setRejectNote] = useState("");
   const [approvalBusy, setApprovalBusy] = useState(false);
   const isAssignee = task.assigneeId === currentUserId;
-  const taskMeta = ((task as any).meta ?? {}) as { contentKind?: string; eventLabel?: string; approverId?: string };
+  const taskMeta = ((task as any).meta ?? {}) as { contentKind?: string; eventLabel?: string; approverId?: string; uploadedAt?: string };
+  // Marketing-department tasks always carry the content sign-off flow.
+  const isMarketing = (task as any).department === "marketing";
+  const [uploaded, setUploaded] = useState(!!taskMeta.uploadedAt);
   // A named approver (marketing content) signs off, not the creator.
   const isApprover = taskMeta.approverId
     ? taskMeta.approverId === currentUserId || !!canManageAll
@@ -313,18 +316,39 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
         toast.success("Submitted for approval");
       } else if (action === "approve") {
         setApprovalStatus("approved");
-        setStatus("completed" as any);
-        toast.success("Approved & marked complete");
+        setStatus((isMarketing ? "in_progress" : "completed") as any);
+        toast.success(isMarketing ? "Approved — the marketing team has been notified" : "Approved & marked complete");
       } else {
         setApprovalStatus("rejected");
         setApprovalNoteShown(rejectNote.trim());
         setStatus("in_progress" as any);
         setRejectOpen(false);
-        toast.success("Task reopened for changes");
+        toast.success(isMarketing ? "Rejected — sent back to the marketing team" : "Task reopened for changes");
       }
       onUpdate();
     } catch (e: any) {
       toast.error(e?.message ?? "Action failed");
+    } finally {
+      setApprovalBusy(false);
+    }
+  }
+
+  async function markUploaded() {
+    setApprovalBusy(true);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markUploaded: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Couldn't mark as uploaded");
+      setUploaded(true);
+      setStatus("completed" as any);
+      toast.success("Marked as uploaded");
+      onUpdate();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't mark as uploaded");
     } finally {
       setApprovalBusy(false);
     }
@@ -594,7 +618,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
               </div>
             ) : null}
 
-            {requiresApproval ? (
+            {requiresApproval || isMarketing ? (
               <>
                 {approvalStatus === "pending" ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-800 flex items-center gap-1.5">
@@ -607,7 +631,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
                 ) : approvalStatus === "rejected" ? (
                   <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-[11px] text-rose-800">
                     <div className="flex items-center gap-1.5 font-semibold">
-                      <RotateCcw className="size-3.5 shrink-0" /> Reopened for changes
+                      <RotateCcw className="size-3.5 shrink-0" /> {isMarketing ? "Rejected — changes needed" : "Reopened for changes"}
                     </div>
                     {approvalNoteShown && <div className="mt-1 text-rose-700">“{approvalNoteShown}”</div>}
                   </div>
@@ -632,7 +656,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
                           onClick={() => runApproval("reject")}
                           className="flex-1 text-xs py-1.5 rounded-md border border-rose-200 bg-rose-50 text-rose-700 font-semibold hover:bg-rose-100"
                         >
-                          Confirm reopen
+                          {isMarketing ? "Confirm reject" : "Confirm reopen"}
                         </button>
                         <button type="button" onClick={() => setRejectOpen(false)} className="text-xs py-1.5 px-3 rounded-md border bg-white">
                           Back
@@ -655,7 +679,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
                         onClick={() => setRejectOpen(true)}
                         className="flex-1 text-xs py-1.5 rounded-md border border-rose-200 text-rose-700 bg-white font-semibold hover:bg-rose-50 flex items-center justify-center gap-1.5"
                       >
-                        <RotateCcw className="size-3.5" /> Reopen
+                        <RotateCcw className="size-3.5" /> {isMarketing ? "Reject" : "Reopen"}
                       </button>
                     </div>
                   )
@@ -666,8 +690,24 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
                     onClick={() => runApproval("submit")}
                     className="w-full btn-primary text-xs py-1.5 flex items-center justify-center gap-1.5"
                   >
-                    <Send className="size-3.5" /> {approvalStatus === "pending" ? "Re-submit for approval" : "Submit for approval"}
+                    <Send className="size-3.5" /> {isMarketing ? (approvalStatus === "pending" ? "Send for approval again" : "Send for approval") : approvalStatus === "pending" ? "Re-submit for approval" : "Submit for approval"}
                   </button>
+                ) : null}
+
+                {isMarketing && approvalStatus === "approved" && !uploaded && (isAssignee || isApprover) ? (
+                  <button
+                    type="button"
+                    disabled={approvalBusy}
+                    onClick={markUploaded}
+                    className="w-full btn-primary text-xs py-1.5 flex items-center justify-center gap-1.5"
+                  >
+                    <CheckCircle2 className="size-3.5" /> Mark as uploaded (posted on social media)
+                  </button>
+                ) : null}
+                {isMarketing && uploaded ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-[11px] text-emerald-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="size-3.5 shrink-0" /> Uploaded — posted on social media.
+                  </div>
                 ) : null}
               </>
             ) : (
