@@ -109,7 +109,7 @@ export default async function TasksPage({
     if (approval === "pending") conds.push(eq(tasks.approvalStatus, "pending"));
     else if (approval === "mine") {
       conds.push(eq(tasks.approvalStatus, "pending"));
-      if (!canViewAll) conds.push(eq(tasks.createdById, session.userId));
+      if (!canViewAll) conds.push(or(eq(tasks.createdById, session.userId), sql`tasks.meta->>'approverId' = ${session.userId}`)!);
     }
 
     if (q) {

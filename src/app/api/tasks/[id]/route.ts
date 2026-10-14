@@ -166,7 +166,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (!before) return null;
       // Assigned-only editors may only touch their own tasks — or a task where a
       // sub-task is delegated to them (so a delegate can update their step).
-      if (!canEditAll && !ownsTask(before, session.userId) && !isSubtaskAssignee(before, session.userId)) {
+      const isNamedApprover = ((before.meta as Record<string, unknown> | null)?.approverId as string | undefined) === session.userId;
+      if (!canEditAll && !ownsTask(before, session.userId) && !isSubtaskAssignee(before, session.userId) && !isNamedApprover) {
         return { forbidden: true as const };
       }
       // Merge the action-point checklist into meta (read-modify-write inside the
@@ -193,7 +194,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // The approver is the task's creator or any view-all user (owner). We
       // queue exactly one approval notification and let the generic status
       // notification below stand down (`approvalHandled`).
-      const isApprover = canEditAll || before.createdById === session.userId;
+      // A task with a NAMED approver (marketing content → Bhargavi) is signed off
+      // by that person (or an owner), not by whoever happened to create it.
+      const namedApproverId = ((before.meta as Record<string, unknown> | null)?.approverId as string | undefined) ?? null;
+      const isApprover = namedApproverId
+        ? canEditAll || namedApproverId === session.userId
+        : canEditAll || before.createdById === session.userId;
       let approvalNotif:
         | null
         | { userId: string; kind: string; title: string; body: string; severity: any; linkUrl: string } = null;
@@ -208,9 +214,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         delete patch.completedAt;
         patch.approvalStatus = "pending";
         patch.submittedAt = new Date();
-        if (before.createdById && before.createdById !== session.userId) {
+        const approvalTo = namedApproverId ?? before.createdById;
+        if (approvalTo && approvalTo !== session.userId) {
           approvalNotif = {
-            userId: before.createdById,
+            userId: approvalTo,
             kind: "task.approval_requested",
             title: `Approval needed: ${before.title}`,
             body: `${actorName} submitted this task for your approval`,

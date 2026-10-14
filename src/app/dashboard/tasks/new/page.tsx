@@ -81,6 +81,9 @@ export default function NewTaskPage() {
     assigneeId: "",
     remarks: "",
     requiresApproval: false,
+    contentKind: "", // marketing content request: post | reel | carousel | other
+    eventKey: "",
+    eventLabel: "",
     reminder: "none", // none | at_due | 1h | 3h | 1d | 2d | 1w  (relative to due)
     estimateMinutes: "", // planned effort (minutes)
     tags: [] as string[],
@@ -95,6 +98,13 @@ export default function NewTaskPage() {
     relatedMeetingId: "",
     relatedMeetingLabel: "",
   });
+  const [events, setEvents] = useState<{ key: string; label: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/lead-events")
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((j) => setEvents(j?.events ?? []))
+      .catch(() => setEvents([]));
+  }, []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState("");
@@ -224,6 +234,9 @@ export default function NewTaskPage() {
         assigneeId: form.assigneeId || undefined,
         remarks: form.remarks || undefined,
         requiresApproval: form.requiresApproval || undefined,
+        contentKind: form.contentKind || undefined,
+        eventKey: form.contentKind && form.eventKey ? form.eventKey : undefined,
+        eventLabel: form.contentKind && form.eventLabel ? form.eventLabel : undefined,
         estimateMinutes: form.estimateMinutes ? Math.max(0, parseInt(form.estimateMinutes, 10) || 0) : undefined,
         tags: form.tags.length ? form.tags : undefined,
       };
@@ -602,6 +615,60 @@ export default function NewTaskPage() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Marketing content request: post / reel / carousel, optionally for an event.
+            Goes to the marketing person; their upload is signed off by the content approver. */}
+        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <div className="text-xs font-medium mb-1">Marketing content</div>
+            <SelectField
+              value={form.contentKind}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((s) => ({ ...s, contentKind: v, department: v ? "marketing" : s.department, assigneeId: v ? "" : s.assigneeId }));
+              }}
+              className="w-full"
+            >
+              <option value="">Not a content request</option>
+              <option value="post">Post</option>
+              <option value="reel">Reel</option>
+              <option value="carousel">Carousel</option>
+              <option value="other">Other creative</option>
+            </SelectField>
+          </label>
+          {form.contentKind ? (
+            <label className="block">
+              <div className="text-xs font-medium mb-1">For event <span className="text-[10px] text-muted-foreground font-normal">· optional</span></div>
+              {events.length > 0 ? (
+                <SelectField
+                  value={form.eventKey}
+                  onChange={(e) => {
+                    const ev = events.find((x) => x.key === e.target.value);
+                    setForm((s) => ({ ...s, eventKey: ev?.key ?? "", eventLabel: ev?.label ?? "" }));
+                  }}
+                  className="w-full"
+                >
+                  <option value="">No event</option>
+                  {events.map((ev) => (
+                    <option key={ev.key} value={ev.key}>{ev.label}</option>
+                  ))}
+                </SelectField>
+              ) : (
+                <input
+                  value={form.eventLabel}
+                  onChange={(e) => setForm((s) => ({ ...s, eventLabel: e.target.value, eventKey: e.target.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 120) }))}
+                  placeholder="Event name"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                />
+              )}
+            </label>
+          ) : null}
+          {form.contentKind ? (
+            <p className="sm:col-span-2 text-[11px] text-muted-foreground">
+              Assign it to the marketing person. They upload the creative and submit it; it then waits for approval from Bhargavi Patnaik, and the marketing person is told once it is approved.
+            </p>
+          ) : null}
         </div>
 
         {/* Reminder + approval */}

@@ -63,7 +63,11 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
   const [rejectNote, setRejectNote] = useState("");
   const [approvalBusy, setApprovalBusy] = useState(false);
   const isAssignee = task.assigneeId === currentUserId;
-  const isApprover = task.createdById === currentUserId || canManageAll;
+  const taskMeta = ((task as any).meta ?? {}) as { contentKind?: string; eventLabel?: string; approverId?: string };
+  // A named approver (marketing content) signs off, not the creator.
+  const isApprover = taskMeta.approverId
+    ? taskMeta.approverId === currentUserId || !!canManageAll
+    : task.createdById === currentUserId || !!canManageAll;
 
   // Per-task reminder state. Default to "custom" (pre-filled) when one is set so
   // saving preserves it; otherwise "none".
@@ -583,11 +587,18 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
               )}
             </div>
 
+            {taskMeta.contentKind ? (
+              <div className="text-[11px] text-slate-600">
+                Marketing {taskMeta.contentKind}
+                {taskMeta.eventLabel ? <> · for <span className="font-semibold">{taskMeta.eventLabel}</span></> : null}
+              </div>
+            ) : null}
+
             {requiresApproval ? (
               <>
                 {approvalStatus === "pending" ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-800 flex items-center gap-1.5">
-                    <Clock3 className="size-3.5 shrink-0" /> Submitted — awaiting sign-off.
+                    <Clock3 className="size-3.5 shrink-0" /> Waiting for approval.
                   </div>
                 ) : approvalStatus === "approved" ? (
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5 text-[11px] text-emerald-800 flex items-center gap-1.5">

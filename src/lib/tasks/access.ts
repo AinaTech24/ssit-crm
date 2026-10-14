@@ -1,4 +1,4 @@
-import type { SQL } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import type { Tx } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
@@ -46,5 +46,8 @@ export function requireTaskView(session: SessionUser) {
  */
 export async function taskScopeSql(tx: Tx, session: SessionUser, alias = "tasks"): Promise<SQL> {
   const scope = await resolveDataScope(tx, session);
-  return dataScopeSqlViaOwnerBranch(scope, [`${alias}.assignee_id`, `${alias}.created_by_id`]);
+  const wall = dataScopeSqlViaOwnerBranch(scope, [`${alias}.assignee_id`, `${alias}.created_by_id`]);
+  // A named sign-off approver (marketing content) always sees the task they
+  // have to approve, whichever desk they sit on.
+  return sql`(${wall} OR ${sql.raw(alias)}.meta->>'approverId' = ${session.userId})`;
 }

@@ -53,6 +53,16 @@ const Body = z.object({
   /** Approval loop — when true, the assignee submits for sign-off instead of
    *  completing directly (creator / owner approves or reopens). */
   requiresApproval: z.boolean().optional(),
+  /**
+   * Marketing-content request (post / reel / carousel), optionally for an event.
+   * Forces the approval loop: the marketing person uploads the creative and
+   * submits it; the approver (explicit, else the firm's content approver) signs
+   * off. Stored in tasks.meta so no schema change is needed.
+   */
+  contentKind: z.enum(["post", "reel", "carousel", "other"]).optional(),
+  eventKey: z.string().max(120).optional(),
+  eventLabel: z.string().max(200).optional(),
+  approverId: z.string().uuid().optional(),
   /** Per-task reminder — absolute ISO time to ping the assignee. */
   remindAt: z.string().optional(),
   /** Planned effort in minutes (time tracking). */
@@ -129,7 +139,7 @@ export async function GET(req: NextRequest) {
         if (approval === "pending") conds.push(eq(tasks.approvalStatus, "pending"));
         else if (approval === "mine") {
           conds.push(eq(tasks.approvalStatus, "pending"));
-          if (!canViewAll) conds.push(eq(tasks.createdById, session.userId));
+          if (!canViewAll) conds.push(or(eq(tasks.createdById, session.userId), sql`tasks.meta->>'approverId' = ${session.userId}`)!);
         }
         if (q) conds.push(or(ilike(tasks.title, `%${q}%`), ilike(tasks.description, `%${q}%`), ilike(users.name, `%${q}%`))!);
         if (priorityFilter.length) conds.push(inArray(tasks.priority, priorityFilter as any));
@@ -225,6 +235,28 @@ export async function POST(req: NextRequest) {
         .limit(1);
       if (!u) throw Object.assign(new Error("assignee not found in this firm"), { status: 400 });
 
+      // Marketing-content requests go through sign-off by a named approver.
+      let contentApproverId: string | null = null;
+      if (body.contentKind) {
+        if (body.approverId) {
+          const [a] = await tx
+            .select({ id: users.id })
+            .from(users)
+            .where(and(eq(users.id, body.approverId), eq(users.tenantId, session.tenantId)))
+            .limit(1);
+          contentApproverId = a?.id ?? null;
+        } else {
+          // The firm's content approver: Bhargavi Patnaik.
+          const r = await tx.execute(sql`
+            SELECT id FROM users
+             WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+               AND name ILIKE '%bhargavi%' AND name ILIKE '%patnaik%'
+             ORDER BY created_at ASC LIMIT 1
+          `);
+          contentApproverId = ((r.rows[0] as { id?: string } | undefined)?.id) ?? null;
+        }
+      }
+
       // Internal SLA target derived from priority (overridable later in the editor).
       const slaHours = SLA_HOURS_BY_PRIORITY[body.priority] ?? 72;
       const slaDueAt = new Date(Date.now() + slaHours * 60 * 60 * 1000);
@@ -238,8 +270,8 @@ export async function POST(req: NextRequest) {
         relatedLeadId: body.relatedLeadId ?? null,
         relatedServiceRequestId: body.relatedServiceRequestId ?? null,
         relatedMeetingId: body.relatedMeetingId ?? null,
-        department: body.department ?? null,
-        type: body.type,
+        department: body.department ?? (body.contentKind ? "marketing" : null),
+        type: body.contentKind ? "marketing_content" : body.type,
         title: body.title,
         description: body.description,
         remarks: body.remarks,
@@ -253,7 +285,7 @@ export async function POST(req: NextRequest) {
         recurrenceUntil: body.recurrenceUntil ?? null,
         // Chain root = this task itself when recurring.
         recurrenceParentId: body.recurrence ? id : null,
-        requiresApproval: body.requiresApproval ?? false,
+        requiresApproval: body.requiresApproval ?? !!body.contentKind,
         remindAt: body.remindAt ? new Date(body.remindAt) : null,
         estimateMinutes: body.estimateMinutes ?? null,
         ...(body.tags?.length ? { tags: body.tags } : {}),
@@ -263,6 +295,12 @@ export async function POST(req: NextRequest) {
           if (body.boParticular) m.boParticular = body.boParticular;
           if (body.boChannel) m.boChannel = body.boChannel;
           if (body.boValue != null) m.boValue = body.boValue;
+          if (body.contentKind) {
+            m.contentKind = body.contentKind;
+            if (body.eventKey) m.eventKey = body.eventKey;
+            if (body.eventLabel) m.eventLabel = body.eventLabel;
+            if (contentApproverId) m.approverId = contentApproverId;
+          }
           return Object.keys(m).length ? m : undefined;
         })(),
       } as any);
