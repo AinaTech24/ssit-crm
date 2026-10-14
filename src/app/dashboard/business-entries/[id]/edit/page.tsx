@@ -49,6 +49,7 @@ export default async function EditBusinessEntryPage({ params }: { params: Promis
           businessDate: String(e.businessDate),
           status: e.status,
           rmId: e.rmId,
+          executedById: e.executedById,
           amcName: e.amcName,
           folioNo: e.folioNo,
           notes: e.notes,

@@ -36,7 +36,8 @@ export default async function BusinessEntryDetailPage({ params }: { params: Prom
       const [inv] = await tx.select({ email: investors.email }).from(investors).where(eq(investors.id, entry.investorId)).limit(1);
       email = inv?.email ?? null;
     }
-    return { entry, lines, rmName: rm?.name ?? null, email };
+    const exec = entry.executedById ? (await tx.select({ name: users.name }).from(users).where(eq(users.id, entry.executedById)).limit(1))[0] : null;
+    return { entry, lines, rmName: rm?.name ?? null, executedByName: exec?.name ?? null, email };
   });
   if (!data) notFound();
 
@@ -60,6 +61,7 @@ export default async function BusinessEntryDetailPage({ params }: { params: Prom
             <span className="inline-flex items-center gap-1"><Briefcase className="size-3.5" /> {PRODUCT_LABEL[entry.productType] ?? entry.productType}</span>
             <span className="inline-flex items-center gap-1"><Calendar className="size-3.5" /> {dateStr}</span>
             {data.rmName && <span className="inline-flex items-center gap-1"><User className="size-3.5" /> {data.rmName}</span>}
+            {data.executedByName && <span className="inline-flex items-center gap-1"><User className="size-3.5" /> Executed by {data.executedByName}</span>}
           </div>
         </div>
         <BusinessEntryActions id={entry.id} status={entry.status} hasEmail={!!data.email} />
@@ -115,7 +117,7 @@ export default async function BusinessEntryDetailPage({ params }: { params: Prom
                   </div>
                 </td>
                 <td className="py-2.5 text-xs">
-                  {TXN_LABEL[l.txnType] ?? l.txnType}{l.frequency ? <span className="text-muted-foreground"> · {l.frequency.replace(/_/g, " ")}</span> : null}
+                  {TXN_LABEL[l.txnType] ?? l.txnType}{l.frequency ? <span className="text-muted-foreground"> · {l.frequency.replace(/_/g, " ")}</span> : null}{l.sipDate && (l.txnType === "sip" || l.txnType === "swp") ? <span className="text-muted-foreground"> · day {l.sipDate}</span> : null}
                 </td>
                 <td className="py-2.5 text-xs capitalize text-muted-foreground">{l.assetClass}</td>
                 <td className="py-2.5 text-right tabular-nums font-medium pr-4">{formatINR(Number(l.amount))}</td>

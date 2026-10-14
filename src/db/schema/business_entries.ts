@@ -42,6 +42,8 @@ export const businessEntries = pgTable(
 
     /** RM who closed the business (defaults to the creator). */
     rmId: uuid("rm_id").references(() => users.id),
+    /** Team member who executed the transaction (may differ from the RM). */
+    executedById: uuid("executed_by_id").references(() => users.id),
     amcName: text("amc_name"),
     folioNo: text("folio_no"),
 

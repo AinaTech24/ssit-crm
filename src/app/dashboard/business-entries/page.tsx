@@ -71,6 +71,7 @@ export default async function BusinessEntriesPage({
         totalAmount: businessEntries.totalAmount,
         rmName: users.name,
         lineCount: sql<number>`(SELECT count(*)::int FROM business_entry_lines l WHERE l.entry_id = ${businessEntries.id})`,
+        txnTypes: sql<string[]>`COALESCE((SELECT array_agg(DISTINCT l.txn_type ORDER BY l.txn_type) FROM business_entry_lines l WHERE l.entry_id = ${businessEntries.id}), ARRAY[]::text[])`,
       })
       .from(businessEntries)
       .leftJoin(users, eq(users.id, businessEntries.rmId))

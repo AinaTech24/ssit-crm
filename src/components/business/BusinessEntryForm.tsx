@@ -76,11 +76,14 @@ const FREQ_OPTS: [string, string][] = [
   ["one_time", "One-time"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["half_yearly", "Half-yearly"], ["yearly", "Yearly"],
 ];
 const CLASS_OPTS: [string, string][] = [
-  ["equity", "Equity"], ["hybrid", "Hybrid"], ["debt", "Debt"], ["liquid", "Liquid"], ["gold", "Gold"], ["other", "Other"],
+  ["equity", "Equity"], ["hybrid", "Hybrid"], ["debt", "Debt"], ["liquid", "Liquid"], ["gold", "Gold & Silver (ETF / FOF)"], ["other", "Other"],
 ];
 const STATUS_OPTS: [string, string][] = [["draft", "Draft"], ["confirmed", "Confirmed"]];
 const NEEDS_FREQ = new Set(["sip", "sip_stop", "stp", "swp"]);
-const NEEDS_FROM = new Set(["switch", "stp", "swp"]);
+/** SWP withdraws from the line's own scheme, so it has no separate source scheme. */
+const NEEDS_FROM = new Set(["switch", "stp"]);
+/** Transaction types that carry an installment day (1–28). */
+const NEEDS_DAY = new Set(["sip", "swp"]);
 /** Recurring installments (amount is per-installment, not a one-time figure). */
 const RECURRING_TXN = new Set(["sip", "sip_stop", "stp", "swp"]);
 /** Money leaving the book — never adds to "business booked". A SIP Stop is a
@@ -124,6 +127,7 @@ type InitialEntry = {
   businessDate: string;
   status: string;
   rmId: string | null;
+  executedById?: string | null;
   amcName: string | null;
   folioNo: string | null;
   notes: string | null;
@@ -155,6 +159,7 @@ export function BusinessEntryForm({
   const [businessDate, setBusinessDate] = useState(initial?.businessDate ?? new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState(initial?.status === "draft" || initial?.status === "confirmed" ? initial.status : "draft");
   const [rmId, setRmId] = useState(initial?.rmId ?? currentUserId);
+  const [executedById, setExecutedById] = useState(initial?.executedById ?? "");
   // AMC is no longer an entry-level field — each scheme carries its own AMC
   // (auto-fetched from the MF catalog), since one entry can mix AMCs. The
   // entry-level amcName is derived from the lines on save for list/detail views.
@@ -243,14 +248,14 @@ export function BusinessEntryForm({
       const body = {
         investorId: investorId || null,
         clientName: clientName.trim(),
-        productType, platform: platform.trim() || null, businessDate, status, rmId: rmId || null,
+        productType, platform: platform.trim() || null, businessDate, status, rmId: rmId || null, executedById: executedById || null,
         amcName: headerAmc, folioNo: folioNo.trim() || null, notes: notes.trim() || null,
         lines: cleaned.map((l) => ({
           schemeCode: l.schemeCode || null, schemeName: l.schemeName.trim(), amcName: l.amcName || null,
           assetCategory: l.assetCategory || null, assetClass: l.assetClass,
           txnType: l.txnType, amount: Number(l.amount) || 0,
           frequency: NEEDS_FREQ.has(l.txnType) ? l.frequency || null : null,
-          sipDate: l.txnType === "sip" ? l.sipDate || null : null,
+          sipDate: NEEDS_DAY.has(l.txnType) ? l.sipDate || null : null,
           fromSchemeCode: NEEDS_FROM.has(l.txnType) ? l.fromSchemeCode || null : null,
           fromSchemeName: NEEDS_FROM.has(l.txnType) ? l.fromSchemeName || null : null,
           fromAssetClass: NEEDS_FROM.has(l.txnType) ? l.fromAssetClass || null : null,
@@ -310,6 +315,13 @@ export function BusinessEntryForm({
         <div>
           <Label>Relationship manager</Label>
           <SelectField value={rmId} onChange={(e) => setRmId(e.target.value)} className="w-full">
+            {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </SelectField>
+        </div>
+        <div>
+          <Label>Transaction executed by</Label>
+          <SelectField value={executedById} onChange={(e) => setExecutedById(e.target.value)} className="w-full">
+            <option value="">Select…</option>
             {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </SelectField>
         </div>
@@ -414,9 +426,9 @@ export function BusinessEntryForm({
                         </SelectField>
                       </div>
                     )}
-                    {l.txnType === "sip" && (
+                    {NEEDS_DAY.has(l.txnType) && (
                       <div className="lg:col-span-3">
-                        <Label sm>SIP date (ECS day) <span className="text-muted-foreground">· 1–28</span></Label>
+                        <Label sm>{l.txnType === "swp" ? "SWP date" : "SIP date (ECS day)"} <span className="text-muted-foreground">· 1–28</span></Label>
                         <input
                           inputMode="numeric"
                           value={l.sipDate}
@@ -424,7 +436,7 @@ export function BusinessEntryForm({
                           placeholder="e.g. 5"
                           className="w-full h-8 rounded-lg border border-border bg-card px-2.5 text-xs focus:outline-none focus:border-brand-cyan/60 focus:ring-2 focus:ring-brand-cyan/15"
                         />
-                        <div className="text-[10px] text-muted-foreground mt-0.5">Drives the SIP reminder workflow.</div>
+                        {l.txnType === "sip" && <div className="text-[10px] text-muted-foreground mt-0.5">Drives the SIP reminder workflow.</div>}
                       </div>
                     )}
                     {NEEDS_FROM.has(l.txnType) && (

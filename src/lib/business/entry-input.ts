@@ -41,6 +41,7 @@ export const EntryInput = z.object({
   businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   status: z.enum(BUSINESS_ENTRY_STATUSES).default("draft"),
   rmId: z.string().uuid().nullish(),
+  executedById: z.string().uuid().nullish(),
   amcName: z.string().max(150).nullish(),
   folioNo: z.string().max(60).nullish(),
   notes: z.string().max(4000).nullish(),

@@ -37,6 +37,7 @@ const PatchInput = z.object({
   businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   status: z.enum(BUSINESS_ENTRY_STATUSES).optional(),
   rmId: z.string().uuid().nullish(),
+  executedById: z.string().uuid().nullish(),
   amcName: z.string().max(150).nullish(),
   folioNo: z.string().max(60).nullish(),
   notes: z.string().max(4000).nullish(),
@@ -100,6 +101,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (b.businessDate !== undefined) set.businessDate = b.businessDate;
       if (b.status !== undefined) set.status = b.status;
       if (b.rmId !== undefined) set.rmId = b.rmId;
+      if (b.executedById !== undefined) set.executedById = b.executedById;
       if (b.amcName !== undefined) set.amcName = b.amcName;
       if (b.folioNo !== undefined) set.folioNo = b.folioNo;
       if (b.notes !== undefined) set.notes = b.notes;
@@ -126,7 +128,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             amount: String(l.amount),
             units: l.units != null ? String(l.units) : null,
             frequency: l.frequency ?? null,
-            sipDate: l.txnType === "sip" ? l.sipDate ?? null : null,
+            sipDate: l.txnType === "sip" || l.txnType === "swp" ? l.sipDate ?? null : null,
             fromSchemeCode: l.fromSchemeCode ?? null,
             fromSchemeName: l.fromSchemeName ?? null,
             fromAssetClass: l.fromAssetClass ?? null,

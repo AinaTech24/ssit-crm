@@ -30,6 +30,10 @@ const KYC_LABEL: Record<string, string> = {
   re_kyc_required: "Re-KYC",
 };
 
+const TXN_LABEL: Record<string, string> = {
+  sip: "SIP", sip_topup: "SIP Top-Up", sip_stop: "SIP Stop", lumpsum: "Lumpsum", additional_purchase: "Add'l Purchase",
+  switch: "Switch", stp: "STP", swp: "SWP", redemption: "Redemption", other: "Others",
+};
 const STATUS_TONE: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600",
   confirmed: "bg-sky-50 text-sky-700",
@@ -48,6 +52,8 @@ type Row = {
   totalAmount: string | number;
   rmName: string | null;
   lineCount: number;
+  /** Distinct transaction types across the entry's lines. */
+  txnTypes: string[];
   /** null for an entry logged against a free-text name with no client record. */
   kycStatus: string | null;
 };
@@ -98,6 +104,7 @@ export function BusinessEntriesTable({ rows, rmOptions }: { rows: Row[]; rmOptio
         ),
     },
     { key: "product", header: "Product", thClass: "text-left py-2 font-medium", tdClass: "py-2.5 text-xs text-muted-foreground", render: (r) => PRODUCT_LABEL[r.productType] ?? r.productType },
+    { key: "txnType", header: "Transaction type", thClass: "text-left py-2 font-medium", tdClass: "py-2.5 text-xs", render: (r) => (r.txnTypes?.length ? r.txnTypes.map((t) => TXN_LABEL[t] ?? t).join(", ") : "—") },
     { key: "schemes", header: "Schemes", thClass: "text-right py-2 font-medium", tdClass: "py-2.5 text-right text-xs tabular-nums", render: (r) => r.lineCount },
     { key: "amount", header: "Amount", thClass: "text-right py-2 font-medium", tdClass: "py-2.5 text-right tabular-nums font-medium", render: (r) => formatINR(Number(r.totalAmount)) },
     { key: "rm", header: "RM", thClass: "text-left py-2 font-medium pl-8", tdClass: "py-2.5 text-xs text-muted-foreground pl-8", render: (r) => r.rmName ?? "—" },
