@@ -96,7 +96,7 @@ export async function InvestorQuickFilters({
     { key: "mine", label: "My clients", count: Number(counts.mine), tone: "violet" },
     { key: "tier_a", label: "A-tier", count: Number(counts.tier_a), tone: "violet" },
     { key: "hni", label: "HNI", count: Number(counts.hni), tone: "violet" },
-    { key: "reviews_due", label: "Reviews due", count: Number(counts.reviews_due), tone: "amber" },
+    { key: "reviews_due", label: "Review pending", count: Number(counts.reviews_due), tone: "amber" },
     { key: "kyc_expiring", label: "KYC expiring 30d", count: Number(counts.kyc_expiring), tone: "rose" },
     { key: "no_nominee", label: "No nominee", count: Number(counts.no_nominee), tone: "amber" },
     { key: "rp_stale", label: "Risk profile stale", count: Number(counts.rp_stale), tone: "amber" },
