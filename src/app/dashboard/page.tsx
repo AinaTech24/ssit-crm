@@ -22,6 +22,7 @@ import { resolvePeriodRange } from "@/lib/dashboard/period";
 import { RmDashboard } from "@/components/dashboards/RmDashboard";
 import { RiaDashboard } from "@/components/dashboards/RiaDashboard";
 import { RaDashboard } from "@/components/dashboards/RaDashboard";
+import { RaAdminDashboard } from "@/components/dashboards/RaAdminDashboard";
 import { BackOfficeDashboard } from "@/components/dashboards/BackOfficeDashboard";
 import { MarketingDashboard } from "@/components/dashboards/MarketingDashboard";
 import { ComplianceCockpit } from "@/components/dashboards/ComplianceCockpit";
@@ -252,10 +253,10 @@ export default async function DashboardPage({
       const selectedIsRa = selectedRoles.some((r) => r === "ra_research" || r === "ra_sales");
       dash = selected
         ? selectedIsRa
-          ? await RaDashboard({ session, rmId: rmParam || undefined, deskId: scopeDeskId, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
+          ? await RaAdminDashboard({ session, deskId: scopeDeskId, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
           : await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
         : asResearch
-          ? await RaDashboard({ session, asAdmin: true, rmId: rmParam || undefined, deskId: scopeDeskId })
+          ? await RaAdminDashboard({ session, asAdmin: true, deskId: scopeDeskId })
           : scope.branch
           ? await BranchCockpit({
               session,

@@ -7,7 +7,6 @@ import { leadScopeSql } from "@/lib/leads/access";
 import { formatRelative, formatDate } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { ResearchCoverageSection } from "./ResearchCoverageSection";
-import { ResearchMeetingsSection } from "./ResearchMeetingsSection";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
 import { formatTrackerItems, type TrackerItem } from "@/db/schema/activity_entries";
 import { loadTenantLicense } from "@/lib/auth/license";
@@ -34,30 +33,9 @@ type LeadRow = { id: string; name: string; avatar_url: string | null; stage: str
 type CountRow = { n: number | string | null };
 type TaskRow = { id: string; title: string; priority: string; due_at: string | null };
 
-export async function RaDashboard({
-  session,
-  rmId,
-  deskId,
-  target,
-  asAdmin = false,
-}: {
-  session: SessionUser;
-  /** ?rm= — narrows a research user's own coverage table to one RM. */
-  rmId?: string;
-  /** ?unit=d:<id> — narrows the admin's meetings view to one sub-branch. */
-  deskId?: string;
-  /** An admin opening one research / sales analyst's dashboard. */
-  target?: { userId: string; name: string; roles: string[] };
-  /** An admin viewing the research dashboard as a whole (no one person picked). */
-  asAdmin?: boolean;
-}) {
-  const uid = target?.userId ?? session.userId;
-  const viewerName = target?.name ?? session.name;
-  const roleList = target?.roles ?? session.roles;
-  // An admin looking at research as a whole holds neither RA role, so show the
-  // research body — the team table is the point of that view.
-  const isResearch = roleList.includes("ra_research") || (asAdmin && !target);
-  const isSales = roleList.includes("ra_sales");
+export async function RaDashboard({ session, rmId }: { session: SessionUser; rmId?: string }) {
+  const isResearch = session.roles.includes("ra_research");
+  const isSales = session.roles.includes("ra_sales");
 
   // Only render sections for modules this firm actually has turned on — the
   // sales body's Leads/Proposals/Meetings links used to show unconditionally
@@ -77,7 +55,7 @@ export async function RaDashboard({
     const tasks = await tx.execute(sql`
       SELECT id, title, priority, due_at
       FROM tasks
-      WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${uid}::uuid
+      WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${session.userId}::uuid
         AND status NOT IN ('completed', 'cancelled') AND deleted_at IS NULL
       ORDER BY due_at ASC NULLS LAST
       LIMIT 8
@@ -90,13 +68,13 @@ export async function RaDashboard({
           COUNT(*) FILTER (WHERE assigned_date >= date_trunc('week', current_date))::int AS week_count,
           COUNT(*) FILTER (WHERE assigned_date >= date_trunc('month', current_date))::int AS month_count
         FROM activity_entries
-        WHERE tenant_id = ${session.tenantId}::uuid AND owner_user_id = ${uid}::uuid AND kind = 'research'
+        WHERE tenant_id = ${session.tenantId}::uuid AND owner_user_id = ${session.userId}::uuid AND kind = 'research'
       `);
       const c = counts.rows[0] as unknown as ResearchCountRow;
       const recent = await tx.execute(sql`
         SELECT id, title, topic, items, item_type, status, assigned_date
         FROM activity_entries
-        WHERE tenant_id = ${session.tenantId}::uuid AND owner_user_id = ${uid}::uuid AND kind = 'research'
+        WHERE tenant_id = ${session.tenantId}::uuid AND owner_user_id = ${session.userId}::uuid AND kind = 'research'
         ORDER BY assigned_date DESC, created_at DESC
         LIMIT 8
       `);
@@ -105,9 +83,7 @@ export async function RaDashboard({
 
     let salesFunnel: { open: number; convertedMtd: number; followUpsToday: number; leads: LeadRow[]; meetingsDue: number } | null = null;
     if (isSales) {
-      const leadScope = target
-        ? sql`leads.owner_id = ${uid}::uuid`
-        : await leadScopeSql(tx, session, "leads");
+      const leadScope = await leadScopeSql(tx, session, "leads");
       const endOfDay = new Date();
       endOfDay.setHours(23, 59, 59, 999);
       const funnel = await tx.execute(sql`
@@ -131,7 +107,7 @@ export async function RaDashboard({
       `);
       const meetingsDue = await tx.execute(sql`
         SELECT COUNT(*)::int AS n FROM review_meetings
-        WHERE tenant_id = ${session.tenantId}::uuid AND COALESCE(created_by_id, rm_id) = ${uid}::uuid
+        WHERE tenant_id = ${session.tenantId}::uuid AND rm_id = ${session.userId}::uuid
           AND status IN ('scheduled', 'confirmed') AND meeting_date >= now() AND meeting_date < now() + interval '7 days'
       `);
       salesFunnel = {
@@ -149,9 +125,9 @@ export async function RaDashboard({
   return (
     <div className="space-y-6 max-w-7xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">{target ? `${target.name}'s dashboard` : asAdmin ? "Research dashboard" : "My day"}</h1>
+        <h1 className="text-2xl font-bold tracking-tight">My day</h1>
         <p className="text-muted-foreground text-sm">
-          {target || asAdmin ? "" : `Hi ${viewerName.split(" ")[0]} —`}{" "}
+          Hi {session.name.split(" ")[0]} —{" "}
           {isResearch && isSales
             ? "what you've researched and where the pipeline stands."
             : isResearch
@@ -183,16 +159,10 @@ export async function RaDashboard({
         </div>
       </div>
 
-      {/* A research user sees their own coverage table (unchanged). The firm
-          admin looking at research — as a whole, or at one analyst — gets the
-          meetings view instead: what was assigned to research and by research,
-          with a sub-branch filter, and no client data. */}
-      {isResearch &&
-        (asAdmin || target ? (
-          <ResearchMeetingsSection session={session} deskId={deskId} userId={uid} allResearch={asAdmin && !target} />
-        ) : (
-          <ResearchCoverageSection session={session} rmId={rmId} />
-        ))}
+      {/* The book, as research is asked about it: how many clients are
+          covered, what has gone unreviewed, and how that splits by RM. Read
+          only — it counts, it does not link anywhere that edits. */}
+      {isResearch && <ResearchCoverageSection session={session} rmId={rmId} />}
 
       {isResearch && (
         <Section title="Recent research" count={data.research!.recent.length} icon={FlaskConical}>
