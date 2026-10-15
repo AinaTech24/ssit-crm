@@ -8,7 +8,7 @@
 
 import Link from "next/link";
 import { Plus, Phone, Mail, FileUp } from "lucide-react";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
@@ -27,7 +27,7 @@ const STATUS_TONE: Record<string, string> = {
 export default async function AmcEmpanelmentsListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; category?: string }>;
+  searchParams: Promise<{ status?: string; category?: string; view?: string }>;
 }) {
   const session = await requireSession();
   // Branch heads only. Empanelment terms — distributor codes, trail rates, the
@@ -53,6 +53,95 @@ export default async function AmcEmpanelmentsListPage({
   }
   await assertActiveLicense(session.tenantId, session.roles);
   const sp = await searchParams;
+  // The AMC dashboard has two parts: the AMC details (this list) and the AMC
+  // meetings (what has happened with them, across every AMC).
+  const view: "details" | "meetings" =
+    sp.view === "meetings" && canMeetings ? "meetings" : canDetails ? "details" : "meetings";
+  const tabs = (
+    <div className="flex gap-1 border-b">
+      {canDetails && (
+        <Link
+          href="/dashboard/amc-empanelments"
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${view === "details" ? "border-brand-cyan-deep text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          AMC details
+        </Link>
+      )}
+      {canMeetings && (
+        <Link
+          href="/dashboard/amc-empanelments?view=meetings"
+          className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${view === "meetings" ? "border-brand-cyan-deep text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          AMC meetings
+        </Link>
+      )}
+    </div>
+  );
+
+  if (view === "meetings") {
+    const meetings = await withTenant(session.tenantId, async (tx) => {
+      const r = await tx.execute(sql`
+        SELECT m.id, m.meeting_date, m.subject, m.attendees, m.notes, m.follow_up,
+               e.id AS amc_id, e.amc_name, u.name AS author_name
+          FROM amc_meetings m
+          JOIN amc_empanelments e ON e.id = m.amc_empanelment_id
+          LEFT JOIN users u ON u.id = m.created_by_user_id
+         WHERE m.tenant_id = ${session.tenantId}::uuid
+         ORDER BY m.meeting_date DESC, m.created_at DESC
+         LIMIT 300
+      `);
+      return r.rows as Array<{
+        id: string; meeting_date: string; subject: string; attendees: string | null;
+        notes: string | null; follow_up: string | null; amc_id: string; amc_name: string; author_name: string | null;
+      }>;
+    });
+    return (
+      <div className="space-y-5">
+        <h1 className="text-2xl font-semibold">AMC empanelments</h1>
+        {tabs}
+        {meetings.length === 0 ? (
+          <div className="card-surface p-12 text-center text-sm text-muted-foreground">
+            No AMC meetings recorded yet. Open an AMC and use its “AMC meetings” tab to add one.
+          </div>
+        ) : (
+          <div className="card-surface table-scroll">
+            <table className="w-full text-xs min-w-[900px]">
+              <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">AMC</th>
+                  <th className="px-3 py-2 text-left">Subject</th>
+                  <th className="px-3 py-2 text-left">Attendees</th>
+                  <th className="px-3 py-2 text-left">Notes</th>
+                  <th className="px-3 py-2 text-left">Follow-up</th>
+                  <th className="px-3 py-2 text-left">Added by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {meetings.map((m) => (
+                  <tr key={m.id} className="border-t hover:bg-slate-50/60 align-top">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {new Date(m.meeting_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Link href={`/dashboard/amc-empanelments/${m.amc_id}?tab=meetings`} className="font-medium hover:underline">
+                        {m.amc_name}
+                      </Link>
+                    </td>
+                    <td className="px-3 py-2">{m.subject}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{m.attendees || "—"}</td>
+                    <td className="px-3 py-2 max-w-xs whitespace-pre-wrap">{m.notes || "—"}</td>
+                    <td className="px-3 py-2 max-w-xs whitespace-pre-wrap">{m.follow_up || "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{m.author_name || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  }
   const statusFilter = sp.status ?? "empanelled";
   const categoryFilter = sp.category ?? "all";
   // Preserve the other axis when one filter is clicked, so the two compose
@@ -125,6 +214,8 @@ export default async function AmcEmpanelmentsListPage({
         </div>
         )}
       </div>
+
+      {tabs}
 
       <div className="flex items-center gap-2 flex-wrap">
         {[

@@ -19,7 +19,6 @@ import { CalendarCheck, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
 import { ROLE_LABELS } from "@/lib/auth/rbac";
-import { ResearchUnitFilter } from "./ResearchUnitFilter";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -55,7 +54,11 @@ export async function ResearchCoverageSection({
   allResearch?: boolean;
 }) {
   const uid = userId ?? session.userId;
-  const unit = deskId && UUID_RE.test(deskId) ? deskId : undefined;
+  // The sub-branch dropdown was removed from the research dashboard; a leftover
+  // ?unit= in the URL must not keep silently filtering the meetings.
+  const unit: string | undefined = undefined;
+  void deskId;
+  void UUID_RE;
   const toMe: { m: MeetingRow; by?: Person }[] = [];
   const byMe: { m: MeetingRow; to: Person[] }[] = [];
   let desks: { id: string; name: string }[] = [];
@@ -144,7 +147,6 @@ export async function ResearchCoverageSection({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <ResearchUnitFilter options={desks} selected={unit} />
           <Link href="/dashboard/review-meetings" className="text-xs text-violet-700 hover:underline font-medium">
             All meetings →
           </Link>
