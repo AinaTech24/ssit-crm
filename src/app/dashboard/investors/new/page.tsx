@@ -465,7 +465,9 @@ function NewInvestorPageInner() {
               <RmSelector
                 value={form.serviceRmId || null}
                 onChange={(id) => setForm((s) => ({ ...s, serviceRmId: id ?? "" }))}
-                role={OWNING_ROLES}
+                // Servicing is often done by back office / the assistant desk, not
+                // only by RMs — offer them too.
+                role={[...OWNING_ROLES, "back_office", "ops", "assistant"]}
                 placeholder="— Same as assigned RM —"
               />
             </div>
