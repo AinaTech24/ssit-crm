@@ -29,6 +29,7 @@ import { AnnouncementsStrip } from "@/components/announcements/AnnouncementsStri
 import { DashboardScopeFilter, type ScopeMember, type ScopeUnit } from "@/components/dashboards/DashboardScopeFilter";
 import { DashboardViewSwitch } from "@/components/dashboards/DashboardViewSwitch";
 import { ReviewMeetingsOverdue } from "@/components/dashboards/ReviewMeetingsOverdue";
+import { AdminRmReviewSection } from "@/components/dashboards/AdminRmReviewSection";
 import { BranchCockpit } from "@/components/dashboards/BranchCockpit";
 import { primaryRoleNode } from "@/lib/auth/role-tree";
 import { confinedDeskId } from "@/lib/scope/view-filter";
@@ -343,6 +344,15 @@ export default async function DashboardPage({
         <Suspense fallback={null}>
           {await ReviewMeetingsOverdue({ session })}
         </Suspense>
+      )}
+      {/* Meetings and portfolio reviews, RM by RM — who is meeting clients. On
+          the firm admin's dashboard only. */}
+      {showReviewOverdue && (
+        <div className="mt-6">
+          <Suspense fallback={null}>
+            {await AdminRmReviewSection({ session, rmId: rmParam || undefined })}
+          </Suspense>
+        </div>
       )}
     </>
   );

@@ -181,8 +181,11 @@ export async function RaDashboard({
 
       {/* Research sees meetings only — the ones handed to them and the ones
           they hand on. No clients, no client data. */}
-      {isResearch && (
-        <ResearchCoverageSection session={session} deskId={deskId} userId={uid} allResearch={asAdmin && !target} />
+      {/* The firm admin's research view (the whole function, or one analyst
+          picked from the dashboard) does not carry this panel — only a research
+          user's own dashboard does. */}
+      {isResearch && !asAdmin && !target && (
+        <ResearchCoverageSection session={session} deskId={deskId} userId={uid} allResearch={false} />
       )}
 
       {isResearch && (
