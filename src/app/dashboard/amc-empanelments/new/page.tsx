@@ -17,6 +17,7 @@ export default async function NewAmcEmpanelmentPage() {
   const amcs = await withTenant(session.tenantId, async (tx) => {
     const r = await tx.execute(sql`
       SELECT code, name FROM amc_master
+      WHERE COALESCE(is_active, true) = true
       ORDER BY name ASC LIMIT 200
     `);
     return r.rows as Array<{ code: string; name: string }>;

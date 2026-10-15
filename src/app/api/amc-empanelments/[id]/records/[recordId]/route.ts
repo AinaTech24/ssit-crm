@@ -24,7 +24,7 @@ export async function DELETE(
   const { id, recordId } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_meeting.view"], session.permissions);
     const kind = req.nextUrl.searchParams.get("kind") === "note" ? "note" : "meeting";
     const meta = clientMetaFromHeaders(req.headers);
 

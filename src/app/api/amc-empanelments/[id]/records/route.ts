@@ -60,7 +60,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_meeting.view"], session.permissions);
 
     const data = await withTenant(session.tenantId, async (tx) => {
       await assertAmc(tx, session.tenantId, id);
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_meeting.view"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));

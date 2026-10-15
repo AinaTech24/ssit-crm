@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   MessageSquare,
   Mail,
@@ -25,6 +25,29 @@ type ActivityItem = {
   channel?: string;
   meta?: string;
 };
+
+/** Long notes collapse to a few lines with a toggle, so a timeline of many
+ *  entries stays scannable and the full text is one click away. */
+function ExpandableText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 220 || text.split(String.fromCharCode(10)).length > 4;
+  return (
+    <div className="mt-2">
+      <p className={`text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed ${!open && long ? "line-clamp-3" : ""}`}>
+        {text}
+      </p>
+      {long && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="mt-1 text-[11px] font-semibold text-brand-cyan hover:underline"
+        >
+          {open ? "Show less" : "Show full note"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function ActivityTimeline({
   communications = [],
@@ -104,7 +127,11 @@ export function ActivityTimeline({
         type: "meeting",
         timestamp: new Date(rm.meetingDate),
         title: `Meeting: ${rm.meetingType?.replace(/_/g, " ") || "Review"}`,
-        description: rm.discussionPoints || `Mode: ${rm.meetingMode}`,
+        // Agenda AND the notes written up afterwards — the notes were never shown.
+        description:
+          [rm.discussionPoints, rm.meetingNotes ? `Notes: ${rm.meetingNotes}` : ""]
+            .filter(Boolean)
+            .join(String.fromCharCode(10, 10)) || `Mode: ${rm.meetingMode}`,
         status: new Date(rm.meetingDate).getTime() < Date.now() ? "Completed" : "Scheduled",
         badgeTone: new Date(rm.meetingDate).getTime() < Date.now() ? "success" : "info",
         meta: `${rm.meetingMode} · ${rm.durationMinutes} mins`,
@@ -214,9 +241,7 @@ export function ActivityTimeline({
                   </div>
                 </div>
 
-                <p className="text-xs text-foreground/80 mt-2 whitespace-pre-wrap leading-relaxed">
-                  {item.description}
-                </p>
+                <ExpandableText text={item.description} />
               </div>
             </div>
           ))}

@@ -37,8 +37,32 @@ const Body = z.object({
   note: z.string().trim().min(1).max(4000),
 });
 
+/**
+ * The client's own Service RM may read and add notes on it whatever their role's
+ * capabilities say — being assigned as the client's service RM is exactly the
+ * relationship notes exist for, and it must not depend on the role also holding
+ * the view-clients capability. Everyone else goes through the normal client wall.
+ */
+async function isClientsServiceRm(tx: any, session: any, investorId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: investors.id })
+    .from(investors)
+    .where(and(eq(investors.id, investorId), eq(investors.tenantId, session.tenantId), eq(investors.serviceRmId, session.userId)))
+    .limit(1);
+  return !!row;
+}
+
 /** Load the client and throw unless this session may open it. */
 async function assertClientVisible(tx: any, session: any, investorId: string) {
+  if (await isClientsServiceRm(tx, session, investorId)) {
+    const [inv] = await tx
+      .select({ id: investors.id, name: investors.name, phone: investors.phone })
+      .from(investors)
+      .where(and(eq(investors.id, investorId), eq(investors.tenantId, session.tenantId)))
+      .limit(1);
+    return inv;
+  }
+  requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
   const [inv] = await tx
     .select({ id: investors.id, name: investors.name, phone: investors.phone, rmId: investors.rmId, serviceRmId: investors.serviceRmId, branchId: investors.branchId })
     .from(investors)
@@ -53,7 +77,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
     const rows = await withTenant(session.tenantId, async (tx) => {
       await assertClientVisible(tx, session, id);
       const r = await tx.execute(sql`
@@ -80,7 +103,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const parse = Body.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {

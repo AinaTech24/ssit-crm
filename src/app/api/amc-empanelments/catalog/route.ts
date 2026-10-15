@@ -20,6 +20,46 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({ name: z.string().trim().min(2).max(120) });
 
+/**
+ * DELETE /api/amc-empanelments/catalog  { code }
+ *
+ * Removes an AMC name from this firm's list (a typo, a test entry). It is hidden
+ * rather than erased — amc_master rows are referenced by schemes and history —
+ * and refused while an empanelment still uses it, so nothing is orphaned.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await requireSession();
+    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    const parse = z.object({ code: z.string().trim().min(1).max(120) }).safeParse(await req.json().catch(() => ({})));
+    if (!parse.success) return NextResponse.json({ error: "AMC code is required" }, { status: 400 });
+    const code = parse.data.code;
+
+    const outcome = await withTenant(session.tenantId, async (tx) => {
+      const used = await tx.execute(sql`
+        SELECT 1 FROM amc_empanelments
+         WHERE tenant_id = ${session.tenantId}::uuid AND amc_code = ${code}
+         LIMIT 1
+      `);
+      if (used.rows.length) return "in_use" as const;
+      await tx.execute(sql`
+        UPDATE amc_master SET is_active = false, updated_at = now()
+         WHERE tenant_id = ${session.tenantId}::uuid AND code = ${code}
+      `);
+      return "ok" as const;
+    });
+    if (outcome === "in_use") {
+      return NextResponse.json(
+        { error: "This AMC already has an empanelment. Delete or terminate that first." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return handleApiError(err);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();

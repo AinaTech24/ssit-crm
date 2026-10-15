@@ -12,7 +12,7 @@
  */
 
 import { useMemo, useRef, useState, useEffect } from "react";
-import { Check, ChevronDown, Loader2, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { STANDARD_AMC_NAMES, amcCodeFromName, normaliseAmcName } from "@/lib/amc/standard-list";
 
 type Amc = { code: string; name: string };
@@ -28,6 +28,8 @@ export function AmcPicker({
   onPick: (amc: Amc) => void;
 }) {
   const [extra, setExtra] = useState<Amc[]>([]);
+  // Codes deleted this session — hidden at once, without waiting for a reload.
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,7 +43,14 @@ export function AmcPicker({
       const k = normaliseAmcName(n);
       if (!byKey.has(k)) byKey.set(k, { code: amcCodeFromName(n), name: n });
     }
-    return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...byKey.values()].filter((o) => !removed.has(o.code)).sort((a, b) => a.name.localeCompare(b.name));
+  }, [catalog, extra, removed]);
+
+  // Only names that live in the firm's own list can be deleted; the standard
+  // houses are built in and would simply reappear.
+  const deletable = useMemo(() => {
+    const std = new Set(STANDARD_AMC_NAMES.map((n) => normaliseAmcName(n)));
+    return new Set([...catalog, ...extra].filter((a) => !std.has(normaliseAmcName(a.name))).map((a) => a.code));
   }, [catalog, extra]);
 
   const selected = options.find((o) => o.code === value);
@@ -61,6 +70,30 @@ export function AmcPicker({
     onPick(a);
     setOpen(false);
     setQuery("");
+  }
+
+  async function remove(a: Amc) {
+    if (a.code === value) {
+      setErr("This AMC is selected — pick another before deleting it.");
+      return;
+    }
+    if (!window.confirm(`Delete "${a.name}" from the AMC list?`)) return;
+    setErr(null);
+    try {
+      const res = await fetch("/api/amc-empanelments/catalog", {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: a.code }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(j.error ?? `Could not delete (${res.status})`);
+        return;
+      }
+      setRemoved((p) => new Set(p).add(a.code));
+    } catch (e: any) {
+      setErr(e?.message ?? "Network error");
+    }
   }
 
   async function addNew() {
@@ -120,19 +153,30 @@ export function AmcPicker({
           </div>
           <ul className="max-h-64 overflow-y-auto py-1">
             {filtered.map((o) => (
-              <li key={o.code}>
+              <li key={o.code} className="flex items-center hover:bg-secondary/50">
                 <button
                   type="button"
                   onClick={() => choose(o)}
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-left text-sm hover:bg-secondary/50"
+                  className="flex flex-1 items-center justify-between px-3 py-1.5 text-left text-sm"
                 >
                   <span>{o.name}</span>
                   {o.code === value && <Check className="size-3.5 text-emerald-600" />}
                 </button>
+                {deletable.has(o.code) && (
+                  <button
+                    type="button"
+                    title={`Delete ${o.name}`}
+                    onClick={() => void remove(o)}
+                    className="mr-2 rounded p-1 text-muted-foreground hover:bg-rose-50 hover:text-rose-600"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                )}
               </li>
             ))}
             {filtered.length === 0 && <li className="px-3 py-2 text-xs text-muted-foreground">No AMC matches “{query}”.</li>}
           </ul>
+          {err && !(!exact && q) && <div className="border-t px-3 py-1.5 text-[11px] text-rose-600">{err}</div>}
           {!exact && q && (
             <div className="border-t p-1.5">
               <button

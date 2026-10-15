@@ -169,6 +169,7 @@ export type Capability =
   // Compliance + DDQ + risk profile + consent + SOP
   | "compliance.view"
   | "amc_empanelment.view"
+  | "amc_meeting.view"
   | "induction.view"
   | "induction.manage"
   | "compliance.edit"
@@ -389,6 +390,10 @@ const MATRIX: Record<Capability, Role[]> = {
   // passes via the short-circuit above, and an owner can delegate it to a
   // specific person by ticking it under Customize Access Permissions.
   "amc_empanelment.view": ["branch_head"],
+  // The relationship history with an AMC — meetings held and notes kept. Wider
+  // than the commercial terms above on purpose, and narrower than the firm:
+  // branch heads, RIA and research only (owner via the short-circuit).
+  "amc_meeting.view": ["branch_head", "ria", "ra_research"],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
   "risk_profile.manage": ["compliance", "back_office", "ops", "rm", "ra_sales", "ria"],

@@ -36,7 +36,12 @@ export default async function AmcEmpanelmentsListPage({
   // owner can delegate to a specific person with the capability tick.
   // A missing capability is an expected state, not a crash: say so instead of
   // dropping the user on the generic error page.
-  if (!can(session.roles, "amc_empanelment.view", session.permissions)) {
+  // Two audiences: people who see the AMC's commercial details, and people who
+  // only see its meetings (RIA / research). The second group gets the list of
+  // AMCs and a way into the meetings tab — never the contacts or the controls.
+  const canDetails = can(session.roles, "amc_empanelment.view", session.permissions);
+  const canMeetings = can(session.roles, "amc_meeting.view", session.permissions);
+  if (!canDetails && !canMeetings) {
     return (
       <div className="card-surface p-8 text-center max-w-xl mx-auto mt-10">
         <h1 className="text-lg font-semibold">AMC empanelments</h1>
@@ -106,6 +111,7 @@ export default async function AmcEmpanelmentsListPage({
         <div>
           <h1 className="text-2xl font-semibold">AMC empanelments</h1>
         </div>
+        {canDetails && (
         <div className="flex items-center gap-2">
           <Link href="/dashboard/amc-empanelments/catalog-import" className="btn-secondary text-sm">
             <FileUp className="size-4" /> Import AMC list
@@ -117,6 +123,7 @@ export default async function AmcEmpanelmentsListPage({
             <Plus className="size-4" /> Add empanelment
           </Link>
         </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -190,10 +197,14 @@ export default async function AmcEmpanelmentsListPage({
                 <th className="px-3 py-2 text-left">AMC</th>
                 <th className="px-3 py-2 text-left">Product line</th>
                 <th className="px-3 py-2 text-left">Empanelled since</th>
-                <th className="px-3 py-2 text-left">RM contact</th>
-                <th className="px-3 py-2 text-left">Ops contact</th>
-                <th className="px-3 py-2 text-left">Escalation</th>
-                <th className="px-3 py-2 text-left">Billing</th>
+                {canDetails && (
+                  <>
+                    <th className="px-3 py-2 text-left">RM contact</th>
+                    <th className="px-3 py-2 text-left">Ops contact</th>
+                    <th className="px-3 py-2 text-left">Escalation</th>
+                    <th className="px-3 py-2 text-left">Billing</th>
+                  </>
+                )}
                 <th className="px-3 py-2 text-left">Status</th>
               </tr>
             </thead>
@@ -202,7 +213,7 @@ export default async function AmcEmpanelmentsListPage({
                 <tr key={r.id} className="border-t hover:bg-slate-50/60 align-top">
                   <td className="px-3 py-2">
                     <Link
-                      href={`/dashboard/amc-empanelments/${r.id}`}
+                      href={`/dashboard/amc-empanelments/${r.id}${canDetails ? "" : "?tab=meetings"}`}
                       className="font-medium hover:underline"
                     >
                       {r.amcName}
@@ -229,26 +240,14 @@ export default async function AmcEmpanelmentsListPage({
                       })
                       : "—"}
                   </td>
-                  <ContactCell
-                    name={r.rmName}
-                    email={r.rmEmail}
-                    phone={r.rmPhone}
-                  />
-                  <ContactCell
-                    name={r.opsName}
-                    email={r.opsEmail}
-                    phone={r.opsPhone}
-                  />
-                  <ContactCell
-                    name={r.escalationName}
-                    email={r.escalationEmail}
-                    phone={r.escalationPhone}
-                  />
-                  <ContactCell
-                    name={r.billingName}
-                    email={r.billingEmail}
-                    phone={r.billingPhone}
-                  />
+                  {canDetails && (
+                    <>
+                      <ContactCell name={r.rmName} email={r.rmEmail} phone={r.rmPhone} />
+                      <ContactCell name={r.opsName} email={r.opsEmail} phone={r.opsPhone} />
+                      <ContactCell name={r.escalationName} email={r.escalationEmail} phone={r.escalationPhone} />
+                      <ContactCell name={r.billingName} email={r.billingEmail} phone={r.billingPhone} />
+                    </>
+                  )}
                   <td className="px-3 py-2">
                     <span
                       className={`chip text-[10px] ${STATUS_TONE[r.status] ?? "bg-slate-100"

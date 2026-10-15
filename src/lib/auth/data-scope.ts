@@ -209,7 +209,20 @@ export async function resolveMeetingScope(tx: any, session: SessionUser): Promis
     resolveDataScope(tx, session),
     loadDelegatedUserIds(tx, session.tenantId, session.userId),
   ]);
-  return { scope, delegatedIds, userId: session.userId };
+  // Research (RA) works only the meetings assigned to them — booked by them or
+  // naming them. A branch/desk/all-records widening on their account (an
+  // allowed-branches list, a scope override) must not turn that into a view of
+  // other people's diaries. Roles that legitimately run a wider diary
+  // (owner, branch head, back office) keep their scope even if they also
+  // hold the research role.
+  const researchOnly =
+    session.roles.includes("ra_research") &&
+    !session.roles.some((r) => ["owner", "branch_head", "back_office", "ops"].includes(r));
+  return {
+    scope: researchOnly ? { kind: "own", userId: session.userId } : scope,
+    delegatedIds,
+    userId: session.userId,
+  };
 }
 
 /**
