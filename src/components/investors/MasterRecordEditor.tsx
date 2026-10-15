@@ -104,6 +104,7 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
       ? `days_${(investor as any).reviewFrequencyDays}`
       : investor.reviewFrequency ?? "",
     rmId: investor.rmId ?? "",
+    serviceRmId: (investor as any).serviceRmId ?? "",
     kycStatus: investor.kycStatus ?? "pending",
     riskProfile: investor.riskProfile ?? "",
     residencyStatus: investor.residencyStatus ?? "",
@@ -221,6 +222,10 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
           ? Number(f.reviewFrequency.slice(5))
           : null,
         rmId: f.rmId || undefined,
+        // Only sent when changed, so an editor opened without the field can
+        // never wipe the client's service RM by saving.
+        serviceRmId:
+          f.serviceRmId !== ((investor as any).serviceRmId ?? "") ? f.serviceRmId || null : undefined,
         kycStatus: inSet(f.kycStatus, ["pending", "registered", "verified", "hold", "rejected", "expired", "re_kyc_required"]),
         riskProfile: inSet(f.riskProfile, ["conservative", "moderate", "aggressive", "very_aggressive"]),
         nominees: f.nominees
@@ -396,6 +401,11 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
                   </div>
                   {flags.showRm && (
                     <F label="Assigned RM"><RmSelector value={f.rmId || null} onChange={(id) => set("rmId", id ?? "")} placeholder="— Unassigned —" /></F>
+                  )}
+                  {flags.showRm && (
+                    <F label="Service RM (handles all servicing — requests are assigned to them)">
+                      <RmSelector value={f.serviceRmId || null} onChange={(id) => set("serviceRmId", id ?? "")} placeholder="— Same as assigned RM —" />
+                    </F>
                   )}
                 </Grp>
               )}

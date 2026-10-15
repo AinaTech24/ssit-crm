@@ -120,6 +120,19 @@ export async function POST(req: NextRequest) {
       const n = Number((seqRes.rows[0] as any)?.n ?? 1);
       const ticketNo = `SR-${new Date().getFullYear()}-${String(n).padStart(5, "0")}`;
 
+      // Servicing belongs to the client's Service RM: with no assignee picked, a
+      // ticket about a client goes to whoever services that client.
+      let serviceRmAssignee: string | null = null;
+      if (!body.assignedToUserId && body.investorId) {
+        const r = await tx.execute(sql`
+          SELECT i.service_rm_id AS id FROM investors i
+            JOIN users u ON u.id = i.service_rm_id AND u.status = 'active'
+           WHERE i.id = ${body.investorId}::uuid AND i.tenant_id = ${session.tenantId}::uuid
+           LIMIT 1
+        `);
+        serviceRmAssignee = ((r.rows[0] as { id?: string } | undefined)?.id) ?? null;
+      }
+
       await tx.insert(serviceRequests).values({
         id,
         tenantId: session.tenantId,
@@ -132,6 +145,7 @@ export async function POST(req: NextRequest) {
         // assignee, which the back-office-only picker now contradicts.
         assignedToUserId:
           body.assignedToUserId ??
+          serviceRmAssignee ??
           (session.roles.includes("back_office") ? session.userId : null),
         type: body.type,
         channel: body.channel,

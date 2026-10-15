@@ -454,12 +454,12 @@ function NewInvestorPageInner() {
             </label>
             <RmSelector value={form.rmId || null} onChange={(id) => setForm((s) => ({ ...s, rmId: id ?? "" }))} role={OWNING_ROLES} placeholder="— Use firm default (owner) —" />
           </div>
-          {full && (
+          {(
             <div className="sm:col-span-2">
               <label className="text-xs font-medium block mb-1">
                 Service RM
                 <span className="ml-1 text-[10px] text-muted-foreground font-normal">
-                  · who handles day-to-day servicing, if different from the owner
+                  · all service requests for this client are assigned to them
                 </span>
               </label>
               <RmSelector

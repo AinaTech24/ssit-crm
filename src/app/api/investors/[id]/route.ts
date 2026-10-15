@@ -309,6 +309,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (!u) return "bad_rm" as const;
         if (u.branchId) rmBranchPatch = { branchId: u.branchId };
       }
+      // A service RM must be a user in THIS firm too (the FK would accept any).
+      if (parse.data.serviceRmId && parse.data.serviceRmId !== before.serviceRmId) {
+        const [su] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, parse.data.serviceRmId), eq(users.tenantId, session.tenantId)))
+          .limit(1);
+        if (!su) return "bad_rm" as const;
+      }
 
       // Stamp KYC audit fields when any KYC-related column is touched.
       const touchingKyc =

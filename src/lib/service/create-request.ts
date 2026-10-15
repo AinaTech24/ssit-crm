@@ -62,12 +62,24 @@ export async function createServiceRequest(
   const n = Number((seq.rows[0] as any)?.n ?? 1);
   const ticketNo = `SR-${new Date().getFullYear()}-${String(n).padStart(5, "0")}`;
 
+  // No explicit assignee: a request about a client goes to that client's Service RM.
+  let assignee: string | null = args.assignedToUserId ?? null;
+  if (!assignee && args.investorId) {
+    const r = await tx.execute(sql`
+      SELECT i.service_rm_id AS id FROM investors i
+        JOIN users u ON u.id = i.service_rm_id AND u.status = 'active'
+       WHERE i.id = ${args.investorId}::uuid AND i.tenant_id = ${args.tenantId}::uuid
+       LIMIT 1
+    `);
+    assignee = ((r.rows[0] as { id?: string } | undefined)?.id) ?? null;
+  }
+
   await tx.insert(serviceRequests).values({
     id,
     tenantId: args.tenantId,
     ticketNo,
     investorId: args.investorId ?? null,
-    assignedToUserId: args.assignedToUserId ?? null,
+    assignedToUserId: assignee,
     type: args.type as any,
     channel: (args.channel ?? "whatsapp") as any,
     subject: args.subject,

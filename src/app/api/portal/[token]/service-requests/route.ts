@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
 
     const result = await withTenant(access.tenantId, async (tx) => {
       const [investor] = await tx
-        .select({ name: investors.name, rmId: investors.rmId })
+        .select({ name: investors.name, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
         .from(investors)
         .where(eq(investors.id, access.investorId))
         .limit(1);
@@ -61,7 +61,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
         id,
         tenantId: access.tenantId,
         investorId: access.investorId,
-        assignedToUserId: investor.rmId,
+        // Servicing goes to the client's Service RM, else their RM.
+        assignedToUserId: investor.serviceRmId ?? investor.rmId,
         ticketNo,
         type: parsed.data.type,
         channel: "form",
