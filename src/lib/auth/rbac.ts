@@ -208,10 +208,12 @@ export type Capability =
  */
 const MATRIX: Record<Capability, Role[]> = {
   // Investor data — back_office sees all, RM sees assigned, marketing blocked.
-  // ra_research does NOT see clients: research works the meetings handed to
-  // it, not the book. (It briefly held investor.view.all to count the book;
-  // removed — see migration 0242.)
-  "investor.view.all": ["compliance", "back_office", "ops", "gifting_hr"],
+  // ra_research reads the book to ANALYSE it — how many clients, which
+  // portfolios are due review, how that splits by RM. Viewing only: the edit
+  // capabilities below are unchanged, so research can count the firm's clients
+  // without being able to alter one. (The firm admin's research view is a
+  // different, meetings-only panel — see ResearchMeetingsSection.)
+  "investor.view.all": ["compliance", "back_office", "ops", "gifting_hr", "ra_research"],
   "investor.view.assigned": ["rm", "branch_head", "sub_broker", "ra_sales", "ria", "insurance"],
   "investor.edit.all": ["back_office", "ops"],
   // sub_broker held investor.view.assigned (read) but never edit — an external

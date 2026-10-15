@@ -252,10 +252,10 @@ export default async function DashboardPage({
       const selectedIsRa = selectedRoles.some((r) => r === "ra_research" || r === "ra_sales");
       dash = selected
         ? selectedIsRa
-          ? await RaDashboard({ session, deskId: scopeDeskId, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
+          ? await RaDashboard({ session, rmId: rmParam || undefined, deskId: scopeDeskId, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
           : await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
         : asResearch
-          ? await RaDashboard({ session, asAdmin: true, deskId: scopeDeskId })
+          ? await RaDashboard({ session, asAdmin: true, rmId: rmParam || undefined, deskId: scopeDeskId })
           : scope.branch
           ? await BranchCockpit({
               session,
@@ -280,7 +280,7 @@ export default async function DashboardPage({
     } else if (can(roles, "dashboard.view.ra", perms)) {
       // ?rm= also drives the research coverage filter, the same param every
       // other module uses for "show me one person".
-      dash = await RaDashboard({ session, deskId: scopeDeskId });
+      dash = await RaDashboard({ session, rmId: rmParam || undefined });
     } else if (can(roles, "dashboard.view.rm", perms)) {
       dash = await RmDashboard({ session, from: dateFrom, to: dateTo });
     } else {

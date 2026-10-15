@@ -7,6 +7,7 @@ import { leadScopeSql } from "@/lib/leads/access";
 import { formatRelative, formatDate } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { ResearchCoverageSection } from "./ResearchCoverageSection";
+import { ResearchMeetingsSection } from "./ResearchMeetingsSection";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
 import { formatTrackerItems, type TrackerItem } from "@/db/schema/activity_entries";
 import { loadTenantLicense } from "@/lib/auth/license";
@@ -35,12 +36,15 @@ type TaskRow = { id: string; title: string; priority: string; due_at: string | n
 
 export async function RaDashboard({
   session,
+  rmId,
   deskId,
   target,
   asAdmin = false,
 }: {
   session: SessionUser;
-  /** ?unit=d:<id> — narrows the meetings to one sub-branch. */
+  /** ?rm= — narrows a research user's own coverage table to one RM. */
+  rmId?: string;
+  /** ?unit=d:<id> — narrows the admin's meetings view to one sub-branch. */
   deskId?: string;
   /** An admin opening one research / sales analyst's dashboard. */
   target?: { userId: string; name: string; roles: string[] };
@@ -179,11 +183,16 @@ export async function RaDashboard({
         </div>
       </div>
 
-      {/* Research sees meetings only — the ones handed to them and the ones
-          they hand on. No clients, no client data. */}
-      {isResearch && (
-        <ResearchCoverageSection session={session} deskId={deskId} userId={uid} allResearch={asAdmin && !target} />
-      )}
+      {/* A research user sees their own coverage table (unchanged). The firm
+          admin looking at research — as a whole, or at one analyst — gets the
+          meetings view instead: what was assigned to research and by research,
+          with a sub-branch filter, and no client data. */}
+      {isResearch &&
+        (asAdmin || target ? (
+          <ResearchMeetingsSection session={session} deskId={deskId} userId={uid} allResearch={asAdmin && !target} />
+        ) : (
+          <ResearchCoverageSection session={session} rmId={rmId} />
+        ))}
 
       {isResearch && (
         <Section title="Recent research" count={data.research!.recent.length} icon={FlaskConical}>
