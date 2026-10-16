@@ -49,6 +49,12 @@ const SLA_HOURS_BY_TYPE: Record<string, number> = {
 
 const CreateBody = z.object({
   investorId: z.string().uuid().optional(),
+  /** Client as typed, client code, department, partner and the partner update log. */
+  clientName: z.string().trim().max(200).optional(),
+  clientCode: z.string().trim().max(80).optional(),
+  department: z.enum(["motilal_oswal", "mf", "demat", "insurance"]).optional(),
+  partnerName: z.string().trim().max(200).optional(),
+  partnerUpdate: z.string().max(8000).optional(),
   assignedToUserId: z.string().uuid().optional(),
   type: z.enum([
     // Spec-canonical (13)
@@ -138,6 +144,11 @@ export async function POST(req: NextRequest) {
         tenantId: session.tenantId,
         ticketNo,
         investorId: body.investorId ?? null,
+        clientName: body.clientName || null,
+        clientCode: body.clientCode || null,
+        department: body.department ?? null,
+        partnerName: body.partnerName || null,
+        partnerUpdate: body.partnerUpdate || null,
         // Service requests are worked by back office, so an unpicked assignee
         // leaves the ticket UNASSIGNED rather than silently landing on whoever
         // raised it. Self-assign is kept for a back-office creator, who is a

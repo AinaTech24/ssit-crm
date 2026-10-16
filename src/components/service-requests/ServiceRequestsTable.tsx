@@ -42,6 +42,13 @@ const STATUS_TONE: Record<string, string> = {
   escalated: "bg-rose-50 text-rose-700 border-rose-200",
 };
 
+const DEPARTMENT_LABEL: Record<string, string> = {
+  motilal_oswal: "Motilal Oswal",
+  mf: "MF",
+  demat: "Demat",
+  insurance: "Insurance",
+};
+
 const PRIORITY_TONE: Record<string, string> = {
   urgent: "text-rose-600", high: "text-amber-600", normal: "text-foreground", low: "text-muted-foreground",
 };
@@ -137,7 +144,11 @@ export function ServiceRequestsTable({ rows }: { rows: any[] }) {
               <th className="px-3 py-2 w-8"><input type="checkbox" checked={allSelected} onChange={toggleAll} className={`size-3.5 rounded transition-opacity ${selected.size > 0 ? "opacity-100" : "opacity-0 group-hover/tbl:opacity-100 focus:opacity-100"}`} aria-label="Select all" /></th>
               <th data-col="ticket" className="text-left px-1 py-2 font-medium">Ticket</th>
               <th data-col="client" className="text-left py-2 font-medium">Client</th>
+              <th data-col="code" className="text-left py-2 font-medium">Client code</th>
               <th data-col="type" className="text-left py-2 font-medium">Service Type</th>
+              <th data-col="department" className="text-left py-2 font-medium">Department</th>
+              <th data-col="partner" className="text-left py-2 font-medium">Partner</th>
+              <th data-col="partner_update" className="text-left py-2 font-medium">Mail / call update with partner</th>
               <th data-col="raised" className="text-left py-2 font-medium">Raised</th>
               <th data-col="assignee" className="text-left py-2 font-medium">Assigned to</th>
               <th data-col="priority" className="text-left py-2 font-medium">Priority</th>
@@ -162,12 +173,18 @@ export function ServiceRequestsTable({ rows }: { rows: any[] }) {
                       <Avatar src={sr.investor_id && sr.investor_avatar_url ? `/api/investors/${sr.investor_id}/avatar` : null} name={sr.investor_name} size={26} />
                       {sr.investor_id ? (
                         <Link href={`/dashboard/investors/${sr.investor_id}`} className="hover:underline">{sr.investor_name}</Link>
-                      ) : (<span>{sr.investor_name ?? "—"}</span>)}
+                      ) : (<span>{sr.investor_name ?? sr.client_name ?? "—"}</span>)}
                     </div>
                   </td>
+                  <td data-col="code" className="py-3 text-xs font-mono whitespace-nowrap">{sr.client_code || "—"}</td>
                   <td data-col="type" className="py-3 text-xs">
                     <Link href={`/dashboard/service-requests/${sr.id}`} className="font-medium hover:underline">{TYPE_LABEL[sr.type] ?? sr.type}</Link>
                     {sr.subject && <div className="text-[11px] text-muted-foreground max-w-[180px] truncate">{sr.subject}</div>}
+                  </td>
+                  <td data-col="department" className="py-3 text-xs whitespace-nowrap">{sr.department ? (DEPARTMENT_LABEL[sr.department] ?? sr.department) : "—"}</td>
+                  <td data-col="partner" className="py-3 text-xs whitespace-nowrap">{sr.partner_name || "—"}</td>
+                  <td data-col="partner_update" className="py-3 text-xs text-muted-foreground max-w-[260px]">
+                    {sr.partner_update ? <div className="line-clamp-2 whitespace-pre-wrap" title={sr.partner_update}>{sr.partner_update}</div> : "—"}
                   </td>
                   <td data-col="raised" className="py-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">{formatDate(sr.created_at)}</td>
                   <td data-col="assignee" className="py-3 text-xs whitespace-nowrap">{sr.assignee_name ?? "—"}</td>

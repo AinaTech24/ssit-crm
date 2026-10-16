@@ -6,6 +6,33 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
+import { PartnerSelect } from "@/components/service-requests/PartnerSelect";
+
+const DEPARTMENTS = [
+  { value: "motilal_oswal", label: "Motilal Oswal" },
+  { value: "mf", label: "MF" },
+  { value: "demat", label: "Demat" },
+  { value: "insurance", label: "Insurance" },
+];
+
+type ClientHit = {
+  id: string;
+  name: string;
+  pan?: string | null;
+  mfCode?: string | null;
+  moCode?: string | null;
+  bajajCode?: string | null;
+  lasCode?: string | null;
+};
+
+/** The client's code for the chosen department; falls back to whichever they have. */
+function pickCode(c: ClientHit, department: string): string {
+  const byDept: Record<string, string | null | undefined> = {
+    motilal_oswal: c.moCode,
+    mf: c.mfCode,
+  };
+  return byDept[department] || c.mfCode || c.moCode || c.bajajCode || c.lasCode || "";
+}
 
 const TYPES = [
   { key: "nominee_update", label: "Nominee update" },
@@ -50,9 +77,16 @@ export default function NewServiceRequestPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialType = searchParams.get("type") === "complaint" ? "complaint" : "kyc_update";
-  const [investors, setInvestors] = useState<any[]>([]);
+  const [hits, setHits] = useState<ClientHit[]>([]);
+  const [picked, setPicked] = useState<ClientHit | null>(null);
+  const [showHits, setShowHits] = useState(false);
   const [form, setForm] = useState({
     investorId: "",
+    clientName: "",
+    clientCode: "",
+    department: "",
+    partnerName: "",
+    partnerUpdate: "",
     type: initialType,
     subject: "",
     description: "",
@@ -67,12 +101,47 @@ export default function NewServiceRequestPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Client typeahead: search the whole book by name as the user types. The
+  // old dropdown only ever held the first 200 clients, so most could not be found.
   useEffect(() => {
-    fetch("/api/investors?limit=200")
-      .then((r) => r.json())
-      .then((j) => setInvestors(j.rows ?? []))
-      .catch(() => {});
-  }, []);
+    const q = form.clientName.trim();
+    if (q.length < 2 || (picked && picked.name === form.clientName)) {
+      setHits([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      fetch(`/api/investors?q=${encodeURIComponent(q)}&limit=8`)
+        .then((r) => (r.ok ? r.json() : { rows: [] }))
+        .then((j) => {
+          const rows: ClientHit[] = j.rows ?? [];
+          // One clear match for exactly what was typed: select it for them.
+          if (rows.length === 1 && rows[0].name.trim().toLowerCase() === q.toLowerCase()) {
+            choose(rows[0]);
+            return;
+          }
+          setHits(rows);
+        })
+        .catch(() => setHits([]));
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.clientName]);
+
+  function choose(c: ClientHit) {
+    setPicked(c);
+    setHits([]);
+    setShowHits(false);
+    setForm((f) => ({ ...f, investorId: c.id, clientName: c.name, clientCode: pickCode(c, f.department) }));
+  }
+
+  function changeDepartment(department: string) {
+    setForm((f) => ({
+      ...f,
+      department,
+      // Re-pick the code for the new department, unless the user typed their own.
+      clientCode: picked && (!f.clientCode || f.clientCode === pickCode(picked, f.department)) ? pickCode(picked, department) : f.clientCode,
+    }));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -84,6 +153,11 @@ export default function NewServiceRequestPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           investorId: form.investorId || undefined,
+          clientName: form.clientName.trim() || undefined,
+          clientCode: form.clientCode.trim() || undefined,
+          department: form.department || undefined,
+          partnerName: form.partnerName || undefined,
+          partnerUpdate: form.partnerUpdate.trim() || undefined,
           type: form.type,
           subject: form.subject,
           description: form.description,
@@ -118,15 +192,72 @@ export default function NewServiceRequestPage() {
       <h1 className="text-2xl font-bold tracking-tight">New service request</h1>
 
       <form onSubmit={submit} className="border rounded-lg bg-card p-5 space-y-3">
-        <label className="block">
-          <div className="text-xs font-medium mb-1">Investor</div>
-          <SelectField value={form.investorId} onChange={(e) => setForm({ ...form, investorId: e.target.value })} className="w-full" searchable>
-            <option value="">Select investor (or leave blank for general)…</option>
-            {investors.map((i: any) => (
-              <option key={i.id} value={i.id}>{i.name} · {i.pan}</option>
-            ))}
-          </SelectField>
-        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="relative">
+            <div className="text-xs font-medium mb-1">Client name</div>
+            <input
+              value={form.clientName}
+              onChange={(e) => {
+                const v = e.target.value;
+                // Typing over a chosen client un-links it until one is picked again.
+                if (picked && picked.name !== v) {
+                  setPicked(null);
+                  setForm((f) => ({ ...f, clientName: v, investorId: "", clientCode: "" }));
+                } else {
+                  setForm((f) => ({ ...f, clientName: v }));
+                }
+                setShowHits(true);
+              }}
+              onFocus={() => setShowHits(true)}
+              onBlur={() => setTimeout(() => setShowHits(false), 150)}
+              placeholder="Start typing the client's name…"
+              autoComplete="off"
+              className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+            />
+            {showHits && hits.length > 0 && (
+              <ul className="absolute z-20 mt-1 w-full rounded-md border bg-card shadow-lg max-h-64 overflow-y-auto py-1">
+                {hits.map((c) => (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => choose(c)}
+                      className="flex w-full items-center justify-between gap-3 px-3 py-1.5 text-left text-sm hover:bg-secondary/50"
+                    >
+                      <span className="truncate">{c.name}</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground font-mono">{pickCode(c, form.department) || c.pan || ""}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="mt-1 text-[10px] text-muted-foreground">
+              {picked ? "Client linked — code filled in automatically." : "Pick a match to link the client, or leave as typed for a general query."}
+            </div>
+          </div>
+          <label className="block">
+            <div className="text-xs font-medium mb-1">Client code</div>
+            <input
+              value={form.clientCode}
+              onChange={(e) => setForm({ ...form, clientCode: e.target.value })}
+              placeholder="Filled in when the client is picked"
+              className="w-full border rounded-md px-3 py-2 text-sm bg-background font-mono"
+            />
+          </label>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <div className="text-xs font-medium mb-1">Department</div>
+            <SelectField value={form.department} onChange={(e) => changeDepartment(e.target.value)} className="w-full">
+              <option value="">Select department…</option>
+              {DEPARTMENTS.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+            </SelectField>
+          </label>
+          <div className="block">
+            <div className="text-xs font-medium mb-1">Partner name</div>
+            <PartnerSelect value={form.partnerName} onChange={(name) => setForm({ ...form, partnerName: name })} />
+          </div>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <div className="text-xs font-medium mb-1">Type<span className="text-rose-600">*</span></div>
@@ -151,6 +282,19 @@ export default function NewServiceRequestPage() {
         <label className="block">
           <div className="text-xs font-medium mb-1">Description</div>
           <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={4} className="w-full border rounded-md px-3 py-2 text-sm bg-background" />
+        </label>
+        <label className="block">
+          <div className="text-xs font-medium mb-1">
+            Mail &amp; call updation with partner
+            <span className="ml-1 text-[10px] text-muted-foreground font-normal">· the query raised and what the partner said</span>
+          </div>
+          <textarea
+            value={form.partnerUpdate}
+            onChange={(e) => setForm({ ...form, partnerUpdate: e.target.value })}
+            rows={3}
+            placeholder="e.g. Mailed RTA on 16 Oct about the nominee change; they asked for the signed form. Called on 17 Oct — in process."
+            className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+          />
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">

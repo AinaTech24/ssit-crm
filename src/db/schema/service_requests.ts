@@ -105,6 +105,16 @@ export const serviceRequests = pgTable(
     attachments: jsonb("attachments").$type<Array<{ name: string; key: string; size: number }>>(),
     timeline: jsonb("timeline").$type<Array<{ at: string; by: string; event: string; note?: string }>>(),
 
+    /** Client as typed (when not tied to a client record) + their code at the partner. */
+    clientName: text("client_name"),
+    clientCode: text("client_code"),
+    /** Motilal Oswal | MF | Demat | Insurance (keys: motilal_oswal, mf, demat, insurance). */
+    department: text("department"),
+    /** The partner the query was raised with — from the firm-managed partner list. */
+    partnerName: text("partner_name"),
+    /** Mail / call updation with the partner, and the query itself. */
+    partnerUpdate: text("partner_update"),
+
     /** Free-text RM remarks — spec § Module 13. */
     remarks: text("remarks"),
     /** Resolution write-up — spec § Module 14 Complaint Register. */

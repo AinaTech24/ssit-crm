@@ -41,6 +41,12 @@ const Patch = z.object({
   sebiSubCategory: z.string().max(120).optional(),
   complaintSource: z.string().max(40).optional(),
   scoresRefNo: z.string().max(80).optional(),
+  /** Client / partner working fields. */
+  clientName: z.string().max(200).optional(),
+  clientCode: z.string().max(80).optional(),
+  department: z.enum(["motilal_oswal", "mf", "demat", "insurance"]).nullable().optional(),
+  partnerName: z.string().max(200).optional(),
+  partnerUpdate: z.string().max(8000).optional(),
 });
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -87,6 +93,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (d.sebiSubCategory !== undefined) patch.sebiSubCategory = d.sebiSubCategory;
       if (d.complaintSource !== undefined) patch.complaintSource = d.complaintSource;
       if (d.scoresRefNo !== undefined) patch.scoresRefNo = d.scoresRefNo;
+      if (d.clientName !== undefined) patch.clientName = d.clientName || null;
+      if (d.clientCode !== undefined) patch.clientCode = d.clientCode || null;
+      if (d.department !== undefined) patch.department = d.department;
+      if (d.partnerName !== undefined) patch.partnerName = d.partnerName || null;
+      if (d.partnerUpdate !== undefined) patch.partnerUpdate = d.partnerUpdate || null;
 
       // Stamp resolvedAt the first time it becomes resolved/closed.
       if ((d.status === "resolved" || d.status === "closed") && !before.resolvedAt) patch.resolvedAt = now;
@@ -111,6 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (d.resolutionNotes !== undefined && d.resolutionNotes !== before.resolutionNotes) entries.push({ at, by, event: "resolution", note: "Resolution notes updated" });
       if (d.assignedToUserId !== undefined && d.assignedToUserId !== before.assignedToUserId) entries.push({ at, by, event: "assigned", note: "Reassigned" });
       if (d.csatRating !== undefined) entries.push({ at, by, event: "csat", note: `CSAT ${d.csatRating}/5` });
+      if (d.partnerUpdate !== undefined && d.partnerUpdate !== (before.partnerUpdate ?? "")) entries.push({ at, by, event: "partner_update", note: "Partner mail / call update changed" });
       if (entries.length) patch.timeline = [ ...((before.timeline as any[]) ?? []), ...entries ];
 
       const after = await tx.update(serviceRequests).set(patch).where(and(eq(serviceRequests.id, id), eq(serviceRequests.tenantId, session.tenantId))).returning();

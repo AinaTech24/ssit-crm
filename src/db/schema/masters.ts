@@ -37,6 +37,9 @@ export const masterValues = pgTable(
         // Named events a lead can be attributed to when source="event".
         // Managed inline from the New-lead form via /api/lead-events.
         "lead_event",
+        // Partners a service request is raised with (RTA, AMC desks, brokers).
+        // Managed inline from the New service request form.
+        "service_partner",
         "campaign_type",
         "service_request_type",
         "task_priority",

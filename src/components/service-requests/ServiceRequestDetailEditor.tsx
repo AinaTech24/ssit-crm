@@ -16,6 +16,7 @@ import {
   Loader2, Save, CheckCircle2, PhoneCall, Plus, Clock, AlertTriangle, Star, MessageSquare, UserCog,
 } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
+import { PartnerSelect } from "@/components/service-requests/PartnerSelect";
 import { formatRelative } from "@/lib/utils";
 
 const STATUSES = [
@@ -68,6 +69,10 @@ export function ServiceRequestDetailEditor({
   const [status, setStatus] = useState<string>(sr.status);
   const [priority, setPriority] = useState<string>(sr.priority);
   const [assignee, setAssignee] = useState<string | null>(sr.assignedToUserId ?? null);
+  const [clientCode, setClientCode] = useState<string>(sr.clientCode ?? "");
+  const [department, setDepartment] = useState<string>(sr.department ?? "");
+  const [partnerName, setPartnerName] = useState<string>(sr.partnerName ?? "");
+  const [partnerUpdate, setPartnerUpdate] = useState<string>(sr.partnerUpdate ?? "");
   const [remarks, setRemarks] = useState<string>(sr.remarks ?? "");
   const [resolutionNotes, setResolutionNotes] = useState<string>(sr.resolutionNotes ?? "");
   const [newNote, setNewNote] = useState("");
@@ -115,6 +120,10 @@ export function ServiceRequestDetailEditor({
       assignedToUserId: assignee || undefined,
       remarks: remarks || undefined,
       resolutionNotes: resolutionNotes || undefined,
+      clientCode,
+      department: department || null,
+      partnerName,
+      partnerUpdate,
     };
     if (csat > 0 && csat !== sr.csatRating) body.csatRating = csat;
     if (csatComment && csatComment !== sr.csatComment) body.csatComment = csatComment;
@@ -204,6 +213,42 @@ export function ServiceRequestDetailEditor({
       <div className="card-surface p-5 space-y-2">
         <h3 className="font-semibold flex items-center gap-2"><UserCog className="size-4 text-brand-cyan" /> Assigned to</h3>
         <div className="max-w-sm"><RmSelector role="back_office" value={assignee} onChange={setAssignee} placeholder="— Unassigned —" /></div>
+      </div>
+
+      {/* Partner — which desk and partner the query is with, and the mail / call trail */}
+      <div className="card-surface p-5 space-y-3">
+        <h3 className="font-semibold">Partner &amp; updates</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <label className="block">
+            <div className="text-xs font-medium mb-1">Client code</div>
+            <input value={clientCode} onChange={(e) => setClientCode(e.target.value)} className="input-base font-mono" placeholder="—" />
+          </label>
+          <label className="block">
+            <div className="text-xs font-medium mb-1">Department</div>
+            <select value={department} onChange={(e) => setDepartment(e.target.value)} className="input-base">
+              <option value="">—</option>
+              <option value="motilal_oswal">Motilal Oswal</option>
+              <option value="mf">MF</option>
+              <option value="demat">Demat</option>
+              <option value="insurance">Insurance</option>
+            </select>
+          </label>
+          <div className="block">
+            <div className="text-xs font-medium mb-1">Partner name</div>
+            <PartnerSelect value={partnerName} onChange={setPartnerName} />
+          </div>
+        </div>
+        <label className="block">
+          <div className="text-xs font-medium mb-1">Mail &amp; call updation with partner</div>
+          <textarea
+            value={partnerUpdate}
+            onChange={(e) => setPartnerUpdate(e.target.value)}
+            rows={4}
+            placeholder="The query raised, mails sent and calls made with the partner, and what they said…"
+            className="input-base"
+          />
+        </label>
+        <p className="text-[11px] text-muted-foreground">Saved with the ticket — press Save.</p>
       </div>
 
       {/* Remarks */}
