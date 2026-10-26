@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         label,
         isActive: true,
         sortOrder: 0,
-      } as any);
+      });
       return { key, label };
     });
     return NextResponse.json({ partner }, { status: 201 });

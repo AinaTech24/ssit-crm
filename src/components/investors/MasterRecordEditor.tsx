@@ -104,7 +104,7 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
       ? `days_${(investor as any).reviewFrequencyDays}`
       : investor.reviewFrequency ?? "",
     rmId: investor.rmId ?? "",
-    serviceRmId: (investor as any).serviceRmId ?? "",
+    serviceRmId: investor.serviceRmId ?? "",
     kycStatus: investor.kycStatus ?? "pending",
     riskProfile: investor.riskProfile ?? "",
     residencyStatus: investor.residencyStatus ?? "",
@@ -225,7 +225,7 @@ export function MasterRecordEditor({ investor, flags }: { investor: Investor; fl
         // Only sent when changed, so an editor opened without the field can
         // never wipe the client's service RM by saving.
         serviceRmId:
-          f.serviceRmId !== ((investor as any).serviceRmId ?? "") ? f.serviceRmId || null : undefined,
+          f.serviceRmId !== (investor.serviceRmId ?? "") ? f.serviceRmId || null : undefined,
         kycStatus: inSet(f.kycStatus, ["pending", "registered", "verified", "hold", "rejected", "expired", "re_kyc_required"]),
         riskProfile: inSet(f.riskProfile, ["conservative", "moderate", "aggressive", "very_aggressive"]),
         nominees: f.nominees

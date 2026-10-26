@@ -65,13 +65,13 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
   const isAssignee = task.assigneeId === currentUserId;
   const taskMeta = ((task as any).meta ?? {}) as { contentKind?: string; eventLabel?: string; approverId?: string; uploadedAt?: string };
   // Marketing-department tasks always carry the content sign-off flow.
-  const isMarketing = (task as any).department === "marketing";
+  const isMarketing = task.department === "marketing";
   const [uploaded, setUploaded] = useState(!!taskMeta.uploadedAt);
   // A named approver (marketing content) signs off, not the creator.
   // Marketing content is signed off by the named approver only; the marketing
   // person who made it never sees Approve / Reject (the marketing role holds
   // "manage all", so that flag must not grant it here).
-  const isApprover = (task as any).department === "marketing"
+  const isApprover = task.department === "marketing"
     ? taskMeta.approverId
       ? taskMeta.approverId === currentUserId
       : task.createdById === currentUserId && task.assigneeId !== currentUserId
@@ -193,7 +193,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
     }
   }
   async function completeTaskNow() {
-    setStatus("completed" as any);
+    setStatus("completed");
     setLoading(true);
     try {
       const res = await fetch(`/api/tasks/${task.id}`, {
@@ -323,12 +323,12 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
         toast.success("Submitted for approval");
       } else if (action === "approve") {
         setApprovalStatus("approved");
-        setStatus((isMarketing ? "in_progress" : "completed") as any);
+        setStatus(isMarketing ? "in_progress" : "completed");
         toast.success(isMarketing ? "Approved — the marketing team has been notified" : "Approved & marked complete");
       } else {
         setApprovalStatus("rejected");
         setApprovalNoteShown(rejectNote.trim());
-        setStatus("in_progress" as any);
+        setStatus("in_progress");
         setRejectOpen(false);
         toast.success(isMarketing ? "Rejected — sent back to the marketing team" : "Task reopened for changes");
       }
@@ -351,7 +351,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "Couldn't mark as uploaded");
       setUploaded(true);
-      setStatus("completed" as any);
+      setStatus("completed");
       toast.success("Marked as uploaded");
       onUpdate();
     } catch (e: any) {
