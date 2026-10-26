@@ -21,6 +21,7 @@ import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { assertCanViewClient } from "@/lib/investors/access";
 import {
   ACTIVITY_KINDS,
   ACTIVITY_DIRECTIONS,
@@ -111,7 +112,7 @@ export async function GET(req: NextRequest) {
 /** Resolve a denormalised name + phone for the polymorphic subject. */
 function subjectLookupSql(subjectType: string, subjectId: string) {
   if (subjectType === "investor")
-    return sql`SELECT name, phone, rm_id FROM investors WHERE id = ${subjectId}::uuid LIMIT 1`;
+    return sql`SELECT name, phone, rm_id, service_rm_id FROM investors WHERE id = ${subjectId}::uuid LIMIT 1`;
   if (subjectType === "lead")
     return sql`SELECT name, phone, owner_id FROM leads WHERE id = ${subjectId}::uuid LIMIT 1`;
   return sql`SELECT COALESCE(family_name, head_name) AS name, NULL::text AS phone, NULL::uuid AS owner_id FROM families WHERE id = ${subjectId}::uuid LIMIT 1`;
@@ -137,9 +138,26 @@ export async function POST(req: NextRequest) {
         const sr = subj.rows[0] as any;
         if (!sr) return { notFound: true as const };
 
-        // Enforce RM assignment checking for non-manager RMs
-        if (b.subjectType === "investor" && !seesAllInvestors && sr.rm_id !== session.userId) {
-          return { forbidden: true as const };
+        // Whoever may OPEN the client may log an interaction on it: its RM, its
+        // Service RM, or anyone the client wall lets in (branch head, delegate).
+        // This used to demand rm_id === you, which refused people the client page
+        // had just let in — the Service RM got "client not assigned to you" while
+        // looking at the client.
+        if (b.subjectType === "investor" && !seesAllInvestors) {
+          let allowed = sr.rm_id === session.userId || sr.service_rm_id === session.userId;
+          if (!allowed) {
+            try {
+              await assertCanViewClient(tx, session, {
+                id: b.subjectId,
+                rmId: sr.rm_id ?? null,
+                serviceRmId: sr.service_rm_id ?? null,
+              });
+              allowed = true;
+            } catch {
+              allowed = false;
+            }
+          }
+          if (!allowed) return { forbidden: true as const };
         }
         if (b.subjectType === "lead" && !seesAllLeads && sr.owner_id !== session.userId) {
           return { forbidden: true as const };
