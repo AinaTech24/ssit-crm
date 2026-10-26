@@ -220,7 +220,10 @@ const MATRIX: Record<Capability, Role[]> = {
   // single record in it. Every write path (create, import, PATCH) gates on
   // this capability, so without it "sub broker uploads their own clients" had
   // no possible entry point.
-  "investor.edit.assigned": ["rm", "ria", "gifting_hr", "sub_broker"],
+  // branch_head runs the branch's book: the data wall already lets them open every
+  // client in their branch/desk, and the row check on each write route
+  // (assertInScope) keeps edits inside it — so they may correct those clients.
+  "investor.edit.assigned": ["rm", "ria", "gifting_hr", "sub_broker", "branch_head"],
   "investor.bulk_export": ["compliance"],
   // Permanent hard-delete of a client + its owned data subgraph (cascades).
   // Deliberately NARROWER than investor.edit.all: editing a phone number must

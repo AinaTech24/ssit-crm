@@ -12,6 +12,7 @@ import { and, eq, desc, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny, can } from "@/lib/auth/rbac";
+import { assertCanViewClient } from "@/lib/investors/access";
 import { goals, investors, folios, sips } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         const inv = (await tx.select().from(investors).where(eq(investors.id, goal.investorId)).limit(1))[0];
         if (!inv) return { goal, investor: null, folios: [], sips: [] };
         // Non-managers only see their own clients' goals.
-        if (!canViewAll && inv.rmId !== session.userId) return { forbidden: true as const };
+        if (!canViewAll) {
+          try {
+            await assertCanViewClient(tx, session, inv);
+          } catch {
+            return { forbidden: true as const };
+          }
+        }
 
         const fol = await tx
           .select({ id: folios.id, amcName: folios.amcName, folioNumber: folios.folioNumber, aum: folios.aum })

@@ -16,6 +16,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, can } from "@/lib/auth/rbac";
+import { assertCanViewClient } from "@/lib/investors/access";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { investors, leads } from "@/db/schema";
@@ -71,13 +72,17 @@ export async function POST(req: NextRequest) {
         // Tenant predicate is the live cross-tenant guard (RLS-bypass model) —
         // mirror the sibling actions route. Pull rmId to enforce own-client scope.
         const [inv] = await tx
-          .select({ email: investors.email, name: investors.name, rmId: investors.rmId })
+          .select({ id: investors.id, email: investors.email, name: investors.name, rmId: investors.rmId, serviceRmId: investors.serviceRmId })
           .from(investors)
           .where(and(eq(investors.id, b.investorId), eq(investors.tenantId, session.tenantId)))
           .limit(1);
         if (!inv) throw Object.assign(new Error("investor not found"), { status: 404 });
-        if (!seesAll && inv.rmId !== session.userId) {
-          throw Object.assign(new Error("not your client"), { status: 403 });
+        if (!seesAll) {
+          try {
+            await assertCanViewClient(tx, session, inv);
+          } catch {
+            throw Object.assign(new Error("not your client"), { status: 403 });
+          }
         }
         if (!inv.email) throw Object.assign(new Error("investor has no email on file"), { status: 400 });
         recipient = inv.email;

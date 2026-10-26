@@ -13,6 +13,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny, can } from "@/lib/auth/rbac";
+import { resolveDataScope, isInScopeViaOwnerBranch } from "@/lib/auth/data-scope";
 import { families, investors, users } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         const fam = (await tx.select().from(families).where(and(eq(families.id, id), eq(families.tenantId, session.tenantId))).limit(1))[0];
         if (!fam) return null;
         // Non-managers only see households they own.
-        if (!canViewAll && fam.rmId !== session.userId) return { forbidden: true as const };
+        if (
+          !canViewAll &&
+          fam.rmId !== session.userId &&
+          !(await isInScopeViaOwnerBranch(tx, await resolveDataScope(tx, session), [fam.rmId]))
+        ) {
+          return { forbidden: true as const };
+        }
 
         const members = await tx
           .select({
