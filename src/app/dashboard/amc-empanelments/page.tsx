@@ -13,6 +13,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
+import { AddAmcMeetingButton } from "@/components/amc-empanelments/AddAmcMeetingButton";
 import { amcEmpanelments, EMPANELMENT_CATEGORIES, EMPANELMENT_CATEGORY_LABEL } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +80,14 @@ export default async function AmcEmpanelmentsListPage({
   );
 
   if (view === "meetings") {
+    const amcOptions = await withTenant(session.tenantId, async (tx) => {
+      const r = await tx.execute(sql`
+        SELECT id, amc_name AS name FROM amc_empanelments
+         WHERE tenant_id = ${session.tenantId}::uuid
+         ORDER BY amc_name ASC LIMIT 400
+      `);
+      return r.rows as Array<{ id: string; name: string }>;
+    });
     const meetings = await withTenant(session.tenantId, async (tx) => {
       const r = await tx.execute(sql`
         SELECT m.id, m.meeting_date, m.subject, m.attendees, m.notes, m.follow_up,
@@ -97,11 +106,14 @@ export default async function AmcEmpanelmentsListPage({
     });
     return (
       <div className="space-y-5">
-        <h1 className="text-2xl font-semibold">AMC empanelments</h1>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h1 className="text-2xl font-semibold">AMC empanelments</h1>
+          <AddAmcMeetingButton amcs={amcOptions} />
+        </div>
         {tabs}
         {meetings.length === 0 ? (
           <div className="card-surface p-12 text-center text-sm text-muted-foreground">
-            No AMC meetings recorded yet. Open an AMC and use its “AMC meetings” tab to add one.
+            No AMC meetings recorded yet. Use “Add meeting notes” to record the first one.
           </div>
         ) : (
           <div className="card-surface table-scroll">

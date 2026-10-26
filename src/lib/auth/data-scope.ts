@@ -216,7 +216,7 @@ export async function resolveMeetingScope(tx: any, session: SessionUser): Promis
   // (owner, branch head, back office) keep their scope even if they also
   // hold the research role.
   const researchOnly =
-    session.roles.includes("ra_research") &&
+    (session.roles.includes("ra_research") || session.roles.includes("ra_sales")) &&
     !session.roles.some((r) => ["owner", "branch_head", "back_office", "ops"].includes(r));
   return {
     scope: researchOnly ? { kind: "own", userId: session.userId } : scope,

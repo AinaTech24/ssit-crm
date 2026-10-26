@@ -267,7 +267,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
     const parse = Patch.safeParse(await req.json().catch(() => ({})));
     if (!parse.success)
       return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
@@ -275,6 +274,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const result = await withTenant(session.tenantId, async (tx) => {
       const before = (await tx.select().from(investors).where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId))).limit(1))[0];
       if (!before) return null;
+
+      // The client's own Assigned RM and Service RM may always edit it, whatever
+      // their role's edit capability says; everyone else needs the capability.
+      if (before.rmId !== session.userId && before.serviceRmId !== session.userId) {
+        requireAny(session.roles, ["investor.edit.all", "investor.edit.assigned"], session.permissions);
+      }
 
       // Row scope. PATCH used to require investor.edit.all, a firm-wide
       // capability, so it never needed a per-row check. Now that an

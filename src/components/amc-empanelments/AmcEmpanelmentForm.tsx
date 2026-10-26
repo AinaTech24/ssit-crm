@@ -111,7 +111,7 @@ export function AmcEmpanelmentForm({
 }: {
   mode: "create" | "edit";
   initial?: Partial<FormValues> & { id?: string };
-  amcCatalog: Array<{ code: string; name: string }>;
+  amcCatalog: Array<{ code: string; name: string; inactive?: boolean }>;
 }) {
   const router = useRouter();
   const [v, setV] = useState<FormValues>({ ...EMPTY, ...(initial ?? {}) });

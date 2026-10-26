@@ -15,7 +15,8 @@ import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { AddMeetingButton } from "@/components/review-meetings/AddMeetingButton";
 import { MeetingsBulkTable } from "@/components/review-meetings/MeetingsBulkTable";
 import { MeetingsKanban } from "@/components/review-meetings/MeetingsKanban";
-import { LayoutList, KanbanSquare, CalendarClock } from "lucide-react";
+import { LayoutList, KanbanSquare, CalendarClock, BarChart3 } from "lucide-react";
+import { can } from "@/lib/auth/rbac";
 
 const MEETINGS_COLUMNS = [
   { key: "date", label: "Date", required: true },
@@ -283,6 +284,16 @@ export default async function ReviewMeetingsPage({
               <CalendarClock className="size-3.5" /> Calendar
             </Link>
           </div>
+          {(session.roles.includes("owner") ||
+            session.roles.includes("branch_head") ||
+            can(session.roles, "dashboard.view.owner", session.permissions)) && (
+            <Link
+              href="/dashboard/review-meetings/details"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary"
+            >
+              <BarChart3 className="size-3.5" /> Meeting details
+            </Link>
+          )}
           <AddMeetingButton />
         </div>
       </div>

@@ -519,7 +519,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-3">
               {/* Primary action — the thing an RM does most from this page */}
-              <LogActivityButton subject={{ type: "investor", id: inv.id, name: inv.name, phone: inv.phone }} label="Log call / visit" variant="primary" />
+              <LogActivityButton subject={{ type: "investor", id: inv.id, name: inv.name, phone: inv.phone }} label="Meeting notes" variant="primary" />
               <OnboardingWizardButton
                 investorId={inv.id}
                 investor={{

@@ -31,9 +31,10 @@ export async function DELETE(req: NextRequest) {
   try {
     const session = await requireSession();
     requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
-    const parse = z.object({ code: z.string().trim().min(1).max(120) }).safeParse(await req.json().catch(() => ({})));
+    const parse = z.object({ code: z.string().trim().min(1).max(120), name: z.string().trim().min(1).max(120).optional() }).safeParse(await req.json().catch(() => ({})));
     if (!parse.success) return NextResponse.json({ error: "AMC code is required" }, { status: 400 });
     const code = parse.data.code;
+    const name = parse.data.name;
 
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const used = await tx.execute(sql`
@@ -42,10 +43,20 @@ export async function DELETE(req: NextRequest) {
          LIMIT 1
       `);
       if (used.rows.length) return "in_use" as const;
-      await tx.execute(sql`
+      const upd = await tx.execute(sql`
         UPDATE amc_master SET is_active = false, updated_at = now()
          WHERE tenant_id = ${session.tenantId}::uuid AND code = ${code}
+         RETURNING id
       `);
+      // A built-in house has no row of its own until now: record it switched
+      // off so it stays gone instead of reappearing from the standard list.
+      if (upd.rows.length === 0 && name) {
+        await tx.execute(sql`
+          INSERT INTO amc_master (id, tenant_id, code, name, is_active, created_at, updated_at)
+          VALUES (gen_random_uuid(), ${session.tenantId}::uuid, ${code}, ${name}, false, now(), now())
+          ON CONFLICT (tenant_id, code) DO UPDATE SET is_active = false, updated_at = now()
+        `);
+      }
       return "ok" as const;
     });
     if (outcome === "in_use") {
@@ -83,7 +94,14 @@ export async function POST(req: NextRequest) {
       const dupe = (existing.rows as { code: string; name: string }[]).find(
         (r) => r.code === code || normaliseAmcName(r.name) === key
       );
-      if (dupe) return { code: String(dupe.code), name: String(dupe.name) };
+      if (dupe) {
+        // Adding a name that was deleted brings it back.
+        await tx.execute(sql`
+          UPDATE amc_master SET is_active = true, updated_at = now()
+           WHERE tenant_id = ${session.tenantId}::uuid AND code = ${String(dupe.code)}
+        `);
+        return { code: String(dupe.code), name: String(dupe.name) };
+      }
 
       await tx.execute(sql`
         INSERT INTO amc_master (id, tenant_id, code, name, is_active, created_at, updated_at)

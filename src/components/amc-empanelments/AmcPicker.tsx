@@ -15,7 +15,7 @@ import { useMemo, useRef, useState, useEffect } from "react";
 import { Check, ChevronDown, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { STANDARD_AMC_NAMES, amcCodeFromName, normaliseAmcName } from "@/lib/amc/standard-list";
 
-type Amc = { code: string; name: string };
+type Amc = { code: string; name: string; inactive?: boolean };
 
 export function AmcPicker({
   catalog,
@@ -38,20 +38,16 @@ export function AmcPicker({
 
   const options = useMemo(() => {
     const byKey = new Map<string, Amc>();
-    for (const a of [...catalog, ...extra]) byKey.set(normaliseAmcName(a.name), a);
+    // Deleted names stay in amc_master switched off; they must also hide the
+    // built-in house of the same name, or it would simply reappear.
+    const off = new Set(catalog.filter((a) => a.inactive).map((a) => normaliseAmcName(a.name)));
+    for (const a of [...catalog.filter((a) => !a.inactive), ...extra]) byKey.set(normaliseAmcName(a.name), a);
     for (const n of STANDARD_AMC_NAMES) {
       const k = normaliseAmcName(n);
-      if (!byKey.has(k)) byKey.set(k, { code: amcCodeFromName(n), name: n });
+      if (!byKey.has(k) && !off.has(k)) byKey.set(k, { code: amcCodeFromName(n), name: n });
     }
     return [...byKey.values()].filter((o) => !removed.has(o.code)).sort((a, b) => a.name.localeCompare(b.name));
   }, [catalog, extra, removed]);
-
-  // Only names that live in the firm's own list can be deleted; the standard
-  // houses are built in and would simply reappear.
-  const deletable = useMemo(() => {
-    const std = new Set(STANDARD_AMC_NAMES.map((n) => normaliseAmcName(n)));
-    return new Set([...catalog, ...extra].filter((a) => !std.has(normaliseAmcName(a.name))).map((a) => a.code));
-  }, [catalog, extra]);
 
   const selected = options.find((o) => o.code === value);
   const q = query.trim().toLowerCase();
@@ -83,7 +79,7 @@ export function AmcPicker({
       const res = await fetch("/api/amc-empanelments/catalog", {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: a.code }),
+        body: JSON.stringify({ code: a.code, name: a.name }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -162,16 +158,14 @@ export function AmcPicker({
                   <span>{o.name}</span>
                   {o.code === value && <Check className="size-3.5 text-emerald-600" />}
                 </button>
-                {deletable.has(o.code) && (
-                  <button
-                    type="button"
-                    title={`Delete ${o.name}`}
-                    onClick={() => void remove(o)}
-                    className="mr-2 rounded p-1 text-muted-foreground hover:bg-rose-50 hover:text-rose-600"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                )}
+                <button
+                  type="button"
+                  title={`Delete ${o.name}`}
+                  onClick={() => void remove(o)}
+                  className="mr-2 rounded p-1 text-muted-foreground hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
               </li>
             ))}
             {filtered.length === 0 && <li className="px-3 py-2 text-xs text-muted-foreground">No AMC matches “{query}”.</li>}

@@ -16,11 +16,10 @@ export default async function NewAmcEmpanelmentPage() {
   // code. Tenant-scoped query in case some tenants prune the catalog.
   const amcs = await withTenant(session.tenantId, async (tx) => {
     const r = await tx.execute(sql`
-      SELECT code, name FROM amc_master
-      WHERE COALESCE(is_active, true) = true
-      ORDER BY name ASC LIMIT 200
+      SELECT code, name, (COALESCE(is_active, true) = false) AS inactive FROM amc_master
+      ORDER BY name ASC LIMIT 400
     `);
-    return r.rows as Array<{ code: string; name: string }>;
+    return r.rows as Array<{ code: string; name: string; inactive?: boolean }>;
   });
 
   return (
