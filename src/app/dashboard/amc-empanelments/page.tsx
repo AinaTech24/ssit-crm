@@ -113,7 +113,7 @@ export default async function AmcEmpanelmentsListPage({
         {tabs}
         {meetings.length === 0 ? (
           <div className="card-surface p-12 text-center text-sm text-muted-foreground">
-            No AMC meetings recorded yet. Use “Add meeting notes” to record the first one.
+            No AMC meetings recorded yet. Use “Create meeting” to add the first one.
           </div>
         ) : (
           <div className="card-surface table-scroll">

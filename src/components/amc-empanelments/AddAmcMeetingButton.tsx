@@ -46,7 +46,7 @@ export function AddAmcMeetingButton({ amcs }: { amcs: Array<{ id: string; name: 
         toast.error((await readApiError(r, "save")).message);
         return;
       }
-      toast.success("Meeting notes added");
+      toast.success("AMC meeting created");
       setSubject("");
       setAttendees("");
       setNotes("");
@@ -63,7 +63,7 @@ export function AddAmcMeetingButton({ amcs }: { amcs: Array<{ id: string; name: 
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="btn-primary text-xs inline-flex items-center gap-1">
-        <Plus className="size-3.5" /> Add meeting notes
+        <Plus className="size-3.5" /> Create meeting
       </button>
       {open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onMouseDown={() => !busy && setOpen(false)}>
@@ -72,7 +72,7 @@ export function AddAmcMeetingButton({ amcs }: { amcs: Array<{ id: string; name: 
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-semibold">Add AMC meeting notes</h2>
+              <h2 className="text-base font-semibold">Create AMC meeting</h2>
               <button type="button" onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
                 <X className="size-4" />
               </button>
@@ -80,7 +80,7 @@ export function AddAmcMeetingButton({ amcs }: { amcs: Array<{ id: string; name: 
             <label className="block">
               <span className="text-[11px] text-muted-foreground">AMC</span>
               <select value={amcId} onChange={(e) => setAmcId(e.target.value)} className="input-base w-full">
-                <option value="">Select an AMC…</option>
+                <option value="">{amcs.length ? "Select an AMC…" : "No AMC empanelments yet — add one first"}</option>
                 {amcs.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
@@ -115,7 +115,7 @@ export function AddAmcMeetingButton({ amcs }: { amcs: Array<{ id: string; name: 
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={4}
-              placeholder="Meeting notes — what was discussed and agreed"
+              placeholder="Discussion points / agenda"
               className="input-base w-full resize-y"
             />
             <input
@@ -135,7 +135,7 @@ export function AddAmcMeetingButton({ amcs }: { amcs: Array<{ id: string; name: 
                 disabled={busy || !amcId || !subject.trim()}
                 className="btn-primary text-xs inline-flex items-center gap-1"
               >
-                {busy && <Loader2 className="size-3 animate-spin" />} Save
+                {busy && <Loader2 className="size-3 animate-spin" />} Create meeting
               </button>
             </div>
           </div>
