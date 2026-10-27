@@ -21,6 +21,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { complianceDocuments } from "@/db/schema";
 import { deleteObject } from "@/lib/storage/s3";
+import { complianceDocScopeSql } from "@/lib/investors/access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -60,10 +61,11 @@ export async function GET() {
     // (owner wins via can()). Previously any authenticated session could list it.
     requireAny(session.roles, ["compliance.view", "kyc.manage"], session.permissions);
     const rows = await withTenant(session.tenantId, async (tx) => {
+      const docScope = await complianceDocScopeSql(tx, session);
       return tx
         .select()
         .from(complianceDocuments)
-        .where(isNull(complianceDocuments.supersededById))
+        .where(and(isNull(complianceDocuments.supersededById), docScope))
         .orderBy(desc(complianceDocuments.createdAt));
     });
     return NextResponse.json({ documents: rows });

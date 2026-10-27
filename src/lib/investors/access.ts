@@ -257,3 +257,26 @@ export async function assertCanViewClient(
 
 /** Kept for callers that build their own `and(...)` chains. */
 export { and, eq };
+
+/**
+ * The branch wall for the compliance document vault.
+ *
+ * The vault page and list were gated on a capability only, so anyone holding it
+ * saw every client's documents in the firm — a branch head included. A document
+ * tied to a client is now visible only when that client is inside the viewer's
+ * data scope; firm-level documents (registrations, audit reports) carry no
+ * client and stay as they were. `TRUE` for an all-branches viewer.
+ */
+export async function complianceDocScopeSql(tx: any, session: SessionUser): Promise<SQL> {
+  const scope = await resolveDataScope(tx, session);
+  if (scope.kind === "all") return sql`TRUE`;
+  const wall = dataScopeSqlViaOwnerBranch(scope, ["scope_inv.rm_id", "scope_inv.service_rm_id"]);
+  return sql`(
+    compliance_documents.related_entity_type IS DISTINCT FROM 'investor'
+    OR compliance_documents.related_entity_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM investors scope_inv
+       WHERE scope_inv.id = compliance_documents.related_entity_id AND ${wall}
+    )
+  )`;
+}

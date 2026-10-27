@@ -5,6 +5,7 @@ import { withTenant } from "@/db/client";
 import { complianceDocuments, investors, ddqScores, sops } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
+import { complianceDocScopeSql } from "@/lib/investors/access";
 import { DocumentsFeed } from "@/components/compliance/DocumentsFeed";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function DocumentsPage() {
   const data = await withTenant(session.tenantId, async (tx) => {
     // Tenant predicate is mandatory under the superuser/RLS-bypass model — without
     // it both queries return EVERY tenant's compliance documents.
+    const docScope = await complianceDocScopeSql(tx, session);
     const stats = await tx.execute(sql`
       SELECT
         COUNT(*)::int AS total,
@@ -39,12 +41,13 @@ export default async function DocumentsPage() {
       FROM compliance_documents
       WHERE tenant_id = ${session.tenantId}::uuid
         AND superseded_by_id IS NULL
+        AND ${docScope}
     `);
     const s = stats.rows[0] as any;
     const rows = await tx
       .select()
       .from(complianceDocuments)
-      .where(and(eq(complianceDocuments.tenantId, session.tenantId), isNull(complianceDocuments.supersededById)))
+      .where(and(eq(complianceDocuments.tenantId, session.tenantId), isNull(complianceDocuments.supersededById), docScope))
       .orderBy(desc(complianceDocuments.createdAt))
       .limit(100);
 

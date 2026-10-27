@@ -242,9 +242,10 @@ const MATRIX: Record<Capability, Role[]> = {
 
   // Leads — marketing + owner own pipeline; RM works assigned.
   "lead.view.all": ["marketing", "branch_head", "compliance"],
-  "lead.view.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
+  // back_office adds and works leads too (its data wall is firm-wide).
+  "lead.view.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance", "back_office"],
   "lead.edit.all": ["marketing", "branch_head"],
-  "lead.edit.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance"],
+  "lead.edit.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance", "back_office"],
 
   // Transactions — execute by back_office + RM; everyone in ops/compliance views.
   "transactions.view": ["back_office", "ops", "rm", "branch_head", "compliance", "sub_broker", "ra_sales", "ria"],

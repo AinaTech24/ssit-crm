@@ -4,6 +4,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { complianceDocuments } from "@/db/schema";
+import { complianceDocScopeSql } from "@/lib/investors/access";
 import { presignedGetUrl } from "@/lib/storage/s3";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { handleApiError } from "@/lib/api/error-handler";
@@ -49,7 +50,13 @@ export async function GET(req: NextRequest) {
           relatedEntityId: complianceDocuments.relatedEntityId,
         })
         .from(complianceDocuments)
-        .where(and(eq(complianceDocuments.id, id), eq(complianceDocuments.tenantId, session.tenantId)))
+        .where(
+          and(
+            eq(complianceDocuments.id, id),
+            eq(complianceDocuments.tenantId, session.tenantId),
+            await complianceDocScopeSql(tx, session)
+          )
+        )
         .limit(1);
 
       if (!doc) {
