@@ -19,6 +19,8 @@ import { Bell, CalendarClock, CheckSquare, PhoneCall, X } from "lucide-react";
 type Popup = {
   key: string;
   kind: "task" | "meeting" | "followup" | "notice";
+  /** Just created, rather than coming due. */
+  fresh?: boolean;
   title: string;
   detail: string;
   href: string;
@@ -51,6 +53,7 @@ const fmtTime = (iso: string) =>
 const ICON = { task: CheckSquare, meeting: CalendarClock, followup: PhoneCall, notice: Bell } as const;
 const LABEL = { task: "Task due", meeting: "Meeting soon", followup: "Follow-up due", notice: "Update" } as const;
 // One theme token for every kind — the icon already says which kind it is.
+const FRESH_LABEL = { task: "New task", meeting: "New meeting", followup: "New follow-up", notice: "Update" } as const;
 const TONE = {
   task: "text-primary",
   meeting: "text-primary",
@@ -70,15 +73,46 @@ export function PopupAlerts() {
     setQueue((q) => q.filter((p) => p.key !== key));
   }, []);
 
-  const poll = useCallback(async () => {
+  const poll = useCallback(async (noticesOnly = false) => {
     if (!ready.current) return;
     const found: Popup[] = [];
     try {
       const [rem, notif] = await Promise.all([
-        fetch("/api/reminders", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+        noticesOnly ? null : fetch("/api/reminders", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
         fetch("/api/notifications?unreadOnly=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
       ]);
+      for (const t of rem?.newTasks ?? []) {
+        found.push({
+          key: `task-new-${t.id}`,
+          kind: "task",
+          fresh: true,
+          title: t.title,
+          detail: t.due_at ? `Due ${fmtTime(t.due_at)}` : "",
+          href: "/dashboard/tasks",
+        });
+      }
+      for (const m of rem?.newMeetings ?? []) {
+        found.push({
+          key: `meeting-new-${m.id}`,
+          kind: "meeting",
+          fresh: true,
+          title: m.subject || (m.party ? `Meeting with ${m.party}` : "Meeting"),
+          detail: `${m.party ? `${m.party} · ` : ""}${fmtTime(m.meeting_date)}`,
+          href: `/dashboard/review-meetings/${m.id}`,
+        });
+      }
+      for (const f of rem?.newFollowUps ?? []) {
+        found.push({
+          key: `followup-new-${f.id}`,
+          kind: "followup",
+          fresh: true,
+          title: f.title,
+          detail: `Follow-up ${fmtTime(f.at)}`,
+          href: f.href,
+        });
+      }
       for (const t of rem?.tasks ?? []) {
+        if ((rem?.newTasks ?? []).some((x: any) => x.id === t.id)) continue;
         const overdue = new Date(t.due_at).getTime() < Date.now();
         found.push({
           key: `task-${t.id}`,
@@ -89,6 +123,7 @@ export function PopupAlerts() {
         });
       }
       for (const m of rem?.meetings ?? []) {
+        if ((rem?.newMeetings ?? []).some((x: any) => x.id === m.id)) continue;
         found.push({
           key: `meeting-${m.id}`,
           kind: "meeting",
@@ -98,6 +133,7 @@ export function PopupAlerts() {
         });
       }
       for (const f of rem?.followUps ?? []) {
+        if ((rem?.newFollowUps ?? []).some((x: any) => x.id === f.id)) continue;
         found.push({
           key: `followup-${f.id}`,
           kind: "followup",
@@ -133,14 +169,22 @@ export function PopupAlerts() {
     seen.current = loadSeen();
     ready.current = true;
     void poll();
-    const i = setInterval(() => void poll(), 60_000);
-    return () => clearInterval(i);
+    const i = setInterval(() => void poll(), 20_000);
+    // The bell's live stream fires this within seconds of a new notification
+    // (a note on one of your clients, a task assigned to you).
+    const onChanged = () => void poll(true);
+    window.addEventListener("notifications:changed", onChanged);
+    return () => {
+      clearInterval(i);
+      window.removeEventListener("notifications:changed", onChanged);
+    };
   }, [poll]);
 
   // Opening a page that deals with the item is as good as dismissing it.
   useEffect(() => {
     setQueue((q) => q.filter((p) => p.href !== pathname));
-  }, [pathname]);
+    void poll(); // just saved something? show it now rather than at the next tick
+  }, [pathname, poll]);
 
   const visible = queue.slice(0, MAX_VISIBLE);
   if (visible.length === 0) return null;
@@ -154,7 +198,7 @@ export function PopupAlerts() {
             <div className="flex items-start gap-2.5">
               <Icon className={`mt-0.5 size-4 shrink-0 ${TONE[p.kind]}`} />
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{LABEL[p.kind]}</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{(p.fresh ? FRESH_LABEL : LABEL)[p.kind]}</div>
                 <Link
                   href={p.href}
                   onClick={() => dismiss(p.key)}

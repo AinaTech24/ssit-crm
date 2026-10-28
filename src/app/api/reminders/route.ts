@@ -21,7 +21,7 @@ export async function GET() {
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
-        const [tasks, meetings, leadFollowUps, activityFollowUps] = await Promise.all([
+        const [tasks, meetings, leadFollowUps, activityFollowUps, newTasks, newMeetings, newFollowUps] = await Promise.all([
           tx.execute(sql`
             SELECT id, title, due_at FROM tasks
              WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${me}::uuid
@@ -54,10 +54,48 @@ export async function GET() {
                AND next_followup_at IS NOT NULL AND next_followup_at <= now() + interval '1 hour'
                AND next_followup_at >= now() - interval '7 days'
              ORDER BY next_followup_at ASC LIMIT 8`),
+          // Just created (last 10 minutes) — so a new task, meeting or follow-up
+          // pops up straight away with its title, not only when it falls due.
+          tx.execute(sql`
+            SELECT id, title, due_at FROM tasks
+             WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${me}::uuid
+               AND status IN ('open', 'in_progress', 'blocked')
+               AND created_at >= now() - interval '10 minutes'
+             ORDER BY created_at DESC LIMIT 8`),
+          tx.execute(sql`
+            SELECT m.id, m.subject, m.meeting_date, COALESCE(i.name, l.name) AS party
+              FROM review_meetings m
+              LEFT JOIN investors i ON i.id = m.investor_id
+              LEFT JOIN leads l ON l.id = m.lead_id
+             WHERE m.tenant_id = ${session.tenantId}::uuid
+               AND m.created_at >= now() - interval '10 minutes'
+               AND (m.created_by_id = ${me}::uuid OR m.rm_id = ${me}::uuid
+                    OR jsonb_exists(COALESCE(m.collaborator_ids, '[]'::jsonb), ${me}))
+             ORDER BY m.created_at DESC LIMIT 8`),
+          tx.execute(sql`
+            SELECT id, subject_type, subject_id, subject_name, next_followup_at FROM activities
+             WHERE tenant_id = ${session.tenantId}::uuid AND owner_user_id = ${me}::uuid
+               AND next_followup_at IS NOT NULL
+               AND created_at >= now() - interval '10 minutes'
+             ORDER BY created_at DESC LIMIT 8`),
         ]);
+        const followHref = (r: Rec) =>
+          r.subject_type === "investor"
+            ? `/dashboard/investors/${r.subject_id}`
+            : r.subject_type === "lead"
+              ? `/dashboard/leads/${r.subject_id}`
+              : "/dashboard/activities";
         return {
           tasks: tasks.rows,
           meetings: meetings.rows,
+          newTasks: newTasks.rows,
+          newMeetings: newMeetings.rows,
+          newFollowUps: (newFollowUps.rows as Rec[]).map((r) => ({
+            id: `act-${r.id}`,
+            title: r.subject_name ?? "Follow-up",
+            at: r.next_followup_at,
+            href: followHref(r),
+          })),
           followUps: [
             ...(leadFollowUps.rows as Rec[]).map((r) => ({
               id: `lead-${r.id}`,

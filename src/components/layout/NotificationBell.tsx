@@ -35,6 +35,8 @@ export function NotificationBell() {
       const j = await res.json();
       setItems(j.notifications ?? []);
       setUnread(j.unreadCount ?? 0);
+      // Tell the bottom-right pop-ups something new may have landed.
+      window.dispatchEvent(new Event("notifications:changed"));
     } catch {
       /* transient — the next poll retries */
     }
