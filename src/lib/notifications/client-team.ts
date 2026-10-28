@@ -48,19 +48,39 @@ export async function notifyClientTeam(
     if (inv.rm_id) to.add(inv.rm_id);
     if (inv.service_rm_id) to.add(inv.service_rm_id);
 
-    if (inv.rm_branch || inv.rm_desk) {
+    // The actor's own unit counts too: when Hitesh, Chirag or another RM writes a
+    // note on a client that belongs to someone else, THEIR branch head must hear
+    // about it as well as the client's RM and that RM's head.
+    const actorRow = await tx.execute(sql`
+      SELECT branch_id, desk_id, reporting_manager_id FROM users
+       WHERE id = ${n.actorUserId}::uuid AND tenant_id = ${n.tenantId}::uuid LIMIT 1
+    `);
+    const actor = actorRow.rows[0] as { branch_id: string | null; desk_id: string | null; reporting_manager_id: string | null } | undefined;
+    const units: { branch: string | null; desk: string | null }[] = [{ branch: inv.rm_branch, desk: inv.rm_desk }];
+    if (actor) units.push({ branch: actor.branch_id, desk: actor.desk_id });
+
+    for (const u of units) {
+      if (!u.branch && !u.desk) continue;
       const heads = await tx.execute(sql`
         SELECT id FROM users
          WHERE tenant_id = ${n.tenantId}::uuid
            AND status = 'active'
            AND 'branch_head' = ANY(roles)
            AND (
-             (desk_id IS NOT NULL AND desk_id IS NOT DISTINCT FROM ${inv.rm_desk}::uuid)
-             OR (desk_id IS NULL AND branch_id IS NOT DISTINCT FROM ${inv.rm_branch}::uuid)
+             (desk_id IS NOT NULL AND desk_id IS NOT DISTINCT FROM ${u.desk}::uuid)
+             OR branch_id IS NOT DISTINCT FROM ${u.branch}::uuid
            )
       `);
       for (const h of heads.rows as { id: string }[]) to.add(h.id);
     }
+
+    // Reporting managers of the client's RM and of whoever made the change.
+    const mgrs = await tx.execute(sql`
+      SELECT reporting_manager_id AS id FROM users
+       WHERE tenant_id = ${n.tenantId}::uuid AND reporting_manager_id IS NOT NULL
+         AND id IN (${inv.rm_id ?? n.actorUserId}::uuid, ${n.actorUserId}::uuid)
+    `);
+    for (const m of mgrs.rows as { id: string }[]) to.add(m.id);
     const named = await tx.execute(sql`
       SELECT id FROM users
        WHERE tenant_id = ${n.tenantId}::uuid AND status = 'active'
