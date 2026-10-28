@@ -29,6 +29,7 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
     title: "Dashboards",
     items: [
       { key: "/dashboard/boards", label: "My Dashboards" },
+      { key: "/dashboard/targets", label: "Targets" },
       { key: "/dashboard/team", label: "Team Dashboard" },
       { key: "/dashboard/team/scorecard", label: "Team Scorecard" },
     ],

@@ -22,6 +22,7 @@ import { requireAny } from "@/lib/auth/rbac";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { notifyClientTeam } from "@/lib/notifications/client-team";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
 import { findRmConflicts } from "@/lib/review-meetings/conflicts";
 import {
@@ -287,6 +288,17 @@ export async function POST(req: NextRequest) {
         } as any,
         ...clientMeta,
       });
+      if (body.investorId) {
+        await notifyClientTeam(tx, {
+          tenantId: session.tenantId,
+          investorId: body.investorId,
+          actorUserId: session.userId,
+          kind: "client.meeting_entry",
+          title: "Meeting scheduled with {client}",
+          body: `${labelForType(body.meetingType)} on ${meetingDate.toLocaleDateString("en-IN")}`,
+          linkUrl: `/dashboard/review-meetings/${id}`,
+        });
+      }
 
       // ─── Smart blueprint advance ───────────────────────────────────
       // If this meeting was scheduled against a lead, push the lead's

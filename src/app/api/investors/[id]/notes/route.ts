@@ -29,6 +29,7 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { activities, investors } from "@/db/schema";
 import { assertCanViewClient } from "@/lib/investors/access";
+import { notifyClientTeam } from "@/lib/notifications/client-team";
 import { and, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -136,6 +137,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         entityId: id,
         after: { noteId },
         ...meta,
+      });
+      await notifyClientTeam(tx, {
+        tenantId: session.tenantId,
+        investorId: id,
+        actorUserId: session.userId,
+        kind: "client.meeting_note",
+        title: "Meeting notes added for {client}",
+        body: parse.data.note.slice(0, 240),
       });
     });
 

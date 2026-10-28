@@ -185,7 +185,9 @@ export default async function LeadsPage({
     if (sourceFilter.length)
       conds.push(sql`leads.source IN (${sql.join(sourceFilter.map((v) => sql`${v}`), sql`, `)})`);
     if (eventFilter.length)
-      conds.push(sql`leads.source_campaign IN (${sql.join(eventFilter.map((v) => sql`${v}`), sql`, `)})`);
+      // Compared trimmed and case-folded, so the same event typed two ways
+      // ("IMA Surat" / "ima surat ") is one choice and one result set.
+      conds.push(sql`lower(btrim(leads.source_campaign)) IN (${sql.join(eventFilter.map((v) => sql`${v.trim().toLowerCase()}`), sql`, `)})`);
     if (ownerFilter.length)
       conds.push(sql`leads.owner_id IN (${sql.join(ownerFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
 
@@ -278,13 +280,16 @@ export default async function LeadsPage({
     // Converted and lost live OUTSIDE the list (it shows live pipeline only),
     // which is exactly why they need surfacing here.
     const eventRes = await tx.execute(sql`
-      SELECT DISTINCT leads.source_campaign AS name
+      SELECT MIN(btrim(leads.source_campaign)) AS name
         FROM leads
        WHERE leads.tenant_id = ${session.tenantId}::uuid
          AND leads.source_campaign IS NOT NULL
          AND btrim(leads.source_campaign) <> ''
          AND leads.lost_reason IS DISTINCT FROM '__deleted__'
          AND leads.deleted_at IS NULL
+         -- Only events among the leads this user may see, never the whole firm's.
+         AND ${await leadScopeSql(tx, session, "leads")}
+       GROUP BY lower(btrim(leads.source_campaign))
        ORDER BY name ASC
        LIMIT 200
     `);
@@ -403,6 +408,12 @@ export default async function LeadsPage({
           </h1>
         </div>
         <div className="flex gap-2 items-center">
+          <Link
+            href="/dashboard/leads/hot"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+          >
+            🔥 Hot leads
+          </Link>
           <WorkSwitcher current="/dashboard/leads" options={PIPELINE_VIEWS} label="Module" />
           {/* View toggle — Kanban vs List */}
           <div className="inline-flex rounded-lg border border-border bg-secondary/40 p-0.5 gap-0.5 mr-1">

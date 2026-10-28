@@ -22,6 +22,7 @@ import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { assertCanViewClient } from "@/lib/investors/access";
+import { notifyClientTeam } from "@/lib/notifications/client-team";
 import {
   ACTIVITY_KINDS,
   ACTIVITY_DIRECTIONS,
@@ -194,6 +195,16 @@ export async function POST(req: NextRequest) {
           after: { kind: b.kind, subjectType: b.subjectType, subjectId: b.subjectId } as any,
           ...meta,
         });
+        if (b.subjectType === "investor") {
+          await notifyClientTeam(tx, {
+            tenantId: session.tenantId,
+            investorId: b.subjectId,
+            actorUserId: session.userId,
+            kind: "client.meeting_note",
+            title: "Meeting notes added for {client}",
+            body: [b.subject, b.notes].filter(Boolean).join(" — ").slice(0, 240) || null,
+          });
+        }
         return { notFound: false as const };
       },
       { userId: session.userId, branchId: session.branchId, roles: session.roles }

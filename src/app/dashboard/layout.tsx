@@ -88,6 +88,7 @@ import { pickLogo } from "@/lib/branding/logo";
 import type { Metadata } from "next";
 import { GlobalSearch } from "@/components/layout/GlobalSearch";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { PopupAlerts } from "@/components/layout/PopupAlerts";
 import { BirthdayBell } from "@/components/layout/BirthdayBell";
 import { WhatsNewBell } from "@/components/layout/WhatsNewBell";
 import { DesktopSidebar } from "@/components/layout/DesktopSidebar";
@@ -620,6 +621,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const dashboardSubItems = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/dashboard/boards", label: "My Dashboards" },
+    { href: "/dashboard/targets", label: "Targets" },
     ...(canSeeTeam
       ? [
           { href: "/dashboard/team", label: "Team Dashboard" },
@@ -797,6 +799,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {/* First-run coachmark tour — runs once, spotlighting nav, search, Ctrl+K,
           quick-create and notifications so a new user isn't overwhelmed. */}
       <ProductTour />
+      <PopupAlerts />
     </div>
     </ToastProvider>
   );

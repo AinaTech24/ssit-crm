@@ -15,6 +15,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { notifyClientTeam } from "@/lib/notifications/client-team";
 import { sql } from "drizzle-orm";
 import { serviceRequests, eventsOutbox } from "@/db/schema";
 
@@ -160,6 +161,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         after: parse.data as any,
         ...clientMeta,
       });
+      if (before.investorId) {
+        await notifyClientTeam(tx, {
+          tenantId: session.tenantId,
+          investorId: before.investorId,
+          actorUserId: session.userId,
+          kind: "client.service_request",
+          title: "Service request updated for {client}",
+          body: `${before.ticketNo}${d.status ? ` · now ${String(d.status).replace(/_/g, " ")}` : ""}`,
+          linkUrl: `/dashboard/service-requests/${id}`,
+        });
+      }
       return after[0];
     });
     if (!result) return NextResponse.json({ error: "not found" }, { status: 404 });

@@ -7,6 +7,7 @@ import { investors, leads, tasks, communications, sips } from "@/db/schema";
 import { formatINR, formatRelative, formatDate } from "@/lib/utils";
 import type { SessionUser } from "@/lib/auth/session";
 import { RmInsightsSection } from "./RmInsightsSection";
+import { SipIssuesCard } from "./SipIssuesCard";
 import { NbaDateFilter } from "@/components/nba/NbaDateFilter";
 import { Avatar } from "@/components/ui/Avatar";
 import { resolvePeriodRange } from "@/lib/dashboard/period";
@@ -752,6 +753,12 @@ export async function RmDashboard({
         </>
       )}
 
+
+      {!limited && (
+        <Suspense fallback={null}>
+          <SipIssuesCard session={session} targetUserId={targetUserId} />
+        </Suspense>
+      )}
 
       {/* ---------- RM Insights — service-first cockpit additions ---------- */}
       {/* Streamed, not awaited inline: RmInsightsSection runs seven more

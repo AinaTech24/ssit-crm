@@ -15,6 +15,7 @@ import { sql } from "drizzle-orm";
 import type { Tx } from "@/db/client";
 import { serviceRequests, eventsOutbox } from "@/db/schema";
 import { acknowledgeServiceRequest } from "./acknowledge";
+import { notifyClientTeam } from "@/lib/notifications/client-team";
 
 export const SLA_HOURS_BY_TYPE: Record<string, number> = {
   nominee_update: 24 * 14,
@@ -111,6 +112,18 @@ export async function createServiceRequest(
     slaResolutionAt,
     investorId: args.investorId ?? null,
   });
+
+  if (args.investorId) {
+    await notifyClientTeam(tx, {
+      tenantId: args.tenantId,
+      investorId: args.investorId,
+      actorUserId: args.actorUserId ?? "",
+      kind: "client.service_request",
+      title: "Service request raised for {client}",
+      body: `${ticketNo} · ${args.subject}`.slice(0, 240),
+      linkUrl: `/dashboard/service-requests/${id}`,
+    });
+  }
 
   return { id, ticketNo, slaResolutionAt };
 }

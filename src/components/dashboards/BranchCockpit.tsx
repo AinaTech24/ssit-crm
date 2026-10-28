@@ -19,7 +19,9 @@ import { withTenant } from "@/db/client";
 import { formatINR } from "@/lib/utils";
 import { ROLE_TREE, primaryRoleNode } from "@/lib/auth/role-tree";
 import type { SessionUser } from "@/lib/auth/session";
+import { Suspense } from "react";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
+import { SipIssuesCard } from "@/components/dashboards/SipIssuesCard";
 
 
 
@@ -191,6 +193,10 @@ export async function BranchCockpit({
             : "Team and book for this branch. Pick a name from the Member dropdown to open their own dashboard."}
         </p>
       </div>
+
+      <Suspense fallback={null}>
+        <SipIssuesCard session={session} />
+      </Suspense>
 
       {/* What the branch is carrying. */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

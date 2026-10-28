@@ -31,6 +31,7 @@ import { DashboardViewSwitch } from "@/components/dashboards/DashboardViewSwitch
 import { ReviewMeetingsOverdue } from "@/components/dashboards/ReviewMeetingsOverdue";
 import { AdminRmReviewSection } from "@/components/dashboards/AdminRmReviewSection";
 import { BranchCockpit } from "@/components/dashboards/BranchCockpit";
+import { MyTargetsCard } from "@/components/targets/MyTargetsCard";
 import { primaryRoleNode } from "@/lib/auth/role-tree";
 import { confinedDeskId } from "@/lib/scope/view-filter";
 import { AdminViewToggle } from "@/components/dashboards/AdminViewToggle";
@@ -336,6 +337,7 @@ export default async function DashboardPage({
       {/* The role cockpits are async server components doing their own data
           fetching — stream them in behind a skeleton so the shell (sidebar,
           topbar, announcements) paints immediately. */}
+      <Suspense fallback={null}>{await MyTargetsCard({ session })}</Suspense>
       <Suspense fallback={<DashboardPageSkeleton />}>{dash}</Suspense>
       {/* Firm-wide worklist: reviews that have slipped and stayed slipped. Only
           on the admin cockpit — a single RM's dashboard already lists their

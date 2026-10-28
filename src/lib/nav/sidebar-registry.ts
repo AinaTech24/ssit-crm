@@ -16,6 +16,7 @@ export const SIDEBAR_REGISTRY: SidebarEntry[] = [
   // "/dashboard" module control is 'disabled'); the others gate each sub-item.
   { group: "Dashboards", href: "/dashboard", label: "Dashboards (all)" },
   { group: "Dashboards", href: "/dashboard/boards", label: "My Dashboards" },
+  { group: "Dashboards", href: "/dashboard/targets", label: "Targets" },
   { group: "Dashboards", href: "/dashboard/team", label: "Team Dashboard" },
   { group: "Dashboards", href: "/dashboard/team/scorecard", label: "Team Scorecard" },
   // General

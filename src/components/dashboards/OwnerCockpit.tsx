@@ -8,6 +8,7 @@ import { formatINR } from "@/lib/utils";
 import type { SessionUser } from "@/lib/auth/session";
 import { DataGapsTile } from "./DataGapsTile";
 import { SipPersistencyTile } from "./SipPersistencyTile";
+import { SipIssuesCard } from "./SipIssuesCard";
 import { resolvePeriodRange, type Period } from "@/lib/dashboard/period";
 import { getDashboardThresholds } from "@/lib/dashboard/thresholds";
 import { Sparkline } from "./Sparkline";
@@ -603,6 +604,11 @@ async function OwnerCockpitBody({
       {/* ---------- Scheme-wise holdings + total SIF book ---------- */}
       <Suspense fallback={<ChartSkeleton />}>
         <SchemeHoldingsSection session={session} />
+      </Suspense>
+
+      {/* ---------- SIP bounced / rejected ---------- */}
+      <Suspense fallback={null}>
+        <SipIssuesCard session={session} />
       </Suspense>
 
       {/* ---------- SIP Persistency — franchise health metric ---------- */}
