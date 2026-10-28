@@ -8,6 +8,10 @@
  * to a known investor AND only when detectServiceIntent recognises a request, so
  * ordinary correspondence never spawns noise tickets. Idempotent because the
  * IMAP poller processes each message exactly once (externalId is unique).
+ *
+ * OFF unless EMAIL_TO_TICKET=on. Keyword matching on ordinary correspondence
+ * ("SIP", "mutual fund", "statement") opened a stream of unwanted tickets, so
+ * service requests are now created only by people, never from inbound email.
  */
 import type { Tx } from "@/db/client";
 import { createServiceRequest, detectServiceIntent } from "@/lib/service/create-request";
@@ -16,6 +20,7 @@ export async function maybeRouteEmailToTicket(
   tx: Tx,
   args: { tenantId: string; investorId: string | null; subject: string | null; text: string | null; messageId: string }
 ): Promise<void> {
+  if (process.env.EMAIL_TO_TICKET !== "on") return;
   if (!args.investorId) return; // only auto-open for a known client
   const intent = detectServiceIntent(`${args.subject ?? ""}\n${args.text ?? ""}`);
   if (!intent) return;
