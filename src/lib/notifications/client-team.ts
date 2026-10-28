@@ -7,13 +7,16 @@
  * opening the record. The notification surfaces as a pop-up at the bottom right
  * (see PopupAlerts) and in the bell.
  *
- * Recipients: the client's RM, its Service RM, and every active branch head whose
+ * Recipients: hitesh@ and chirag@equitywala.com (always), the client's RM, its Service RM, and every active branch head whose
  * branch (or desk, for a head confined to one) the RM sits in. The person who made
  * the change is never told about their own edit.
  */
 
 import { sql } from "drizzle-orm";
 import { createNotification } from "./create";
+
+/** Always told about client meeting notes / entries / updates, whoever the client's RM is. */
+const ALWAYS_NOTIFY_EMAILS = ["hitesh@equitywala.com", "chirag@equitywala.com"];
 
 export async function notifyClientTeam(
   tx: any,
@@ -58,6 +61,12 @@ export async function notifyClientTeam(
       `);
       for (const h of heads.rows as { id: string }[]) to.add(h.id);
     }
+    const named = await tx.execute(sql`
+      SELECT id FROM users
+       WHERE tenant_id = ${n.tenantId}::uuid AND status = 'active'
+         AND lower(email) IN (${sql.join(ALWAYS_NOTIFY_EMAILS.map((e) => sql`${e}`), sql`, `)})
+    `);
+    for (const u of named.rows as { id: string }[]) to.add(u.id);
     to.delete(n.actorUserId);
 
     for (const userId of to) {

@@ -47,7 +47,7 @@ function nowLocal(): string {
 }
 const toIso = (local: string) => (local ? new Date(local).toISOString() : undefined);
 
-export function ClientCallLog({ investorId }: { investorId: string }) {
+export function ClientCallLog({ investorId, readOnly = false }: { investorId: string; readOnly?: boolean }) {
   const toast = useToast();
   const base = `/api/investors/${investorId}/calls`;
   const [calls, setCalls] = useState<Call[] | null>(null);
@@ -118,7 +118,7 @@ export function ClientCallLog({ investorId }: { investorId: string }) {
   return (
     <div className="space-y-3">
       {!open ? (
-        <button type="button" onClick={() => setOpen(true)} className="btn-secondary text-sm inline-flex items-center gap-1.5">
+        readOnly ? null : <button type="button" onClick={() => setOpen(true)} className="btn-secondary text-sm inline-flex items-center gap-1.5">
           <Plus className="size-4" /> Log a call
         </button>
       ) : (

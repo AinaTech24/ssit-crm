@@ -6,6 +6,7 @@
  * to the client, and a free note. Mirrors NomineesField (no document upload).
  */
 
+import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { Referral } from "@/lib/investors/referral";
 
@@ -51,7 +52,17 @@ export function ReferralsField({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <Inp label="Name" value={n.name ?? ""} onChange={(v) => update(i, { name: v })} />
+            <NameLookup
+              value={n.name ?? ""}
+              onType={(v) => update(i, { name: v })}
+              onPick={(p) =>
+                update(i, {
+                  name: p.name,
+                  mobile: p.phone || n.mobile,
+                  email: p.email || n.email,
+                })
+              }
+            />
             <Inp
               label="Mobile no"
               value={n.mobile ?? ""}
@@ -118,6 +129,92 @@ function Inp({
         placeholder={placeholder}
         className="w-full border rounded-md px-2.5 py-1.5 text-sm bg-background"
       />
+    </label>
+  );
+}
+
+type Match = { id: string; name: string; phone?: string | null; email?: string | null; kind: "Client" | "Lead" };
+
+/** Name box that suggests existing clients and leads as you type and fills mobile + email from the pick. */
+function NameLookup({
+  value,
+  onType,
+  onPick,
+}: {
+  value: string;
+  onType: (v: string) => void;
+  onPick: (m: Match) => void;
+}) {
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [open, setOpen] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seq = useRef(0);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  function type(v: string) {
+    onType(v);
+    if (timer.current) clearTimeout(timer.current);
+    if (v.trim().length < 2) {
+      setMatches([]);
+      return;
+    }
+    timer.current = setTimeout(async () => {
+      const mine = ++seq.current;
+      try {
+        const r = await fetch(`/api/search?q=${encodeURIComponent(v.trim())}`);
+        if (!r.ok || mine !== seq.current) return;
+        const j = await r.json();
+        const found: Match[] = [
+          ...((j.investors ?? []) as any[]).map((x) => ({ id: x.id, name: x.name, phone: x.phone, email: x.email, kind: "Client" as const })),
+          ...((j.leads ?? []) as any[]).map((x) => ({ id: x.id, name: x.name, phone: x.phone, email: x.email, kind: "Lead" as const })),
+        ];
+        setMatches(found);
+        setOpen(found.length > 0);
+      } catch {
+        /* suggestions are a convenience; typing a name by hand still works */
+      }
+    }, 250);
+  }
+
+  return (
+    <label className="block relative">
+      <div className="text-xs font-medium mb-1">Name</div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => type(e.target.value)}
+        onFocus={() => matches.length > 0 && setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Type a name — existing clients and leads are suggested"
+        autoComplete="off"
+        className="w-full border rounded-md px-2.5 py-1.5 text-sm bg-background"
+      />
+      {open && (
+        <div className="absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border bg-card shadow-lg">
+          {matches.map((m) => (
+            <button
+              key={`${m.kind}-${m.id}`}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onPick(m);
+                setOpen(false);
+                setMatches([]);
+              }}
+              className="w-full text-left px-2.5 py-1.5 hover:bg-secondary text-sm border-b last:border-b-0"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium truncate">{m.name}</span>
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">{m.kind}</span>
+              </div>
+              <div className="text-[11px] text-muted-foreground truncate">
+                {[m.phone, m.email].filter(Boolean).join(" · ") || "No contact details saved"}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </label>
   );
 }

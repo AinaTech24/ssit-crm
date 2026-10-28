@@ -789,7 +789,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       </RelatedListSection>
 
       <RelatedListSection moduleKey="investors-detail" sectionKey="calls">
-        <ClientCallLog investorId={inv.id} />
+        <ClientCallLog investorId={inv.id} readOnly />
       </RelatedListSection>
 
       <RelatedListSection moduleKey="investors-detail" sectionKey="meeting_notes">

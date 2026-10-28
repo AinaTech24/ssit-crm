@@ -22,8 +22,8 @@ const KINDS = [
   ["call", "Call"], ["visit", "Visit"], ["note", "Note"], ["whatsapp", "WhatsApp"], ["email", "Email"], ["sms", "SMS"],
 ] as const;
 const STATUSES = [
-  ["", "Select…"], ["completed", "Completed"], ["answered", "Answered"], ["no_answer", "No answer"],
-  ["busy", "Busy"], ["left_voicemail", "Left voicemail"], ["no_show", "No show"],
+  ["", "Select…"], ["completed", "Completed"], ["no_answer", "No answer"],
+  ["busy", "Busy"],
 ] as const;
 
 export function LogActivityButton({ subject, label = "Log activity", variant = "primary" }: { subject?: Subject; label?: string; variant?: "primary" | "secondary" }) {
