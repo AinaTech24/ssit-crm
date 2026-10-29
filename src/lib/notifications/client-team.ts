@@ -17,6 +17,8 @@ import { createNotification } from "./create";
 
 /** Always told about client meeting notes / entries / updates, whoever the client's RM is. */
 const ALWAYS_NOTIFY_EMAILS = ["hitesh@equitywala.com", "chirag@equitywala.com"];
+/** Same two people by first name, for when their CRM login uses a different email. */
+const ALWAYS_NOTIFY_NAMES = ["hitesh", "chirag"];
 
 export async function notifyClientTeam(
   tx: any,
@@ -84,7 +86,10 @@ export async function notifyClientTeam(
     const named = await tx.execute(sql`
       SELECT id FROM users
        WHERE tenant_id = ${n.tenantId}::uuid AND status = 'active'
-         AND lower(email) IN (${sql.join(ALWAYS_NOTIFY_EMAILS.map((e) => sql`${e}`), sql`, `)})
+         AND (
+           lower(email) IN (${sql.join(ALWAYS_NOTIFY_EMAILS.map((e) => sql`${e}`), sql`, `)})
+           OR lower(split_part(btrim(name), ' ', 1)) IN (${sql.join(ALWAYS_NOTIFY_NAMES.map((e) => sql`${e}`), sql`, `)})
+         )
     `);
     for (const u of named.rows as { id: string }[]) to.add(u.id);
     to.delete(n.actorUserId);
