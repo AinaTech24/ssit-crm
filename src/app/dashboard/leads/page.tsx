@@ -15,6 +15,7 @@ import {
 import { withTenant } from "@/db/client";
 import { leads, users } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { requireLeadView, leadScopeSql } from "@/lib/leads/access";
 import { WorkSwitcher } from "@/components/layout/WorkSwitcher";
 
@@ -155,6 +156,7 @@ export default async function LeadsPage({
 
   const scopeSel = parseScope(sp as Record<string, string | undefined>);
   const showScopePicker = canPickScope(session);
+  const canCreateLead = can(session.roles, "lead.create", session.permissions);
 
   const data = await withTenant(session.tenantId, async (tx) => {
     const conds: any[] = [
@@ -439,12 +441,16 @@ export default async function LeadsPage({
 
           {/* Columns + Views moved into the filter toolbar (right side), so every
               list module carries the same compact icon row as Tasks. */}
-          <Link href="/dashboard/leads/import" className="btn-secondary text-xs">
-            <FileDown className="size-3.5" /> Import Excel
-          </Link>
-          <Link href="/dashboard/leads/new" className="btn-primary">
-            <Plus className="size-4" /> New lead
-          </Link>
+          {canCreateLead && (
+            <>
+              <Link href="/dashboard/leads/import" className="btn-secondary text-xs">
+                <FileDown className="size-3.5" /> Import Excel
+              </Link>
+              <Link href="/dashboard/leads/new" className="btn-primary">
+                <Plus className="size-4" /> New lead
+              </Link>
+            </>
+          )}
         </div>
       </div>
 

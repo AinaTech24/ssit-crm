@@ -106,6 +106,7 @@ export type Capability =
   | "lead.view.assigned"
   | "lead.edit.all"
   | "lead.edit.assigned"
+  | "lead.create"
   // Transactions / SIPs / Mandates
   | "transactions.view"
   | "transactions.execute"
@@ -248,6 +249,10 @@ const MATRIX: Record<Capability, Role[]> = {
   "lead.view.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance", "back_office"],
   "lead.edit.all": ["marketing", "branch_head"],
   "lead.edit.assigned": ["rm", "sub_broker", "ra_sales", "ria", "insurance", "back_office"],
+  // Adding a lead (form, Excel import). Same roles that could add before it was split
+  // out of the edit capabilities, so defaults are unchanged; the owner can now tick it
+  // per person. Custom permission lists need the 0248 backfill.
+  "lead.create": ["marketing", "branch_head", "rm", "sub_broker", "ra_sales", "ria", "insurance", "back_office"],
 
   // Transactions — execute by back_office + RM; everyone in ops/compliance views.
   "transactions.view": ["back_office", "ops", "rm", "branch_head", "compliance", "sub_broker", "ra_sales", "ria"],

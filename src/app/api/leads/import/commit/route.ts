@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     // owner_id = the importer, so "edit all" is the wrong bar. Requiring it
     // blocked every RM, sub-broker, RA-sales, RIA and insurance user from bulk
     // lead upload entirely, which is most of the people who do it.
-    requireAny(session.roles, ["lead.edit.all", "lead.edit.assigned"], session.permissions);
+    requireAny(session.roles, ["lead.create"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));

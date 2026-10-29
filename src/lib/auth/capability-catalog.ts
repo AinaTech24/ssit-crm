@@ -72,6 +72,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "lead.view.assigned": { group: "Leads", label: "View assigned leads only" },
   "lead.edit.all": { group: "Leads", label: "Edit all leads" },
   "lead.edit.assigned": { group: "Leads", label: "Edit assigned leads only" },
+  "lead.create": { group: "Leads", label: "Add leads" },
 
   // ── Transactions & Operations ───────────────────────────────────────────
   "transactions.view": { group: "Transactions & Operations", label: "View transactions" },

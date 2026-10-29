@@ -164,7 +164,7 @@ export async function POST(req: NextRequest) {
     // Allow lead.edit.all (marketing) OR lead.edit.assigned (rm). Owner
     // always wins via the can() override. branch_head doesn't have a
     // dedicated lead-edit cap in the matrix — treat as edit.assigned.
-    requireAny(session.roles, ["lead.edit.all", "lead.edit.assigned"], session.permissions);
+    requireAny(session.roles, ["lead.create"], session.permissions);
     await assertModuleEnabled(session.tenantId, "lead_management", session.roles);
     await assertActiveLicense(session.tenantId, session.roles);
 

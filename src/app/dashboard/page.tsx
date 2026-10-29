@@ -30,6 +30,7 @@ import { DashboardScopeFilter, type ScopeMember, type ScopeUnit } from "@/compon
 import { DashboardViewSwitch } from "@/components/dashboards/DashboardViewSwitch";
 import { ReviewMeetingsOverdue } from "@/components/dashboards/ReviewMeetingsOverdue";
 import { AdminRmReviewSection } from "@/components/dashboards/AdminRmReviewSection";
+import { TasksByPersonSection } from "@/components/dashboards/TasksByPersonSection";
 import { BranchCockpit } from "@/components/dashboards/BranchCockpit";
 import { MyTargetsCard } from "@/components/targets/MyTargetsCard";
 import { primaryRoleNode } from "@/lib/auth/role-tree";
@@ -353,6 +354,15 @@ export default async function DashboardPage({
         <div className="mt-6">
           <Suspense fallback={null}>
             {await AdminRmReviewSection({ session, rmId: rmParam || undefined })}
+          </Suspense>
+        </div>
+      )}
+      {/* Tasks, person by person — on every dashboard, under the meetings table.
+          The owner sees everyone, a head their desk, an RM only themselves. */}
+      {(can(session.roles, "task.view.all", session.permissions) || can(session.roles, "task.view.assigned", session.permissions)) && (
+        <div className="mt-6">
+          <Suspense fallback={null}>
+            {await TasksByPersonSection({ session, rmId: rmParam || undefined })}
           </Suspense>
         </div>
       )}
