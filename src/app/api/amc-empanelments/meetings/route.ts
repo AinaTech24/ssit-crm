@@ -45,7 +45,7 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trim
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["amc_meeting.view"], session.permissions);
+    requireAny(session.roles, ["amc_meeting.add"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));

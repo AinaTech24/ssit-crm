@@ -27,6 +27,8 @@ export default async function AmcEmpanelmentDetailPage({
     can(session.roles, "compliance.edit", session.permissions) ||
     can(session.roles, "amc_empanelment.view", session.permissions);
   const canMeetings = can(session.roles, "amc_meeting.view", session.permissions);
+  const canAddDetails = can(session.roles, "amc_empanelment.add", session.permissions);
+  const canAddMeeting = can(session.roles, "amc_meeting.add", session.permissions);
   const sp = await searchParams;
   const tab: "details" | "meetings" =
     sp.tab === "meetings" && canMeetings ? "meetings" : canDetails ? "details" : "meetings";
@@ -94,6 +96,8 @@ export default async function AmcEmpanelmentDetailPage({
       </div>
 
       {tab === "details" && canDetails && (
+      // Read-only for anyone who may view but not add: a disabled fieldset switches off every input and button inside it.
+      <fieldset disabled={!canAddDetails} className="contents">
       <AmcEmpanelmentForm
         mode="edit"
         amcCatalog={amcs}
@@ -129,11 +133,12 @@ export default async function AmcEmpanelmentDetailPage({
           redFlags: (row as any).redFlags ?? null,
         }}
       />
+      </fieldset>
       )}
 
       {/* The relationship itself — meetings held and notes kept. The form above
           is the panel STATUS; this is what has actually happened with the AMC. */}
-      {tab === "meetings" && canMeetings && <AmcRecords amcId={row.id} amcName={row.amcName} />}
+      {tab === "meetings" && canMeetings && <AmcRecords amcId={row.id} amcName={row.amcName} canAdd={canAddMeeting} />}
     </div>
   );
 }

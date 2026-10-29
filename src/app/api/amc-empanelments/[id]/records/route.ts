@@ -98,7 +98,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["amc_meeting.view"], session.permissions);
+    requireAny(session.roles, ["amc_meeting.add"], session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));

@@ -17,6 +17,7 @@ import { requireAny } from "@/lib/auth/rbac";
 import { sendInvestorStatement } from "@/lib/finance/send-statement";
 import { investors } from "@/db/schema";
 import { assertInScope } from "@/lib/auth/data-scope";
+import { assertCanViewPortfolio } from "@/lib/investors/access";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           .limit(1);
         if (!inv) return { ok: false, error: "not found", status: 404 } as const;
         await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
+        await assertCanViewPortfolio(tx, session, inv);
         return sendInvestorStatement(tx, {
           tenantId: session.tenantId,
           investorId: id,

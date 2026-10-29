@@ -39,7 +39,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 const fmt = (d: string | null) =>
   d ? new Date(d.length > 10 ? d : d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-export function AmcRecords({ amcId, amcName }: { amcId: string; amcName: string }) {
+export function AmcRecords({ amcId, amcName, canAdd = true }: { amcId: string; amcName: string; canAdd?: boolean }) {
   const toast = useToast();
   const base = `/api/amc-empanelments/${amcId}/records`;
   const [tab, setTab] = useState<"meetings" | "notes">("meetings");
@@ -164,13 +164,15 @@ export function AmcRecords({ amcId, amcName }: { amcId: string; amcName: string 
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="btn-secondary text-xs inline-flex items-center gap-1"
-        >
-          <Plus className="size-3.5" /> {tab === "meetings" ? "Record a meeting" : "Add a note"}
-        </button>
+        {canAdd && (
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="btn-secondary text-xs inline-flex items-center gap-1"
+          >
+            <Plus className="size-3.5" /> {tab === "meetings" ? "Record a meeting" : "Add a note"}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -270,14 +272,16 @@ export function AmcRecords({ amcId, amcName }: { amcId: string; amcName: string 
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => remove(m.id, "meeting")}
-                  title="Delete this meeting"
-                  className="text-muted-foreground hover:text-rose-600 shrink-0"
-                >
-                  <Trash2 className="size-4" />
-                </button>
+                {canAdd && (
+                  <button
+                    type="button"
+                    onClick={() => remove(m.id, "meeting")}
+                    title="Delete this meeting"
+                    className="text-muted-foreground hover:text-rose-600 shrink-0"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                )}
               </div>
             </li>
           ))}
@@ -293,14 +297,16 @@ export function AmcRecords({ amcId, amcName }: { amcId: string; amcName: string 
                     {n.author_name ?? "Unknown"} · {fmt(n.noted_on ?? n.created_at)}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => remove(n.id, "note")}
-                  title="Delete this note"
-                  className="text-muted-foreground hover:text-rose-600 shrink-0"
-                >
-                  <Trash2 className="size-4" />
-                </button>
+                {canAdd && (
+                  <button
+                    type="button"
+                    onClick={() => remove(n.id, "note")}
+                    title="Delete this note"
+                    className="text-muted-foreground hover:text-rose-600 shrink-0"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                )}
               </div>
             </li>
           ))}

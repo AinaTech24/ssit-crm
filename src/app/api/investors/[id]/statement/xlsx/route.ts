@@ -19,7 +19,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { investors } from "@/db/schema";
-import { assertCanViewClient } from "@/lib/investors/access";
+import { assertCanViewClient, assertCanViewPortfolio } from "@/lib/investors/access";
 import { valueInvestor } from "@/lib/finance/valuation";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +52,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // Honours the per-tenant data wall. Without it the export stayed open
       // even for a firm that had walled its books.
       await assertCanViewClient(tx, session, inv);
+      await assertCanViewPortfolio(tx, session, inv);
       return { inv, valuation: await valueInvestor(tx, id) };
     });
     if (!built) return NextResponse.json({ error: "not found" }, { status: 404 });

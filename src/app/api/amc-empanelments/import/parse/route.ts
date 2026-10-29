@@ -72,7 +72,7 @@ function suggestMapping(headers: string[]): Record<string, string> {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_empanelment.add"], session.permissions);
 
     const form = await req.formData();
     const file = form.get("file");

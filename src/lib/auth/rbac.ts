@@ -169,7 +169,9 @@ export type Capability =
   // Compliance + DDQ + risk profile + consent + SOP
   | "compliance.view"
   | "amc_empanelment.view"
+  | "amc_empanelment.add"
   | "amc_meeting.view"
+  | "amc_meeting.add"
   | "induction.view"
   | "induction.manage"
   | "compliance.edit"
@@ -393,11 +395,17 @@ const MATRIX: Record<Capability, Role[]> = {
   // escalation tree. Commercial relationship data, so branch heads only; owner
   // passes via the short-circuit above, and an owner can delegate it to a
   // specific person by ticking it under Customize Access Permissions.
-  "amc_empanelment.view": ["branch_head"],
+  "amc_empanelment.view": ["branch_head", "rm"],
+  // Adding or changing AMC details / empanelments is the RM's job alone (owner
+  // via the short-circuit, and delegable by ticking it on an employee). Branch
+  // heads keep read-only access above.
+  "amc_empanelment.add": ["rm"],
   // The relationship history with an AMC — meetings held and notes kept. Wider
   // than the commercial terms above on purpose, and narrower than the firm:
   // branch heads, RIA and research only (owner via the short-circuit).
-  "amc_meeting.view": ["branch_head", "ria", "ra_research"],
+  "amc_meeting.view": ["branch_head", "ria", "ra_research", "rm"],
+  // Recording or deleting an AMC meeting / note: RMs only (see above).
+  "amc_meeting.add": ["rm"],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
   "risk_profile.manage": ["compliance", "back_office", "ops", "rm", "ra_sales", "ria"],

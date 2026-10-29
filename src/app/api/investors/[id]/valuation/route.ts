@@ -14,6 +14,7 @@ import { requireAny } from "@/lib/auth/rbac";
 import { investors } from "@/db/schema";
 import { valueInvestor } from "@/lib/finance/valuation";
 import { assertInScope } from "@/lib/auth/data-scope";
+import { assertCanViewPortfolio } from "@/lib/investors/access";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export async function GET(
         .limit(1);
       if (!inv) return null;
       await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
+      await assertCanViewPortfolio(tx, session, inv);
       return await valueInvestor(tx, id);
     });
 

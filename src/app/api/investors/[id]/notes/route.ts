@@ -81,14 +81,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const rows = await withTenant(session.tenantId, async (tx) => {
       await assertClientVisible(tx, session, id);
       const r = await tx.execute(sql`
-        SELECT a.id, a.notes, a.occurred_at, a.owner_user_id, a.created_at, a.updated_at,
+        SELECT a.id, a.kind, a.subject, a.notes, a.occurred_at, a.owner_user_id, a.created_at, a.updated_at,
                u.name AS author_name
         FROM activities a
         LEFT JOIN users u ON u.id = a.owner_user_id
         WHERE a.tenant_id = ${session.tenantId}::uuid
           AND a.subject_type = 'investor'
           AND a.subject_id = ${id}::uuid
-          AND a.kind = 'note'
+          -- A note typed here, and the notes of every call / visit / WhatsApp / email /
+          -- SMS logged against the client — whichever type it was logged as, what was
+          -- written down belongs in the one running history.
+          AND a.kind IN ('note', 'call', 'visit', 'whatsapp', 'email', 'sms')
+          AND (a.kind = 'note' OR NULLIF(btrim(COALESCE(a.notes, '')), '') IS NOT NULL)
         ORDER BY a.occurred_at DESC
         LIMIT 300
       `);

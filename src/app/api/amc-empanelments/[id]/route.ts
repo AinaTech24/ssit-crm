@@ -102,7 +102,7 @@ export async function PATCH(
 ) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_empanelment.add"], session.permissions);
     const { id } = await params;
     const parse = PatchBody.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {
@@ -170,7 +170,7 @@ export async function DELETE(
 ) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_empanelment.add"], session.permissions);
     const { id } = await params;
     const meta = clientMetaFromHeaders(req.headers);
     const result = await withTenant(session.tenantId, async (tx) => {

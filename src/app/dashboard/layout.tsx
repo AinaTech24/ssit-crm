@@ -251,7 +251,7 @@ const NAV: NavSection[] = [
       // Branch heads only (owner always passes) — matches amc_empanelment.view
       // on the page. Compliance and back office lose the link they had; they
       // never needed the negotiated trail rates.
-      { href: "/dashboard/amc-empanelments", label: "AMC Empanelments", icon: Building2, roles: ["owner", "branch_head"] },
+      { href: "/dashboard/amc-empanelments", label: "AMC Empanelments", icon: Building2, roles: ["owner", "branch_head", "rm"] },
       { href: "/dashboard/schemes", label: "Scheme Master", icon: Boxes, roles: ["owner", "compliance", "back_office", "branch_head", "rm"] },
       { href: "/dashboard/product-offerings", label: "Products & Services", icon: Package, roles: ["owner", "compliance"] },
     ],

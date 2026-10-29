@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function NewAmcEmpanelmentPage() {
   const session = await requireSession();
-  requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+  requireAny(session.roles, ["amc_empanelment.add"], session.permissions);
 
   // Load AMC catalog (amc_master) for the dropdown — display name +
   // code. Tenant-scoped query in case some tenants prune the catalog.

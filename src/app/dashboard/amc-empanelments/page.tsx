@@ -42,6 +42,9 @@ export default async function AmcEmpanelmentsListPage({
   // AMCs and a way into the meetings tab — never the contacts or the controls.
   const canDetails = can(session.roles, "amc_empanelment.view", session.permissions);
   const canMeetings = can(session.roles, "amc_meeting.view", session.permissions);
+  // Viewing is wider than adding: only RMs (and the owner) can record AMC details and meetings.
+  const canAddDetails = can(session.roles, "amc_empanelment.add", session.permissions);
+  const canAddMeeting = can(session.roles, "amc_meeting.add", session.permissions);
   if (!canDetails && !canMeetings) {
     return (
       <div className="card-surface p-8 text-center max-w-xl mx-auto mt-10">
@@ -117,12 +120,12 @@ export default async function AmcEmpanelmentsListPage({
       <div className="space-y-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-2xl font-semibold">AMC empanelments</h1>
-          <AddAmcMeetingButton catalog={catalog} branches={branchOptions} currentUserId={session.userId} />
+          {canAddMeeting && <AddAmcMeetingButton catalog={catalog} branches={branchOptions} currentUserId={session.userId} />}
         </div>
         {tabs}
         {meetings.length === 0 ? (
           <div className="card-surface p-12 text-center text-sm text-muted-foreground">
-            No AMC meetings recorded yet. Use “Create meeting” to add the first one.
+            No AMC meetings recorded yet.{canAddMeeting ? " Use “Create meeting” to add the first one." : ""}
           </div>
         ) : (
           <div className="card-surface table-scroll">
@@ -227,7 +230,7 @@ export default async function AmcEmpanelmentsListPage({
         <div>
           <h1 className="text-2xl font-semibold">AMC empanelments</h1>
         </div>
-        {canDetails && (
+        {canDetails && canAddDetails && (
         <div className="flex items-center gap-2">
           <Link href="/dashboard/amc-empanelments/catalog-import" className="btn-secondary text-sm">
             <FileUp className="size-4" /> Import AMC list

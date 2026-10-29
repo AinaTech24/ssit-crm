@@ -16,6 +16,8 @@ import { readApiError, readThrownError } from "@/lib/api/client-error";
 
 type Note = {
   id: string;
+  kind: string;
+  subject: string | null;
   notes: string | null;
   occurred_at: string;
   owner_user_id: string | null;
@@ -23,6 +25,8 @@ type Note = {
   updated_at: string | null;
   created_at: string | null;
 };
+
+const KIND_LABEL: Record<string, string> = { call: "Call", visit: "Visit", whatsapp: "WhatsApp", email: "Email", sms: "SMS" };
 
 function when(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
@@ -202,6 +206,12 @@ export function ClientNotes({ investorId }: { investorId: string }) {
                   </>
                 ) : (
                   <>
+                    {(KIND_LABEL[n.kind] || n.subject) && (
+                      <div className="mb-1 flex items-center gap-1.5 text-[11px]">
+                        {KIND_LABEL[n.kind] && <span className="chip bg-secondary px-1.5 py-0">{KIND_LABEL[n.kind]}</span>}
+                        {n.subject && <span className="font-medium text-foreground/80">{n.subject}</span>}
+                      </div>
+                    )}
                     <p className="text-sm whitespace-pre-wrap">{n.notes}</p>
                     <div className="flex items-center justify-between mt-2 gap-2">
                       <div className="text-[11px] text-muted-foreground">
@@ -221,14 +231,17 @@ export function ClientNotes({ investorId }: { investorId: string }) {
                           >
                             <Pencil className="size-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            title="Delete"
-                            onClick={() => remove(n.id)}
-                            className="btn-ghost p-1.5 text-rose-600 hover:bg-rose-50"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </button>
+                          {/* Deleting a call / visit from here would erase the whole record, so only plain notes can be removed. */}
+                          {n.kind === "note" && (
+                            <button
+                              type="button"
+                              title="Delete"
+                              onClick={() => remove(n.id)}
+                              className="btn-ghost p-1.5 text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
                         </div>
                       ) : null}
                     </div>

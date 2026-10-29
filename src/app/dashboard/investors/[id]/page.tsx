@@ -23,6 +23,7 @@ import { requireSession } from "@/lib/auth/session";
 import { formatINR, formatDate, formatRelative, formatPhone, isValidIndianMobile } from "@/lib/utils";
 import { RenewSubscriptionButton } from "@/components/investors/RenewSubscriptionButton";
 import { ClientCallLog } from "@/components/investors/ClientCallLog";
+import { canViewPortfolio } from "@/lib/investors/access";
 import { ClientMeetingNotes } from "@/components/investors/ClientMeetingNotes";
 import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES } from "@/lib/subscriptions";
 import { CheckInButton, LogActivityButton } from "@/components/activities/ActivityLogger";
@@ -342,6 +343,8 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       consents: consentsRows,
       rm: rmRow,
       serviceRm: serviceRmRow,
+      // The portfolio is the relationship RM's: a service RM who is not also the RM sees the client, not the money.
+      portfolioAllowed: await canViewPortfolio(tx, session, inv),
       taskLog: taskLogRows,
       srLog: srLogRows,
       family: familyRow,
@@ -587,7 +590,10 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
 
       {/* Category tabs — group the sections so the page shows one clean group at
           a time. Renders right under the header (which stays pinned). */}
-      <InvestorDetailTabs moduleKey="investors-detail" tabs={INVESTOR_DETAIL_TABS} />
+      <InvestorDetailTabs
+        moduleKey="investors-detail"
+        tabs={data.portfolioAllowed ? INVESTOR_DETAIL_TABS : INVESTOR_DETAIL_TABS.filter((t) => t.key !== "portfolio")}
+      />
 
       {/* Composite health score — derived from existing fields, no extra query */}
       <RelatedListSection moduleKey="investors-detail" sectionKey="health">
@@ -671,7 +677,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
 
       {/* Empty Portfolio tab — instead of a blank tab, point the RM at how to
           load holdings (RTA statement import). Lives in the Portfolio tab. */}
-      {!hasPortfolio && (
+      {data.portfolioAllowed && !hasPortfolio && (
         <RelatedListSection moduleKey="investors-detail" sectionKey="valuation">
           <div className="rounded-lg border border-dashed bg-muted/20 px-6 py-10 text-center">
             <Wallet className="size-8 mx-auto text-muted-foreground/60" />
@@ -690,7 +696,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       {/* Portfolio-centric sections — hidden for onboarding-phase clients with
           no holdings/transactions so the page isn't a wall of empty ₹0 cards.
           Cross-sell stays visible below (useful even pre-investment). */}
-      {hasPortfolio && (
+      {data.portfolioAllowed && hasPortfolio && (
         <>
           {/* Live portfolio valuation — units × latest AMFI NAV + XIRR */}
           {showAum && data.valuation && (
@@ -771,13 +777,17 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       {/* Cross-sell / product-holdings matrix — wallet-share opportunities.
           Shown for every client (recording what they hold elsewhere is useful
           before they've invested a rupee with us). */}
-      <RelatedListSection moduleKey="investors-detail" sectionKey="expected_inflows">
-        <ExpectedInflowsCard investorId={inv.id} />
-      </RelatedListSection>
+      {data.portfolioAllowed && (
+        <>
+          <RelatedListSection moduleKey="investors-detail" sectionKey="expected_inflows">
+            <ExpectedInflowsCard investorId={inv.id} />
+          </RelatedListSection>
 
-      <RelatedListSection moduleKey="investors-detail" sectionKey="cross_sell">
-        <CrossSellCard investorId={inv.id} initial={(inv as any).crossSell ?? null} />
-      </RelatedListSection>
+          <RelatedListSection moduleKey="investors-detail" sectionKey="cross_sell">
+            <CrossSellCard investorId={inv.id} initial={(inv as any).crossSell ?? null} />
+          </RelatedListSection>
+        </>
+      )}
 
       {/* Documents & attachments — RM-uploaded files + auto-ingested client
           uploads from the required-documents form (same compliance_documents

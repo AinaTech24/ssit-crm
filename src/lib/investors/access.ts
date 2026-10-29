@@ -185,6 +185,32 @@ export async function investorScopeSql(tx: any, session: SessionUser, alias = "i
 }
 
 /**
+ * May this session see the client's PORTFOLIO (holdings, valuation, transactions,
+ * SIP health, statements)? The portfolio belongs to the relationship RM. A client's
+ * Service RM can open the client — contact details, notes, service requests — but
+ * not the portfolio, unless they are also its RM, or are otherwise in reach of the
+ * relationship RM (owner, a branch head over that RM, a firm-wide role).
+ */
+export async function canViewPortfolio(
+  tx: any,
+  session: SessionUser,
+  inv: { rmId?: string | null; serviceRmId?: string | null }
+): Promise<boolean> {
+  if (!inv.serviceRmId || inv.serviceRmId !== session.userId) return true;
+  if (inv.rmId === session.userId) return true;
+  return isInScopeViaOwnerBranch(tx, await resolveDataScope(tx, session), [inv.rmId]);
+}
+
+export async function assertCanViewPortfolio(
+  tx: any,
+  session: SessionUser,
+  inv: { rmId?: string | null; serviceRmId?: string | null }
+): Promise<void> {
+  if (await canViewPortfolio(tx, session, inv)) return;
+  throw Object.assign(new Error("forbidden: the portfolio is visible to the client's relationship RM only"), { status: 403 });
+}
+
+/**
  * Throws 403 unless this session may open THIS client's record.
  *
  * The single-row counterpart to `investorScopeCondition`, for routes that load

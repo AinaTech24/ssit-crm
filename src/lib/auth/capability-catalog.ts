@@ -181,6 +181,8 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "compliance.view": { group: "Compliance", label: "View compliance register" },
   "amc_empanelment.view": { group: "Compliance", label: "View AMC empanelments" },
   "amc_meeting.view": { group: "Compliance", label: "View AMC meetings & notes" },
+  "amc_empanelment.add": { group: "Compliance", label: "Add / edit AMC empanelments" },
+  "amc_meeting.add": { group: "Compliance", label: "Record AMC meetings & notes" },
   "compliance.edit": { group: "Compliance", label: "Edit compliance records" },
   "compliance.approve": { group: "Compliance", label: "Approve compliance items" },
   "sop.manage": { group: "Compliance", label: "Manage SOP library" },

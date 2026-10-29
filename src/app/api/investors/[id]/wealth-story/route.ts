@@ -16,6 +16,7 @@ import { requireSession, type SessionUser } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { investors, folios, tenants } from "@/db/schema";
 import { assertInScope } from "@/lib/auth/data-scope";
+import { assertCanViewPortfolio } from "@/lib/investors/access";
 import { renderCalcPdf, type PdfBlock } from "@/lib/calculators/calc-pdf";
 import { fetchBrandLogoBytes } from "@/lib/calculators/share-helpers";
 import { pickLogo } from "@/lib/branding/logo";
@@ -79,6 +80,7 @@ async function loadStory(tx: any, session: SessionUser, investorId: string): Pro
   // Same wall as the client's other pages — the wealth story is a PDF of the
   // client's full portfolio, transactions and goals.
   await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
+      await assertCanViewPortfolio(tx, session, inv);
 
   const to = new Date();
   const from = new Date(to);

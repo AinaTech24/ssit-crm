@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function ImportAmcCatalogPage() {
   const session = await requireSession();
-  if (!(can(session.roles, "compliance.edit", session.permissions) || can(session.roles, "amc_empanelment.view", session.permissions))) {
+  if (!can(session.roles, "amc_empanelment.add", session.permissions)) {
     redirect("/dashboard/amc-empanelments");
   }
   return (

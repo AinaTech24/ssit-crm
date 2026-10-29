@@ -13,6 +13,7 @@ import { requireAny } from "@/lib/auth/rbac";
 import { investors } from "@/db/schema";
 import { computeRealizedGains, currentFyStartYear } from "@/lib/tax/realized-gains";
 import { assertInScope } from "@/lib/auth/data-scope";
+import { assertCanViewPortfolio } from "@/lib/investors/access";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         .limit(1);
       if (!inv) return null;
       await assertInScope(tx, session, { branchId: inv.branchId, ownerId: [inv.rmId, inv.serviceRmId] }, "client");
+      await assertCanViewPortfolio(tx, session, inv);
       return computeRealizedGains(tx, id, fy);
     });
     if (!result) return NextResponse.json({ error: "not found" }, { status: 404 });

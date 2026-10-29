@@ -10,7 +10,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -40,7 +40,7 @@ async function loadOwnNote(tx: any, session: any, investorId: string, noteId: st
         eq(activities.id, noteId),
         eq(activities.tenantId, session.tenantId),
         eq(activities.subjectId, investorId),
-        eq(activities.kind, "note")
+        inArray(activities.kind, ["note", "call", "visit", "whatsapp", "email", "sms"])
       )
     )
     .limit(1);

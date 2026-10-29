@@ -30,7 +30,7 @@ const Body = z.object({ name: z.string().trim().min(2).max(120) });
 export async function DELETE(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_empanelment.add"], session.permissions);
     const parse = z.object({ code: z.string().trim().min(1).max(120), name: z.string().trim().min(1).max(120).optional() }).safeParse(await req.json().catch(() => ({})));
     if (!parse.success) return NextResponse.json({ error: "AMC code is required" }, { status: 400 });
     const code = parse.data.code;
@@ -74,7 +74,7 @@ export async function DELETE(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["compliance.edit", "amc_empanelment.view"], session.permissions);
+    requireAny(session.roles, ["amc_empanelment.add"], session.permissions);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));
     if (!parse.success) {
