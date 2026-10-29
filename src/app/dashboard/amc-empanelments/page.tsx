@@ -14,7 +14,7 @@ import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { AddAmcMeetingButton } from "@/components/amc-empanelments/AddAmcMeetingButton";
-import { amcEmpanelments, EMPANELMENT_CATEGORIES, EMPANELMENT_CATEGORY_LABEL } from "@/db/schema";
+import { amcEmpanelments, AMC_MODE_LABEL, EMPANELMENT_CATEGORIES, EMPANELMENT_CATEGORY_LABEL } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -80,18 +80,26 @@ export default async function AmcEmpanelmentsListPage({
   );
 
   if (view === "meetings") {
-    const amcOptions = await withTenant(session.tenantId, async (tx) => {
-      const r = await tx.execute(sql`
-        SELECT id, amc_name AS name FROM amc_empanelments
+    // The picker offers the firm's AMC catalogue merged with the standard list
+    // (done in the picker), so it is never empty on a firm with no empanelments.
+    const { catalog, branchOptions } = await withTenant(session.tenantId, async (tx) => {
+      const c = await tx.execute(sql`
+        SELECT code, name, (COALESCE(is_active, true) = false) AS inactive FROM amc_master
          WHERE tenant_id = ${session.tenantId}::uuid
-         ORDER BY amc_name ASC LIMIT 400
+         ORDER BY name ASC LIMIT 400
       `);
-      return r.rows as Array<{ id: string; name: string }>;
+      const b = await tx.execute(sql`SELECT id, name FROM branches WHERE tenant_id = ${session.tenantId}::uuid ORDER BY name ASC`);
+      return {
+        catalog: c.rows as Array<{ code: string; name: string; inactive?: boolean }>,
+        branchOptions: b.rows as Array<{ id: string; name: string }>,
+      };
     });
     const meetings = await withTenant(session.tenantId, async (tx) => {
       const r = await tx.execute(sql`
-        SELECT m.id, m.meeting_date, m.subject, m.attendees, m.notes, m.follow_up,
-               e.id AS amc_id, e.amc_name, u.name AS author_name
+        SELECT m.id, m.meeting_date, m.subject, m.attendees, m.notes, m.follow_up, m.mode,
+               e.id AS amc_id, e.amc_name, u.name AS author_name,
+               (SELECT string_agg(cu.name, ', ' ORDER BY cu.name) FROM users cu
+                 WHERE m.collaborator_user_ids ? cu.id::text) AS collaborator_names
           FROM amc_meetings m
           JOIN amc_empanelments e ON e.id = m.amc_empanelment_id
           LEFT JOIN users u ON u.id = m.created_by_user_id
@@ -101,14 +109,15 @@ export default async function AmcEmpanelmentsListPage({
       `);
       return r.rows as Array<{
         id: string; meeting_date: string; subject: string; attendees: string | null;
-        notes: string | null; follow_up: string | null; amc_id: string; amc_name: string; author_name: string | null;
+        notes: string | null; follow_up: string | null; mode: string | null; collaborator_names: string | null;
+        amc_id: string; amc_name: string; author_name: string | null;
       }>;
     });
     return (
       <div className="space-y-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h1 className="text-2xl font-semibold">AMC empanelments</h1>
-          <AddAmcMeetingButton amcs={amcOptions} />
+          <AddAmcMeetingButton catalog={catalog} branches={branchOptions} currentUserId={session.userId} />
         </div>
         {tabs}
         {meetings.length === 0 ? (
@@ -117,13 +126,15 @@ export default async function AmcEmpanelmentsListPage({
           </div>
         ) : (
           <div className="card-surface table-scroll">
-            <table className="w-full text-xs min-w-[900px]">
+            <table className="w-full text-xs min-w-[1100px]">
               <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
                 <tr>
                   <th className="px-3 py-2 text-left">Date</th>
                   <th className="px-3 py-2 text-left">AMC</th>
                   <th className="px-3 py-2 text-left">Subject</th>
+                  <th className="px-3 py-2 text-left">Mode</th>
                   <th className="px-3 py-2 text-left">Attendees</th>
+                  <th className="px-3 py-2 text-left">Collaborators</th>
                   <th className="px-3 py-2 text-left">Notes</th>
                   <th className="px-3 py-2 text-left">Follow-up</th>
                   <th className="px-3 py-2 text-left">Added by</th>
@@ -141,7 +152,11 @@ export default async function AmcEmpanelmentsListPage({
                       </Link>
                     </td>
                     <td className="px-3 py-2">{m.subject}</td>
+                    <td className="px-3 py-2">
+                      {m.mode ? <span className="chip bg-secondary text-[10px]">{AMC_MODE_LABEL[m.mode] ?? m.mode}</span> : <span className="text-muted-foreground">—</span>}
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">{m.attendees || "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{m.collaborator_names || "—"}</td>
                     <td className="px-3 py-2 max-w-xs whitespace-pre-wrap">{m.notes || "—"}</td>
                     <td className="px-3 py-2 max-w-xs whitespace-pre-wrap">{m.follow_up || "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">{m.author_name || "—"}</td>

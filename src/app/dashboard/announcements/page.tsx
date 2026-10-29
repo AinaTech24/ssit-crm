@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { Megaphone } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { audienceUserSql } from "@/lib/announcements/access";
 import { AnnouncementBoard } from "@/components/announcements/AnnouncementBoard";
 import { branches, desks } from "@/db/schema";
 
@@ -22,6 +23,7 @@ export default async function AnnouncementsPage() {
                (SELECT count(*)::int FROM announcement_reads ar WHERE ar.announcement_id = a.id AND ar.acknowledged_at IS NOT NULL) AS ack_count
         FROM announcements a LEFT JOIN users u ON u.id = a.created_by_user_id
         WHERE a.tenant_id = ${session.tenantId}::uuid
+          AND ${audienceUserSql(session, true)}
         ORDER BY a.is_pinned DESC, COALESCE(a.published_at, a.created_at) DESC
         LIMIT 200
       `);
@@ -41,6 +43,7 @@ export default async function AnnouncementsPage() {
           AND a.published_at IS NOT NULL AND a.published_at <= now()
           AND (a.expires_at IS NULL OR a.expires_at > now())
           AND (a.branch_id IS NULL OR a.branch_id = ${session.branchId ?? null})
+          AND ${audienceUserSql(session)}
           AND (
             a.audience_roles IS NULL
             OR jsonb_array_length(a.audience_roles) = 0

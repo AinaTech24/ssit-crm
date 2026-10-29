@@ -17,6 +17,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { ANNOUNCEMENT_CATEGORIES, announcements } from "@/db/schema";
+import { audienceUserSql } from "@/lib/announcements/access";
 import { audienceRolesSchema, checkBranchTarget, checkDeskTarget } from "@/lib/announcements/validate";
 import { notifyAnnouncementPublished } from "@/lib/announcements/notify";
 
@@ -53,6 +54,7 @@ export async function GET(req: NextRequest) {
                  (SELECT count(*)::int FROM announcement_attachments aa WHERE aa.announcement_id = a.id AND aa.deleted_at IS NULL) AS attachment_count
           FROM announcements a LEFT JOIN users u ON u.id = a.created_by_user_id
           WHERE a.tenant_id = ${session.tenantId}::uuid
+            AND ${audienceUserSql(session, true)}
           ORDER BY a.is_pinned DESC, COALESCE(a.published_at, a.created_at) DESC
           LIMIT 200
         `);
@@ -72,6 +74,7 @@ export async function GET(req: NextRequest) {
           AND a.published_at IS NOT NULL AND a.published_at <= now()
           AND (a.expires_at IS NULL OR a.expires_at > now())
           AND (a.branch_id IS NULL OR a.branch_id = ${session.branchId ?? null})
+          AND ${audienceUserSql(session)}
           -- Desk scope. Read from the USER ROW rather than the session token,
           -- like every other desk check, so moving someone to another
           -- sub-branch changes what they see on the next request instead of

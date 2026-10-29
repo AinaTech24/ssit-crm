@@ -1,4 +1,4 @@
-import { date, index, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { date, index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { id, tenantId, timestamps } from "./_shared";
 import { tenants } from "./tenants";
 import { users } from "./users";
@@ -17,6 +17,9 @@ import { amcEmpanelments } from "./amc_empanelments";
  * differ — a meeting has a date, attendees and an agenda that a note does not,
  * and folding them together means half the columns are null on every row.
  */
+
+export const AMC_MEETING_MODES = ["online", "offline", "office"] as const;
+export const AMC_MODE_LABEL: Record<string, string> = { online: "Online", offline: "Offline", office: "Office" };
 
 export const amcMeetings = pgTable(
   "amc_meetings",
@@ -37,6 +40,12 @@ export const amcMeetings = pgTable(
     notes: text("notes"),
     /** What the firm has to do next, if anything. */
     followUp: text("follow_up"),
+    /** How it was held. NULL = recorded before this was captured. */
+    mode: text("mode", { enum: AMC_MEETING_MODES }),
+    /** Colleagues tagged on the meeting — they are told about it. */
+    collaboratorUserIds: jsonb("collaborator_user_ids").$type<string[]>(),
+    /** Branch tagged on the meeting — everyone in it is told. */
+    branchId: uuid("branch_id"),
 
     createdByUserId: uuid("created_by_user_id").references(() => users.id),
     ...timestamps,

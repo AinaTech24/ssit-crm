@@ -5,11 +5,14 @@
  *   everyone else only targets the admin left "visible":
  *                   · their own,
  *                   · their branch's / desk's,
+ *                   · anyone who reports to them, directly or through others — a team
+ *                     lead sees their team, an RA / RIA with no team sees only themselves,
  *                   · a branch head also sees the people in their branch / desk.
  */
 
 import { sql } from "drizzle-orm";
 import type { SessionUser } from "@/lib/auth/session";
+import { departmentOf } from "@/lib/team/departments";
 import {
   achievementFor,
   loadMembership,
@@ -23,6 +26,8 @@ export type SubjectCard = {
   subjectType: SubjectType;
   subjectId: string;
   name: string;
+  /** Department of a person (profile, else from their role); null for a branch / desk. */
+  department: string | null;
   metrics: { key: string; label: string; unit: "count" | "inr"; target: number; actual: number; visible: boolean }[];
 };
 
@@ -44,6 +49,20 @@ export async function loadVisibleTargets(tx: any, session: SessionUser, period: 
   const myBranch = me?.branch_id ?? null;
   const myDesk = me?.desk_id ?? null;
   const allowedUsers = new Set<string>([session.userId]);
+  // Everyone who reports up to me, however many levels down.
+  const reportsOf = new Map<string, string[]>();
+  for (const u of membership.users) {
+    if (u.reporting_manager_id) (reportsOf.get(u.reporting_manager_id) ?? reportsOf.set(u.reporting_manager_id, []).get(u.reporting_manager_id)!).push(u.id);
+  }
+  const queue = [session.userId];
+  while (queue.length) {
+    for (const id of reportsOf.get(queue.pop()!) ?? []) {
+      if (!allowedUsers.has(id)) {
+        allowedUsers.add(id);
+        queue.push(id);
+      }
+    }
+  }
   if (isHead) {
     for (const u of membership.users) {
       if (myDesk ? u.desk_id === myDesk : myBranch && u.branch_id === myBranch) allowedUsers.add(u.id);
@@ -63,7 +82,11 @@ export async function loadVisibleTargets(tx: any, session: SessionUser, period: 
   const actuals = await loadUserActuals(tx, session.tenantId, period);
 
   const names = new Map<string, string>();
-  for (const u of membership.users) names.set(`user:${u.id}`, u.name ?? "—");
+  const depts = new Map<string, string | null>();
+  for (const u of membership.users) {
+    names.set(`user:${u.id}`, u.name ?? "—");
+    depts.set(`user:${u.id}`, departmentOf(u));
+  }
   const [br, dk] = await Promise.all([
     tx.execute(sql`SELECT id, name FROM branches WHERE tenant_id = ${session.tenantId}::uuid`),
     tx.execute(sql`SELECT id, name FROM desks WHERE tenant_id = ${session.tenantId}::uuid`),
@@ -83,6 +106,7 @@ export async function loadVisibleTargets(tx: any, session: SessionUser, period: 
           subjectType: r.subject_type,
           subjectId: r.subject_id,
           name: names.get(key) ?? "—",
+          department: depts.get(key) ?? null,
           metrics: [],
         })
         .get(key)!;

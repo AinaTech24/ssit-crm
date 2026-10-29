@@ -77,6 +77,7 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { eq, sql } from "drizzle-orm";
+import { audienceUserSql } from "@/lib/announcements/access";
 import { withTenant } from "@/db/client";
 import { tenants, users, tenantUiLayouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
@@ -386,6 +387,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         AND a.published_at IS NOT NULL AND a.published_at <= now()
         AND (a.expires_at IS NULL OR a.expires_at > now())
         AND (a.branch_id IS NULL OR a.branch_id = ${session.branchId ?? null})
+        AND ${audienceUserSql(session)}
         -- Desk scope, read from the user row so a move between sub-branches
         -- takes effect on the next request rather than the next login.
         AND (

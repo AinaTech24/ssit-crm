@@ -85,10 +85,18 @@ export async function loadUserActuals(
 /** Active users grouped for roll-up: branch id → user ids, desk id → user ids. */
 export async function loadMembership(tx: any, tenantId: string) {
   const r = await tx.execute(sql`
-    SELECT id, name, roles, branch_id, desk_id FROM users
+    SELECT id, name, roles, department, branch_id, desk_id, reporting_manager_id FROM users
      WHERE tenant_id = ${tenantId}::uuid AND status = 'active'
   `);
-  const users = r.rows as { id: string; name: string | null; roles: string[] | null; branch_id: string | null; desk_id: string | null }[];
+  const users = r.rows as {
+    id: string;
+    name: string | null;
+    roles: string[] | null;
+    department: string | null;
+    branch_id: string | null;
+    desk_id: string | null;
+    reporting_manager_id: string | null;
+  }[];
   const byBranch = new Map<string, string[]>();
   const byDesk = new Map<string, string[]>();
   for (const u of users) {

@@ -46,6 +46,12 @@ export const announcements = pgTable(
      * the desk is the unit a notice is usually aimed at. NULL = not desk-scoped.
      */
     deskId: uuid("desk_id"),
+    /**
+     * Optional PER-PERSON audience (migration 0247). Set, it narrows the notice to
+     * exactly these users (plus its author and the owner) — an AMC meeting is
+     * told only to the people tagged on it. NULL / empty = no per-person limit.
+     */
+    audienceUserIds: jsonb("audience_user_ids").$type<string[]>(),
 
     isPinned: boolean("is_pinned").notNull().default(false),
     /** When true, staff must explicitly click "I acknowledge" (policy/urgent

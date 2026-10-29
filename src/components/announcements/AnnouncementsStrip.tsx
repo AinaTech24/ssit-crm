@@ -8,6 +8,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { Megaphone, Pin } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { audienceUserSql } from "@/lib/announcements/access";
 
 const CAT_TONE: Record<string, string> = {
   urgent: "border-rose-200 bg-rose-50/70 text-rose-900 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-200",
@@ -36,6 +37,7 @@ export async function AnnouncementsStrip({ session }: { session: { tenantId: str
           a.desk_id IS NULL
           OR a.desk_id = (SELECT desk_id FROM users WHERE id = ${session.userId}::uuid)
         )
+        AND ${audienceUserSql(session)}
         AND (a.is_pinned = true OR a.category = 'urgent' OR a.requires_ack = true)
         AND (
           a.audience_roles IS NULL

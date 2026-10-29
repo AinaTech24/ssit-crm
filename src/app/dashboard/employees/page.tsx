@@ -10,6 +10,7 @@ import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { CustomViews } from "@/components/common/CustomViews";
 import { EmployeeRowActions } from "@/components/employees/EmployeeRowActions";
 import { TeamPresence } from "@/components/employees/TeamPresence";
+import { DEPT_ROLES, inferDepartment } from "@/lib/team/departments";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700",
@@ -18,28 +19,6 @@ const STATUS_COLORS: Record<string, string> = {
   offboarding: "bg-amber-50 text-amber-700",
   offboarded: "bg-gray-50 text-gray-700",
 };
-
-/**
- * `users.department` is optional and most firms never fill it in, so a
- * department filter matching only that column finds nobody. Fall back to the
- * role a person already holds — the first match in this order wins.
- */
-const DEPT_ROLES: Array<[string, string[]]> = [
-  ["leadership", ["owner", "branch_head"]],
-  ["compliance", ["compliance"]],
-  ["operations", ["ops"]],
-  ["back_office", ["back_office"]],
-  ["marketing", ["marketing"]],
-  ["advisory", ["ria", "ra_research"]],
-  ["sales", ["rm", "sub_broker", "ra_sales", "insurance"]],
-  ["support", ["assistant", "gifting_hr"]],
-];
-
-function inferDepartment(roles: string[] | null | undefined): string | null {
-  const have = new Set(roles ?? []);
-  for (const [dept, rs] of DEPT_ROLES) if (rs.some((r) => have.has(r))) return dept;
-  return null;
-}
 
 type EmployeeRow = Record<string, any>;
 type BranchSummaryRow = { branch: string; users: number; clients: number; heads: string };
