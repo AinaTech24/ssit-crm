@@ -34,7 +34,11 @@ export async function MarketingDashboard({
       SELECT
         (SELECT COUNT(*)::int FROM campaigns WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS campaigns_mtd,
         (SELECT COUNT(*)::int FROM campaigns WHERE status IN ('sending', 'scheduled')) AS active_campaigns,
-        (SELECT COUNT(*)::int FROM templates WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS content_mtd,
+        (SELECT COUNT(*)::int FROM templates WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS templates_mtd,
+        (SELECT COUNT(*)::int FROM tasks t
+          WHERE t.status = 'completed' AND t.completed_at >= ${fromISO} AND t.completed_at <= ${toISO}
+            AND (t.department = 'marketing'
+                 OR EXISTS (SELECT 1 FROM users u WHERE u.id = t.assignee_id AND 'marketing' = ANY(u.roles)))) AS content_done,
         (SELECT COALESCE(SUM(sent_count), 0)::int FROM campaigns WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS sent_mtd,
         (SELECT COUNT(*)::int FROM templates WHERE status = 'pending_approval' AND category = 'marketing') AS pending_approval
     `);
@@ -51,7 +55,8 @@ export async function MarketingDashboard({
     return {
       campaignsMtd: Number(s.campaigns_mtd),
       activeCampaigns: Number(s.active_campaigns),
-      contentMtd: Number(s.content_mtd),
+      templatesMtd: Number(s.templates_mtd),
+      contentDone: Number(s.content_done),
       sentMtd: Number(s.sent_mtd),
       pendingApproval: Number(s.pending_approval),
       campaigns: campaignsList.rows as any[],
@@ -77,10 +82,11 @@ export async function MarketingDashboard({
         <PeriodSelector current={period ?? "mtd"} variant="light" />
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <Kpi label="Campaigns" value={String(data.campaignsMtd)} />
         <Kpi label="Active right now" value={String(data.activeCampaigns)} />
-        <Kpi label="Content created" value={String(data.contentMtd)} />
+        <Kpi label="Content done (tasks)" value={String(data.contentDone)} />
+        <Kpi label="Templates created" value={String(data.templatesMtd)} />
         <Kpi label="Messages sent" value={data.sentMtd.toLocaleString("en-IN")} />
         <Kpi label="Approval queue" value={String(data.pendingApproval)} tone={data.pendingApproval > 0 ? "amber" : "muted"} />
       </div>
