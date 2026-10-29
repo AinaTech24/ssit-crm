@@ -19,6 +19,28 @@ const STATUS_COLORS: Record<string, string> = {
   offboarded: "bg-gray-50 text-gray-700",
 };
 
+/**
+ * `users.department` is optional and most firms never fill it in, so a
+ * department filter matching only that column finds nobody. Fall back to the
+ * role a person already holds — the first match in this order wins.
+ */
+const DEPT_ROLES: Array<[string, string[]]> = [
+  ["leadership", ["owner", "branch_head"]],
+  ["compliance", ["compliance"]],
+  ["operations", ["ops"]],
+  ["back_office", ["back_office"]],
+  ["marketing", ["marketing"]],
+  ["advisory", ["ria", "ra_research"]],
+  ["sales", ["rm", "sub_broker", "ra_sales", "insurance"]],
+  ["support", ["assistant", "gifting_hr"]],
+];
+
+function inferDepartment(roles: string[] | null | undefined): string | null {
+  const have = new Set(roles ?? []);
+  for (const [dept, rs] of DEPT_ROLES) if (rs.some((r) => have.has(r))) return dept;
+  return null;
+}
+
 type EmployeeRow = Record<string, any>;
 type BranchSummaryRow = { branch: string; users: number; clients: number; heads: string };
 
@@ -56,8 +78,18 @@ export default async function EmployeesPage({
       // from every department filter.
       const named = deptFilter.filter((v) => v !== "unset");
       const parts: any[] = [];
-      if (named.length) parts.push(sql`u.department IN (${sql.join(named.map((v) => sql`${v}`), sql`, `)})`);
-      if (deptFilter.includes("unset")) parts.push(sql`u.department IS NULL`);
+      for (const dept of named) {
+        const roles = DEPT_ROLES.find(([d]) => d === dept)?.[1] ?? [];
+        parts.push(
+          roles.length
+            ? sql`(u.department = ${dept} OR (u.department IS NULL AND u.roles && ARRAY[${sql.join(roles.map((r) => sql`${r}`), sql`, `)}]::text[]))`
+            : sql`u.department = ${dept}`
+        );
+      }
+      if (deptFilter.includes("unset")) {
+        const mapped = DEPT_ROLES.flatMap(([, rs]) => rs);
+        parts.push(sql`(u.department IS NULL AND NOT (u.roles && ARRAY[${sql.join(mapped.map((r) => sql`${r}`), sql`, `)}]::text[]))`);
+      }
       conds.push(sql`(${sql.join(parts, sql` OR `)})`);
     }
     if (branchFilter.length) {
@@ -303,7 +335,15 @@ export default async function EmployeesPage({
                         )}
                       </td>
                       <td className="py-3 text-xs capitalize">
-                        {e.department ? e.department.replace(/_/g, " ") : ""}
+                        {e.department ? (
+                          e.department.replace(/_/g, " ")
+                        ) : inferDepartment(e.roles) ? (
+                          <span className="text-muted-foreground" title="Not set on the profile — taken from their role">
+                            {inferDepartment(e.roles)!.replace(/_/g, " ")}
+                          </span>
+                        ) : (
+                          ""
+                        )}
                         {e.desk_name && (
                           <div className="text-[10px] normal-case text-muted-foreground">Desk: {e.desk_name}</div>
                         )}
