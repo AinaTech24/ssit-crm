@@ -18,6 +18,7 @@ import { CustomViews } from "@/components/common/CustomViews";
 import { TaskViewSelect } from "./TaskViewSelect";
 import { TaskList } from "./TaskList";
 import { TaskKanban } from "./TaskKanban";
+import { OtherActivityButton } from "./OtherActivityButton";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,10 @@ export default async function TasksPage({
     // View-tab scope: tasks assigned TO me, or tasks I assigned (created).
     if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
     else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
+    // "Other activity" (bank work, AMC work, BA service…) lives in its own tab;
+    // every other view leaves it out so it doesn't mix into client tasks.
+    if (view === "other") conds.push(eq(tasks.type, "other_activity"));
+    else conds.push(sql`${tasks.type} <> 'other_activity'`);
 
     // Status filtering applies to the LIST only — the KANBAN's columns ARE the
     // status dimension, so it must show every status (otherwise a lingering
@@ -216,6 +221,7 @@ export default async function TasksPage({
       FROM tasks
       WHERE tasks.tenant_id = ${session.tenantId}::uuid
         AND tasks.deleted_at IS NULL
+        AND ${view === "other" ? sql`tasks.type = 'other_activity'` : sql`tasks.type <> 'other_activity'`}
         AND ${await taskScopeSql(tx, session)}
         AND ${scopeFilterSql(scopeSel, session.tenantId, ["tasks.assignee_id", "tasks.created_by_id"])}
     `);
@@ -245,6 +251,7 @@ export default async function TasksPage({
           >
             <CalendarDays className="size-4" /> Calendar
           </Link>
+          <OtherActivityButton />
           <Link
             href="/dashboard/tasks/new"
             className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium flex items-center gap-1.5"

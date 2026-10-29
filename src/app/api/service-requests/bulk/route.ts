@@ -20,6 +20,7 @@ import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { serviceRequests } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { becameFinished, notifyServiceRequestFinished } from "@/lib/notifications/service-request";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,15 @@ export async function POST(req: NextRequest) {
         break;
     }
 
+    const finishing = patch.status === "closed" || patch.status === "resolved";
+
     const count = await withTenant(session.tenantId, async (tx) => {
+      // Who to tell afterwards: only tickets that weren't already finished.
+      const toAnnounce = finishing
+        ? (await tx.select().from(serviceRequests).where(inArray(serviceRequests.id, ids))).filter((r) =>
+            becameFinished(r.status, patch.status)
+          )
+        : [];
       const updated = await tx
         .update(serviceRequests)
         .set(patch as any)
@@ -75,6 +84,22 @@ export async function POST(req: NextRequest) {
         after: { action, value: value ?? null, count: updated.length, ids } as any,
         ...meta,
       });
+      // A bulk close of hundreds shouldn't bury people in pop-ups — announce the first few.
+      for (const r of toAnnounce.slice(0, 20)) {
+        await notifyServiceRequestFinished(tx, {
+          tenantId: session.tenantId,
+          actorUserId: session.userId,
+          status: patch.status,
+          request: {
+            id: r.id,
+            ticketNo: r.ticketNo,
+            subject: r.subject,
+            investorId: r.investorId ?? null,
+            assignedToUserId: r.assignedToUserId ?? null,
+            timeline: r.timeline,
+          },
+        });
+      }
       return updated.length;
     });
 

@@ -162,7 +162,7 @@ function NameLookup({
     timer.current = setTimeout(async () => {
       const mine = ++seq.current;
       try {
-        const r = await fetch(`/api/search?q=${encodeURIComponent(v.trim())}`);
+        const r = await fetch(`/api/search?limit=15&q=${encodeURIComponent(v.trim())}`);
         if (!r.ok || mine !== seq.current) return;
         const j = await r.json();
         const found: Match[] = [
@@ -191,7 +191,7 @@ function NameLookup({
         className="w-full border rounded-md px-2.5 py-1.5 text-sm bg-background"
       />
       {open && (
-        <div className="absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-md border bg-card shadow-lg">
+        <div className="absolute z-20 left-0 mt-1 max-h-72 w-[24rem] max-w-[calc(100vw-3rem)] overflow-y-auto rounded-md border bg-card shadow-lg">
           {matches.map((m) => (
             <button
               key={`${m.kind}-${m.id}`}
@@ -202,10 +202,10 @@ function NameLookup({
                 setOpen(false);
                 setMatches([]);
               }}
-              className="w-full text-left px-2.5 py-1.5 hover:bg-secondary text-sm border-b last:border-b-0"
+              className="w-full text-left px-3 py-2 hover:bg-secondary text-sm border-b last:border-b-0"
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-medium truncate">{m.name}</span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-medium break-words">{m.name}</span>
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">{m.kind}</span>
               </div>
               <div className="text-[11px] text-muted-foreground truncate">

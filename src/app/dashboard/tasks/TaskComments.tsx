@@ -107,6 +107,7 @@ export function TaskComments({ taskId, currentUserId }: { taskId: string; curren
         body: JSON.stringify({ body, mentions }),
       });
       const j = await res.json().catch(() => ({}));
+      if (res.status === 401) throw new Error("Your login timed out — refresh the page and sign in again, then re-post your comment.");
       if (!res.ok) throw new Error(j?.error ?? "Failed to add comment");
       setComments((c) => [...(c ?? []), j.comment]);
       setText("");

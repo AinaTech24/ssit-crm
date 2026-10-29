@@ -39,6 +39,8 @@ export default async function EmployeesPage({
   const q = (sp.q ?? "").trim();
   const deptFilter = (sp.department ?? "").split(",").filter(Boolean);
   const statusFilter = (sp.status ?? "").split(",").filter(Boolean);
+  const branchFilter = (sp.branch ?? "").split(",").filter(Boolean);
+  const deskFilter = (sp.desk ?? "").split(",").filter(Boolean);
 
   const data = await withTenant(session.tenantId, async (tx) => {
     // Trashed (soft-deleted) employees live in the Trash bin, not the team list.
@@ -49,9 +51,20 @@ export default async function EmployeesPage({
       );
     }
     if (deptFilter.length) {
-      conds.push(
-        sql`u.department IN (${sql.join(deptFilter.map((v) => sql`${v}`), sql`, `)})`
-      );
+      // "unset" picks everyone whose department was never filled in — most of a
+      // firm's team until each profile is edited — who would otherwise vanish
+      // from every department filter.
+      const named = deptFilter.filter((v) => v !== "unset");
+      const parts: any[] = [];
+      if (named.length) parts.push(sql`u.department IN (${sql.join(named.map((v) => sql`${v}`), sql`, `)})`);
+      if (deptFilter.includes("unset")) parts.push(sql`u.department IS NULL`);
+      conds.push(sql`(${sql.join(parts, sql` OR `)})`);
+    }
+    if (branchFilter.length) {
+      conds.push(sql`u.branch_id IN (${sql.join(branchFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
+    }
+    if (deskFilter.length) {
+      conds.push(sql`u.desk_id IN (${sql.join(deskFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
     }
     if (statusFilter.length) {
       conds.push(
@@ -73,13 +86,14 @@ export default async function EmployeesPage({
       SELECT u.id, u.name, u.email, u.phone, u.roles, u.status,
              u.department, u.joining_date, u.annual_target, u.sip_monthly_target,
              u.reporting_manager_id, mgr.name AS manager_name,
-             u.branch_id, br.name AS branch_name, u.restrict_to_own_records,
+             u.branch_id, br.name AS branch_name, dk.name AS desk_name, u.restrict_to_own_records,
              u.euin, u.nism_expiry_at, u.last_login_at, u.created_at,
              (SELECT COUNT(*)::int FROM investors i WHERE i.rm_id = u.id AND i.status = 'active') AS assigned_clients,
              (SELECT COALESCE(SUM(i.aum::numeric), 0)::numeric FROM investors i WHERE i.rm_id = u.id AND i.status = 'active') AS my_aum
       FROM users u
       LEFT JOIN users mgr ON mgr.id = u.reporting_manager_id
       LEFT JOIN branches br ON br.id = u.branch_id
+      LEFT JOIN desks dk ON dk.id = u.desk_id
       ${whereSql}
       ORDER BY u.created_at DESC
     `);
@@ -101,9 +115,18 @@ export default async function EmployeesPage({
       GROUP BY b.name
       ORDER BY clients DESC
     `);
-    return { employees: employees.rows as EmployeeRow[], branchSummary: branchSummary.rows as unknown as BranchSummaryRow[] };
+    const branchOpts = await tx.execute(sql`SELECT id, name FROM branches WHERE tenant_id = ${session.tenantId}::uuid ORDER BY name`);
+    const deskOpts = await tx.execute(sql`SELECT id, name FROM desks WHERE tenant_id = ${session.tenantId}::uuid ORDER BY name`);
+    return {
+      employees: employees.rows as EmployeeRow[],
+      branchSummary: branchSummary.rows as unknown as BranchSummaryRow[],
+      branchOpts: branchOpts.rows as { id: string; name: string }[],
+      deskOpts: deskOpts.rows as { id: string; name: string }[],
+    };
   });
   const branchSummary = data.branchSummary;
+  const branchOpts = data.branchOpts;
+  const deskOpts = data.deskOpts;
   const roster = data.employees;
 
   const stats = {
@@ -160,8 +183,15 @@ export default async function EmployeesPage({
               { value: "advisory", label: "Advisory" },
               { value: "support", label: "Support" },
               { value: "leadership", label: "Leadership" },
+              { value: "unset", label: "Not set" },
             ],
           },
+          ...(branchOpts.length > 1
+            ? [{ type: "multi" as const, key: "branch", label: "Branch", options: branchOpts.map((b) => ({ value: b.id, label: b.name })) }]
+            : []),
+          ...(deskOpts.length > 0
+            ? [{ type: "multi" as const, key: "desk", label: "Desk", options: deskOpts.map((d) => ({ value: d.id, label: d.name })) }]
+            : []),
           {
             type: "multi",
             key: "status",
@@ -274,6 +304,9 @@ export default async function EmployeesPage({
                       </td>
                       <td className="py-3 text-xs capitalize">
                         {e.department ? e.department.replace(/_/g, " ") : ""}
+                        {e.desk_name && (
+                          <div className="text-[10px] normal-case text-muted-foreground">Desk: {e.desk_name}</div>
+                        )}
                       </td>
                       <td className="py-3 text-xs">{e.manager_name ?? ""}</td>
                       <td className="py-3 text-xs text-muted-foreground tabular-nums">

@@ -28,6 +28,8 @@ export type AttRow = {
   clock_in_at: string | null;
   clock_out_at: string | null;
   total_minutes: number | null;
+  /** Every clock-in/out session of the day (first in / last out are the editable cells). */
+  punches?: Array<{ in: string; out: string | null }> | null;
   note: string | null;
   source?: string | null;
   is_late?: boolean;
@@ -289,6 +291,11 @@ export function AttendanceTable({ rows, canManage, toolbar }: { rows: AttRow[]; 
                       </span>
                     )}
                   </div>
+                  {r.punches && r.punches.length > 1 && (
+                    <div className="mt-1 text-[10px] text-muted-foreground whitespace-nowrap" title="All clock-in / clock-out sessions that day">
+                      {r.punches.map((p) => `${hhmm(p.in)}–${p.out ? hhmm(p.out) : "now"}`).join(" · ")}
+                    </div>
+                  )}
                 </td>
                 <td className="py-2.5 text-right text-xs tabular-nums">
                   {r.total_minutes && r.total_minutes > 0 ? (

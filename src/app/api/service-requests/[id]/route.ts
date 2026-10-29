@@ -16,6 +16,7 @@ import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { notifyClientTeam } from "@/lib/notifications/client-team";
+import { becameFinished, notifyServiceRequestFinished } from "@/lib/notifications/service-request";
 import { sql } from "drizzle-orm";
 import { serviceRequests, eventsOutbox } from "@/db/schema";
 
@@ -161,7 +162,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         after: parse.data as any,
         ...clientMeta,
       });
-      if (before.investorId) {
+      if (becameFinished(before.status, d.status)) {
+        await notifyServiceRequestFinished(tx, {
+          tenantId: session.tenantId,
+          actorUserId: session.userId,
+          status: d.status as string,
+          request: {
+            id,
+            ticketNo: before.ticketNo,
+            subject: before.subject,
+            investorId: before.investorId ?? null,
+            assignedToUserId: after[0]?.assignedToUserId ?? before.assignedToUserId ?? null,
+            timeline: before.timeline,
+          },
+        });
+      } else if (before.investorId) {
         await notifyClientTeam(tx, {
           tenantId: session.tenantId,
           investorId: before.investorId,
@@ -235,6 +250,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         entityId: id,
         ...clientMeta,
       });
+      if (becameFinished(before.status, "closed")) {
+        await notifyServiceRequestFinished(tx, {
+          tenantId: session.tenantId,
+          actorUserId: session.userId,
+          status: "closed",
+          request: {
+            id,
+            ticketNo: before.ticketNo,
+            subject: before.subject,
+            investorId: before.investorId ?? null,
+            assignedToUserId: before.assignedToUserId ?? null,
+            timeline: before.timeline,
+          },
+        });
+      }
       return "closed" as const;
     });
 

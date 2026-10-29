@@ -281,7 +281,7 @@ function absUrl(url: string): string {
   return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
 }
 
-async function embedLogo(doc: PDFDocument, rawUrl?: string | null): Promise<PDFImage | null> {
+export async function embedLogo(doc: PDFDocument, rawUrl?: string | null): Promise<PDFImage | null> {
   if (!rawUrl) return null;
   try {
     const url = absUrl(rawUrl);
@@ -313,13 +313,13 @@ function drawGradientStrip(page: PDFPage, x: number, y: number, w: number, h: nu
   }
 }
 
-function fmtDate(iso: string | null | undefined): string {
+export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
-function fmtDateTime(iso: string): string {
+export function fmtDateTime(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -327,7 +327,7 @@ function fmtDateTime(iso: string): string {
 function titleCase(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+export function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
   const words = (text || "").split(/\s+/).filter(Boolean);
   const lines: string[] = [];
   let cur = "";
@@ -339,12 +339,12 @@ function wrap(text: string, font: PDFFont, size: number, maxWidth: number): stri
   if (cur) lines.push(cur);
   return lines.length ? lines : [""];
 }
-function ascii(s: string): string {
+export function ascii(s: string): string {
   if (!s) return "";
   // Keeps "₹" when the Unicode font is embedded; strips/converts otherwise.
   return pdfSanitize(s.replace(/·/g, "-"), KEEP_RUPEE);
 }
-function hexToRgb(hex: string | null | undefined): RGB {
+export function hexToRgb(hex: string | null | undefined): RGB {
   const m = (hex ?? "").replace(/^#/, "").match(/^([0-9a-fA-F]{6})$/);
   if (!m) return DEFAULT_PRIMARY;
   const parts = m[1].match(/.{2}/g)!;

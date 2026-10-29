@@ -19,6 +19,7 @@ const SCOPES = [
   { value: "", label: "All tasks" },
   { value: "to_me", label: "Assigned to me" },
   { value: "by_me", label: "Assigned by me" },
+  { value: "other", label: "Other activity" },
 ];
 
 export function TaskViewSelect({ current, layout }: { current: string; layout: string }) {

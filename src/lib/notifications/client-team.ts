@@ -30,6 +30,8 @@ export async function notifyClientTeam(
     title: string;
     body?: string | null;
     linkUrl?: string | null;
+    /** Users who have already been told about this — skipped here. */
+    exclude?: Set<string>;
   }
 ): Promise<void> {
   try {
@@ -93,6 +95,7 @@ export async function notifyClientTeam(
     `);
     for (const u of named.rows as { id: string }[]) to.add(u.id);
     to.delete(n.actorUserId);
+    for (const x of n.exclude ?? []) to.delete(x);
 
     for (const userId of to) {
       await createNotification(tx, {

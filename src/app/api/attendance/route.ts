@@ -16,6 +16,7 @@ import { can } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { ATTENDANCE_STATUSES } from "@/db/schema";
 import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
+import { punchesOf, summarise } from "@/lib/attendance/punches";
 
 export const dynamic = "force-dynamic";
 
@@ -66,29 +67,37 @@ export async function POST(req: NextRequest) {
     const date = parse.data.date.slice(0, 10);
     const clockInIso = parse.data.clockInAt ? new Date(parse.data.clockInAt).toISOString() : null;
     const clockOutIso = parse.data.clockOutAt ? new Date(parse.data.clockOutAt).toISOString() : null;
-    const totalMin =
-      clockInIso && clockOutIso
-        ? Math.max(0, Math.round((new Date(clockOutIso).getTime() - new Date(clockInIso).getTime()) / 60000))
-        : null;
     const clientMeta = clientMetaFromHeaders(req.headers);
 
     await withTenant(session.tenantId, async (tx) => {
+      // A corrected time edits the day's first "in" / last "out"; any sessions in
+      // between are kept, and the worked minutes are re-summed over all of them.
+      const cur = await tx.execute(sql`
+        SELECT punches, clock_in_at, clock_out_at, total_minutes FROM attendance
+         WHERE tenant_id = ${session.tenantId}::uuid AND employee_user_id = ${employeeUserId}::uuid
+           AND attendance_date = ${date}::date
+         FOR UPDATE
+      `);
+      const punches = punchesOf(cur.rows[0]);
+      if (clockInIso) {
+        if (punches.length) punches[0].in = clockInIso;
+        else punches.push({ in: clockInIso, out: null });
+      }
+      if (clockOutIso && punches.length) punches[punches.length - 1].out = clockOutIso;
+      const s = summarise(punches);
+      const hasPunches = punches.length > 0;
       await tx.execute(sql`
-        INSERT INTO attendance (tenant_id, employee_user_id, attendance_date, status, note, clock_in_at, clock_out_at, total_minutes, source)
+        INSERT INTO attendance (tenant_id, employee_user_id, attendance_date, status, note, punches, clock_in_at, clock_out_at, total_minutes, source)
         VALUES (${session.tenantId}::uuid, ${employeeUserId}::uuid, ${date}::date, ${status}, ${note ?? null},
-                ${clockInIso}::timestamptz, ${clockOutIso}::timestamptz, ${totalMin}, 'manual')
+                ${hasPunches ? JSON.stringify(punches) : null}::jsonb,
+                ${s.clockInAt}::timestamptz, ${s.clockOutAt ?? clockOutIso}::timestamptz, ${s.totalMinutes}, 'manual')
         ON CONFLICT (tenant_id, employee_user_id, attendance_date) DO UPDATE SET
           status = EXCLUDED.status,
           note = COALESCE(EXCLUDED.note, attendance.note),
+          punches = COALESCE(EXCLUDED.punches, attendance.punches),
           clock_in_at = COALESCE(EXCLUDED.clock_in_at, attendance.clock_in_at),
           clock_out_at = COALESCE(EXCLUDED.clock_out_at, attendance.clock_out_at),
-          total_minutes = CASE
-            WHEN COALESCE(EXCLUDED.clock_in_at, attendance.clock_in_at) IS NOT NULL
-             AND COALESCE(EXCLUDED.clock_out_at, attendance.clock_out_at) IS NOT NULL
-            THEN GREATEST(0, ROUND(EXTRACT(EPOCH FROM (
-                 COALESCE(EXCLUDED.clock_out_at, attendance.clock_out_at) - COALESCE(EXCLUDED.clock_in_at, attendance.clock_in_at)
-               )) / 60))::int
-            ELSE attendance.total_minutes END,
+          total_minutes = COALESCE(EXCLUDED.total_minutes, attendance.total_minutes),
           updated_at = now()
       `);
       await recordAudit(tx, {

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { ShieldCheck, AlertTriangle, Plus, ArrowRight } from "lucide-react";
+import { ShieldCheck, AlertTriangle, Plus, ArrowRight, Download } from "lucide-react";
+import { DownloadButton } from "@/components/common/SecureLinkButtons";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny, can } from "@/lib/auth/rbac";
@@ -156,9 +157,18 @@ export default async function RiskProfilesPage({
             <ShieldCheck className="size-6 text-brand-cyan" /> Risk profiles
           </h1>
         </div>
-        <Link href="/dashboard/risk-profiles/new" className="btn-primary">
-          <Plus className="size-4" /> New Risk Profile
-        </Link>
+        <div className="flex items-center gap-2">
+          <DownloadButton
+            url="/api/risk-profile-template/pdf?download=1"
+            className="btn-secondary inline-flex items-center gap-1.5"
+            title="Printable blank questionnaire to hand to a client"
+          >
+            <Download className="size-4" /> Blank form (PDF)
+          </DownloadButton>
+          <Link href="/dashboard/risk-profiles/new" className="btn-primary">
+            <Plus className="size-4" /> New Risk Profile
+          </Link>
+        </div>
       </div>
 
       {/* Filter tabs */}

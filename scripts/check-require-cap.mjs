@@ -58,6 +58,9 @@ const SKIP_FILES = new Set([
   // ever touch their own row, so a capability check would be meaningless.
   "me/password/route.ts",
   "me/profile/route.ts",
+  // Session keep-alive — re-signs the caller's OWN already-valid, non-revoked
+  // token (same claims, same sid); it grants nothing the cookie didn't already.
+  "session/keepalive/route.ts",
   // SOP acknowledgement — any user records their OWN read receipt (scoped to
   // session.userId, idempotent unique). Mirrors notifications/mark-read.
   "sops/[id]/acknowledge/route.ts",

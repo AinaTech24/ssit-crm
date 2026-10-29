@@ -81,6 +81,12 @@ const Body = z.object({
     .optional(),
   boChannel: z.enum(["online", "offline"]).optional(),
   boValue: z.number().min(0).max(1e12).optional(),
+  /**
+   * "Other activity" — day-to-day work that isn't a client task (bank work, AMC
+   * work, BA service…). Stored as a task of type `other_activity` with the kind in
+   * meta, and listed under its own Tasks tab instead of the normal task list.
+   */
+  activityKind: z.enum(["bank_work", "amc_work", "ba_service", "other"]).optional(),
 });
 
 /**
@@ -271,7 +277,7 @@ export async function POST(req: NextRequest) {
         relatedServiceRequestId: body.relatedServiceRequestId ?? null,
         relatedMeetingId: body.relatedMeetingId ?? null,
         department: body.department ?? (body.contentKind ? "marketing" : null),
-        type: body.contentKind ? "marketing_content" : body.type,
+        type: body.contentKind ? "marketing_content" : body.activityKind ? "other_activity" : body.type,
         title: body.title,
         description: body.description,
         remarks: body.remarks,
@@ -295,6 +301,7 @@ export async function POST(req: NextRequest) {
           if (body.boParticular) m.boParticular = body.boParticular;
           if (body.boChannel) m.boChannel = body.boChannel;
           if (body.boValue != null) m.boValue = body.boValue;
+          if (body.activityKind) m.activityKind = body.activityKind;
           if (body.contentKind) {
             m.contentKind = body.contentKind;
             if (body.eventKey) m.eventKey = body.eventKey;

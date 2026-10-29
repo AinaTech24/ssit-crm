@@ -25,6 +25,12 @@ export async function GET(req: NextRequest) {
 
     const like = `%${q}%`;
     const likeUpper = `%${q.toUpperCase()}%`;
+    // Name pickers (e.g. the referral field) ask for more rows than the 5-per-group
+    // header search, and match "Dr. Aditya" when typed as "dr aditya".
+    const limitParam = Number(url.searchParams.get("limit"));
+    const personLimit = Number.isFinite(limitParam) && limitParam > 5 ? Math.min(Math.floor(limitParam), 25) : 5;
+    const likeLoose = `%${q.replace(/[.,]/g, " ").replace(/\s+/g, " ")}%`;
+    const startsWith = `${q}%`;
 
     const results = await withTenant(session.tenantId, async (tx) => {
       // Same data wall as the Clients/Leads list pages — this search bar is
@@ -42,18 +48,22 @@ export async function GET(req: NextRequest) {
         tx.execute(sql`
           SELECT id, name, pan, phone, email, segment_tag
           FROM investors
-          WHERE tenant_id = ${session.tenantId}::uuid AND deleted_at IS NULL AND (name ILIKE ${like} OR pan ILIKE ${likeUpper}
+          WHERE tenant_id = ${session.tenantId}::uuid AND deleted_at IS NULL AND (name ILIKE ${like}
+             OR regexp_replace(name, '[.,]', ' ', 'g') ILIKE ${likeLoose} OR pan ILIKE ${likeUpper}
              OR phone ILIKE ${like} OR email ILIKE ${like})
             AND ${investorScope}
-          LIMIT 5
+          ORDER BY (name ILIKE ${startsWith}) DESC, name ASC
+          LIMIT ${personLimit}
         `),
         tx.execute(sql`
           SELECT id, name, phone, email, stage, source
           FROM leads
-          WHERE tenant_id = ${session.tenantId}::uuid AND (name ILIKE ${like} OR phone ILIKE ${like} OR email ILIKE ${like})
+          WHERE tenant_id = ${session.tenantId}::uuid AND (name ILIKE ${like}
+             OR regexp_replace(name, '[.,]', ' ', 'g') ILIKE ${likeLoose} OR phone ILIKE ${like} OR email ILIKE ${like})
             AND converted_investor_id IS NULL
             AND ${leadScope}
-          LIMIT 5
+          ORDER BY (name ILIKE ${startsWith}) DESC, name ASC
+          LIMIT ${personLimit}
         `),
         tx.execute(sql`
           SELECT f.id, f.folio_number, f.amc_name, f.aum, i.name AS investor_name, i.id AS investor_id

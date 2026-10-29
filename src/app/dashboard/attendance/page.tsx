@@ -66,7 +66,7 @@ export default async function AttendancePage({
 
     const rowsRes = await tx.execute(sql`
       SELECT a.id, a.employee_user_id, a.attendance_date, a.status, a.clock_in_at, a.clock_out_at,
-             a.total_minutes, a.note, a.source, u.name AS employee_name, u.avatar_url AS employee_avatar_url
+             a.total_minutes, a.punches, a.note, a.source, u.name AS employee_name, u.avatar_url AS employee_avatar_url
       FROM attendance a LEFT JOIN users u ON u.id = a.employee_user_id
       ${whereSql}
       ORDER BY a.attendance_date DESC, u.name ASC
@@ -94,7 +94,7 @@ export default async function AttendancePage({
     `);
 
     const myToday = await tx.execute(sql`
-      SELECT clock_in_at, clock_out_at, total_minutes, status FROM attendance
+      SELECT clock_in_at, clock_out_at, total_minutes, punches, status FROM attendance
       WHERE tenant_id = ${session.tenantId}::uuid AND employee_user_id = ${session.userId}::uuid AND attendance_date = current_date
       LIMIT 1
     `);

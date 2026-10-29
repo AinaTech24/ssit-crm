@@ -27,9 +27,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   GripVertical,
+  Download,
   X,
 } from "lucide-react";
 import { v4 as uuid } from "uuid";
+import { DownloadButton } from "@/components/common/SecureLinkButtons";
 
 type Option = { value: string; label: string; score: number };
 type Question = { key: string; label: string; helperText?: string; type: "single"; options: Option[] };
@@ -296,6 +298,13 @@ export function RiskTemplateEditor({
           </span>
         )}
         {saved && <span className="chip bg-emerald-50 text-emerald-700">✓ Published</span>}
+        <DownloadButton
+          url="/api/risk-profile-template/pdf?download=1"
+          className={`chip inline-flex items-center gap-1 ${saved ? "bg-brand-cyan text-white" : "bg-secondary hover:bg-accent"}`}
+          title="Printable questionnaire of the published version — every department can download it"
+        >
+          <Download className="size-3" /> {saved ? "Download the published form (PDF)" : "Download form (PDF)"}
+        </DownloadButton>
       </div>
 
       {error && (
