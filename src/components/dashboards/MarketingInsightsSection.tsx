@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { Heart, ShieldQuestion, ListChecks, MessageCircle } from "lucide-react";
+import { Heart, ListChecks, MessageCircle } from "lucide-react";
 import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
 
@@ -10,7 +10,6 @@ import type { SessionUser } from "@/lib/auth/session";
  *   1. Service-vs-marketing comm split (% utility/transactional vs marketing)
  *   2. Consent base health (WA opt-in %, email deliverability, unsubscribes)
  *   3. Template approval pipeline (Meta WA + internal approvals)
- *   4. Source conversion (which sources actually convert, not just generate leads)
  */
 export async function MarketingInsightsSection({ session }: { session: SessionUser }) {
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
@@ -18,7 +17,7 @@ export async function MarketingInsightsSection({ session }: { session: SessionUs
   const data = await withTenant(
     session.tenantId,
     async (tx) => {
-      const [commsSplit, consentHealth, templatePipeline, sourceConversion] = await Promise.all([
+      const [commsSplit, consentHealth, templatePipeline] = await Promise.all([
         // 1. Service vs marketing comm split — last 30 days
         await tx.execute(sql`
           SELECT
@@ -77,20 +76,6 @@ export async function MarketingInsightsSection({ session }: { session: SessionUs
             (SELECT EXTRACT(DAY FROM (now() - MIN(created_at)))::int FROM whatsapp_templates
               WHERE meta_status = 'PENDING') AS oldest_pending_days
         `),
-
-        // 4. Source-wise conversion MTD
-        await tx.execute(sql`
-          SELECT
-            source,
-            COUNT(*)::int AS leads,
-            COUNT(*) FILTER (WHERE converted_investor_id IS NOT NULL)::int AS converted
-          FROM leads
-          WHERE created_at >= ${startOfMonth}
-          GROUP BY source
-          HAVING COUNT(*) > 0
-          ORDER BY converted DESC, leads DESC
-          LIMIT 6
-        `),
       ]);
 
       const split = commsSplit.rows[0] as any;
@@ -132,12 +117,6 @@ export async function MarketingInsightsSection({ session }: { session: SessionUs
           metaApproved: Number(tp.meta_approved),
           oldestPendingDays: tp.oldest_pending_days != null ? Number(tp.oldest_pending_days) : null,
         },
-        sourceConversion: (sourceConversion.rows as any[]).map((r) => ({
-          source: String(r.source),
-          leads: Number(r.leads),
-          converted: Number(r.converted),
-          convPct: Number(r.leads) > 0 ? (Number(r.converted) / Number(r.leads)) * 100 : 0,
-        })),
       };
     },
     { userId: session.userId, branchId: session.branchId, roles: session.roles }
@@ -302,58 +281,6 @@ export async function MarketingInsightsSection({ session }: { session: SessionUs
         </div>
       </div>
 
-      {/* Source conversion */}
-      <div className="card-surface glass-card p-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold flex items-center gap-2 text-sm tracking-tight text-foreground/90">
-            <div className="size-7 rounded-lg bg-violet-50 grid place-items-center">
-              <ShieldQuestion className="size-3.5 text-violet-700" />
-            </div>
-            Source conversion (MTD)
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            Which channels actually deliver clients
-          </span>
-        </div>
-        {data.sourceConversion.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">
-            No leads attributed by source yet.
-          </p>
-        ) : (
-          <table className="w-full text-xs">
-            <thead className="text-[10px] text-muted-foreground uppercase tracking-wider">
-              <tr>
-                <th className="text-left pb-2">Source</th>
-                <th className="text-right pb-2">Leads</th>
-                <th className="text-right pb-2">Converted</th>
-                <th className="text-right pb-2">Conv %</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {data.sourceConversion.map((s) => (
-                <tr key={s.source}>
-                  <td className="py-2 font-medium capitalize">
-                    {s.source.replace(/_/g, " ")}
-                  </td>
-                  <td className="py-2 text-right tabular-nums">{s.leads}</td>
-                  <td className="py-2 text-right tabular-nums">{s.converted}</td>
-                  <td
-                    className={`py-2 text-right tabular-nums font-bold ${
-                      s.convPct >= 20
-                        ? "text-emerald-700"
-                        : s.convPct >= 10
-                        ? "text-amber-700"
-                        : "text-rose-700"
-                    }`}
-                  >
-                    {s.convPct.toFixed(1)}%
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }

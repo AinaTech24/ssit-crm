@@ -11,8 +11,8 @@ import { MarketingInsightsSection } from "./MarketingInsightsSection";
 
 /**
  * Marketing dashboard — content + campaign focused.
- * Per spec section 2:
- *   Campaigns this month · Leads generated campaign-wise
+ * Marketing-only: no lead or lead-source figures live here.
+ *   Campaigns this month · Content created · Messages sent
  *   Pending creatives · Content pending approval · Posted content archive
  *   Social media calendar · Event registrations · Webinar follow-ups
  */
@@ -34,10 +34,8 @@ export async function MarketingDashboard({
       SELECT
         (SELECT COUNT(*)::int FROM campaigns WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS campaigns_mtd,
         (SELECT COUNT(*)::int FROM campaigns WHERE status IN ('sending', 'scheduled')) AS active_campaigns,
-        (SELECT COUNT(*)::int FROM leads WHERE created_at >= ${fromISO} AND created_at <= ${toISO}
-            AND source IN ('website', 'meta_ads', 'google_ads', 'social_media', 'webinar')) AS leads_mtd,
-        (SELECT COUNT(*)::int FROM leads WHERE converted_investor_id IS NOT NULL
-            AND converted_at >= ${fromISO} AND converted_at <= ${toISO}) AS conversions_mtd,
+        (SELECT COUNT(*)::int FROM templates WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS content_mtd,
+        (SELECT COALESCE(SUM(sent_count), 0)::int FROM campaigns WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS sent_mtd,
         (SELECT COUNT(*)::int FROM templates WHERE status = 'pending_approval' AND category = 'marketing') AS pending_approval
     `);
     const s = r.rows[0] as any;
@@ -50,23 +48,13 @@ export async function MarketingDashboard({
       LIMIT 8
     `);
 
-    // Lead sources roll-up for the period
-    const leadSources = await tx.execute(sql`
-      SELECT source, COUNT(*)::int AS c
-      FROM leads
-      WHERE created_at >= ${fromISO} AND created_at <= ${toISO}
-      GROUP BY source
-      ORDER BY c DESC
-    `);
-
     return {
       campaignsMtd: Number(s.campaigns_mtd),
       activeCampaigns: Number(s.active_campaigns),
-      leadsMtd: Number(s.leads_mtd),
-      conversionsMtd: Number(s.conversions_mtd),
+      contentMtd: Number(s.content_mtd),
+      sentMtd: Number(s.sent_mtd),
       pendingApproval: Number(s.pending_approval),
       campaigns: campaignsList.rows as any[],
-      leadSources: leadSources.rows as any[],
     };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
@@ -83,7 +71,7 @@ export async function MarketingDashboard({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Marketing dashboard</h1>
           <p className="text-muted-foreground text-sm">
-            Campaigns, content, lead flow · <span className="font-medium">{range.label}</span>
+            Campaigns and content · <span className="font-medium">{range.label}</span>
           </p>
         </div>
         <PeriodSelector current={period ?? "mtd"} variant="light" />
@@ -92,14 +80,14 @@ export async function MarketingDashboard({
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Kpi label="Campaigns" value={String(data.campaignsMtd)} />
         <Kpi label="Active right now" value={String(data.activeCampaigns)} />
-        <Kpi label="Leads (marketing)" value={String(data.leadsMtd)} />
-        <Kpi label="Conversions" value={String(data.conversionsMtd)} />
+        <Kpi label="Content created" value={String(data.contentMtd)} />
+        <Kpi label="Messages sent" value={data.sentMtd.toLocaleString("en-IN")} />
         <Kpi label="Approval queue" value={String(data.pendingApproval)} tone={data.pendingApproval > 0 ? "amber" : "muted"} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Campaign ROI visual */}
-        <div className="lg:col-span-2 card-surface glass-card p-5">
+        <div className="lg:col-span-3 card-surface glass-card p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold flex items-center gap-2 text-sm tracking-tight text-foreground/90">
               <Megaphone className="size-4 text-brand-cyan-deep" /> Campaign ROI Performance
@@ -120,27 +108,6 @@ export async function MarketingDashboard({
           )}
         </div>
 
-        {/* Lead sources list */}
-        <div className="card-surface glass-card p-5">
-          <h2 className="font-semibold text-sm tracking-tight text-foreground/90 mb-3">Lead sources · {range.label}</h2>
-          {data.leadSources.length === 0 ? (
-            <DashboardEmptyState
-              compact
-              title="No marketing leads this period"
-              hint="Lead sources will appear here as new leads come in."
-              cta={{ href: "/dashboard/leads", label: "View leads" }}
-            />
-          ) : (
-            <ul className="space-y-2 text-sm">
-              {data.leadSources.map((s: any) => (
-                <li key={s.source} className="flex items-center justify-between py-1.5 border-b last:border-0 border-border/40">
-                  <span className="capitalize font-medium">{s.source.replace(/_/g, " ")}</span>
-                  <span className="font-semibold tabular-nums chip bg-secondary">{s.c}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </div>
 
       {/* Quick Actions */}
@@ -148,11 +115,10 @@ export async function MarketingDashboard({
         <h2 className="font-semibold flex items-center gap-2 text-sm tracking-tight text-foreground/90 mb-4">
           <Send className="size-4 text-brand-cyan-deep" /> Quick Actions
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Action href="/dashboard/campaigns/new" label="Create broadcast" />
           <Action href="/dashboard/templates/new" label="Create template" />
           <Action href="/dashboard/ssit-library" label="Browse content library" />
-          <Action href="/dashboard/leads" label="Review new leads" />
         </div>
       </div>
 
