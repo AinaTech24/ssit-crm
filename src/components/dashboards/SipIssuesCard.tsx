@@ -1,5 +1,5 @@
 /**
- * SIP bounced + SIP rejected, as one table.
+ * SIP bounced and SIP rejected, as two separate tables.
  *
  *   Bounced   — an installment of a running SIP that did not debit (the marks the
  *               SIP Tracker's installment watch records as "bounced").
@@ -25,7 +25,7 @@ const fmtDate = (v: unknown) =>
   v ? new Date(String(v)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
 export async function SipIssuesCard({ session, targetUserId }: { session: SessionUser; targetUserId?: string }) {
-  let d: { rows: Rec[]; bounced: number; rejected: number; rejectedOpen: number; atStake: number };
+  let d: { bouncedRows: Rec[]; rejectedRows: Rec[]; bounced: number; rejected: number; rejectedOpen: number; atStake: number };
   try {
     d = await withTenant(
       session.tenantId,
@@ -59,14 +59,12 @@ export async function SipIssuesCard({ session, targetUserId }: { session: Sessio
                AND ${wall} AND ${rmOnly}
              ORDER BY sr.rejection_date DESC LIMIT 25`),
         ]);
-        const bounced = (b.rows as Rec[]).map((x): Rec => ({ ...x, issue: "Bounced" }));
-        const rejected = (r.rows as Rec[]).map((x): Rec => ({ ...x, issue: "Rejected" }));
-        const rows = [...bounced, ...rejected]
-          .sort((x, y) => String(y.on_date).localeCompare(String(x.on_date)))
-          .slice(0, 12);
+        const bounced = b.rows as Rec[];
+        const rejected = r.rows as Rec[];
         const openRows = rejected.filter((x) => x.is_open);
         return {
-          rows,
+          bouncedRows: bounced.slice(0, 12),
+          rejectedRows: rejected.slice(0, 12),
           bounced: bounced.length,
           rejected: rejected.length,
           rejectedOpen: openRows.length,
@@ -81,62 +79,94 @@ export async function SipIssuesCard({ session, targetUserId }: { session: Sessio
   }
 
   return (
+    <div className="space-y-4">
+      <IssueTable
+        title="SIP bounced"
+        note="installments that did not debit · last 90 days"
+        stats={[{ label: "Bounced", value: String(d.bounced) }]}
+        link={{ href: "/dashboard/sips/at-risk", label: "SIP tracker" }}
+        statusHeading="Installment"
+        empty="No bounced SIP installments in the last 90 days."
+        rows={d.bouncedRows}
+      />
+      <IssueTable
+        title="SIP rejected"
+        note="rejections reported by the RTA · last 90 days"
+        stats={[
+          { label: "Rejected", value: String(d.rejected) },
+          { label: "Open", value: String(d.rejectedOpen) },
+          ...(d.atStake > 0 ? [{ label: "To recover", value: inr(d.atStake) }] : []),
+        ]}
+        link={{ href: "/dashboard/sip-rejections", label: "All rejections" }}
+        statusHeading="Status"
+        empty="No rejected SIPs in the last 90 days."
+        rows={d.rejectedRows}
+      />
+    </div>
+  );
+}
+
+function IssueTable({
+  title,
+  note,
+  stats,
+  link,
+  statusHeading,
+  empty,
+  rows,
+}: {
+  title: string;
+  note: string;
+  stats: { label: string; value: string }[];
+  link: { href: string; label: string };
+  statusHeading: string;
+  empty: string;
+  rows: Rec[];
+}) {
+  return (
     <div className="rounded-xl border bg-card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold">
-          <AlertTriangle className="size-4 text-muted-foreground" /> SIP bounced &amp; rejected
-          <span className="text-xs font-normal text-muted-foreground">last 90 days</span>
+          <AlertTriangle className="size-4 text-muted-foreground" /> {title}
+          <span className="text-xs font-normal text-muted-foreground">{note}</span>
         </div>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>
-            Bounced <b className="text-foreground tabular-nums">{d.bounced}</b>
-          </span>
-          <span>
-            Rejected <b className="text-foreground tabular-nums">{d.rejected}</b>
-          </span>
-          <span>
-            Open <b className="text-foreground tabular-nums">{d.rejectedOpen}</b>
-          </span>
-          {d.atStake > 0 && (
-            <span>
-              To recover <b className="text-foreground tabular-nums">{inr(d.atStake)}</b>
+          {stats.map((s) => (
+            <span key={s.label}>
+              {s.label} <b className="text-foreground tabular-nums">{s.value}</b>
             </span>
-          )}
-          <Link href="/dashboard/sip-rejections" className="hover:underline">
-            All rejections
+          ))}
+          <Link href={link.href} className="hover:underline">
+            {link.label}
           </Link>
         </div>
       </div>
       <div className="table-scroll">
-        <table className="w-full min-w-[720px] text-xs">
+        <table className="w-full min-w-[640px] text-xs">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
               <th className="px-3 py-2 text-left">Client</th>
-              <th className="px-3 py-2 text-left">Issue</th>
               <th className="px-3 py-2 text-left">Scheme</th>
               <th className="px-3 py-2 text-right">Amount</th>
               <th className="px-3 py-2 text-left">Date</th>
               <th className="px-3 py-2 text-left">RM</th>
-              <th className="px-3 py-2 text-left">Status</th>
+              <th className="px-3 py-2 text-left">{statusHeading}</th>
             </tr>
           </thead>
           <tbody>
-            {d.rows.length === 0 ? (
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
-                  No bounced or rejected SIPs in the last 90 days.
+                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                  {empty}
                 </td>
               </tr>
             ) : (
-              d.rows.map((x, i) => (
-                <tr key={`${x.issue}-${i}`} className="border-t">
+              rows.map((x, i) => (
+                <tr key={i} className="border-t">
                   <td className="px-3 py-2">
                     <Link href={`/dashboard/investors/${x.investor_id}`} className="font-medium hover:underline">
                       {x.client}
                     </Link>
-                  </td>
-                  <td className="px-3 py-2">
-                    <span className="chip bg-secondary">{x.issue}</span>
                   </td>
                   <td className="px-3 py-2 max-w-[240px] truncate" title={x.scheme_name ?? ""}>
                     {x.scheme_name ?? "—"}

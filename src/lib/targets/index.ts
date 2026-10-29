@@ -40,7 +40,8 @@ export function monthRange(period: string): { from: string; to: string } {
   return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(last).padStart(2, "0")}` };
 }
 
-export const currentPeriod = () => new Date().toISOString().slice(0, 7);
+/** Current month in India time — UTC would still say last month until 5:30 am on the 1st. */
+export const currentPeriod = () => new Date(Date.now() + 330 * 60_000).toISOString().slice(0, 7);
 export const validPeriod = (p: unknown): p is string => typeof p === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(p);
 
 /** metric → (user id → value) for one month. */

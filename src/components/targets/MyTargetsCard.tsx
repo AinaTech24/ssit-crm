@@ -31,7 +31,31 @@ export async function MyTargetsCard({ session }: { session: SessionUser }) {
   }
   const isManager = session.roles.includes("owner") || session.roles.includes("branch_head");
   const shown = isManager ? cards : cards.filter((c) => c.subjectType !== "user" || c.subjectId === session.userId);
-  if (shown.length === 0) return null;
+  const monthLabel = new Date(`${period}-01T00:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  if (shown.length === 0) {
+    // Stay visible: a card that vanishes looks like a broken dashboard. The
+    // targets only appear once the admin has saved this month's grid and ticked
+    // who gets to see it, so say so.
+    const isOwner = session.roles.includes("owner");
+    return (
+      <div className="mb-6 rounded-xl border bg-card">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Target className="size-4 text-brand-cyan" />
+            {isManager ? "Targets & achievement" : "My targets"} · {monthLabel}
+          </div>
+          <Link href="/dashboard/targets" className="text-xs text-muted-foreground hover:underline">
+            {isOwner ? "Set targets" : "All targets"}
+          </Link>
+        </div>
+        <p className="px-4 py-4 text-xs text-muted-foreground">
+          {isOwner
+            ? `No targets are set for ${monthLabel}. Set them on the Targets page and tick “show” for the people who should see theirs.`
+            : `No targets have been shown to you for ${monthLabel}. Your admin sets them on the Targets page.`}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="mb-6 rounded-xl border bg-card">
       <div className="flex items-center justify-between border-b px-4 py-3">
