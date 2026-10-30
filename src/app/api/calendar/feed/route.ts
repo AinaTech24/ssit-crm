@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { withSystem, withTenant } from "@/db/client";
 import { users } from "@/db/schema";
 import { can } from "@/lib/auth/rbac";
+import { isBackOfficeOnly } from "@/lib/auth/data-scope";
 import { getCalendarItems } from "@/lib/calendar/items";
 import { loadDelegatedUserIds } from "@/lib/auth/data-scope";
 
@@ -62,6 +63,7 @@ export async function GET(req: NextRequest) {
           tasksAll: can(roles, "task.view.all", perms),
           leadsAll: can(roles, "lead.view.all", perms),
           investorsAll: can(roles, "investor.view.all", perms),
+          backOfficeOnly: isBackOfficeOnly(roles),
           // Meetings this user runs for a colleague (users.delegates_for) show on
           // their own calendar too — an EA books the partner's diary from here.
           delegatedUserIds: await loadDelegatedUserIds(tx, user.tenantId, user.id),

@@ -3,6 +3,7 @@ import { CalendarDays, ArrowLeft, Plus } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
+import { isBackOfficeOnly } from "@/lib/auth/data-scope";
 import { InteractiveCalendar } from "@/components/calendar/InteractiveCalendar";
 import { getCalendarItems } from "@/lib/calendar/items";
 import { loadDelegatedUserIds } from "@/lib/auth/data-scope";
@@ -56,6 +57,7 @@ export default async function TasksCalendarPage({
         tasksAll: can(session.roles, "task.view.all", session.permissions),
         leadsAll: can(session.roles, "lead.view.all", session.permissions),
         investorsAll: can(session.roles, "investor.view.all", session.permissions),
+        backOfficeOnly: isBackOfficeOnly(session.roles),
         // Meetings this user runs for a colleague (users.delegates_for) show on
         // their own calendar too — an EA books the partner's diary from here.
         delegatedUserIds: await loadDelegatedUserIds(tx, session.tenantId, session.userId),

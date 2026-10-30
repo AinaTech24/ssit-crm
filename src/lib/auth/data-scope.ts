@@ -42,6 +42,18 @@ import type { SessionUser } from "@/lib/auth/session";
  */
 export const ALL_BRANCH_ROLES = ["owner", "back_office", "ops"];
 
+/**
+ * Back office / ops with no wider role. They need every CLIENT in the firm to run
+ * transactions and onboarding, but leads and meetings are sales work — see
+ * resolveSalesDataScope.
+ */
+export function isBackOfficeOnly(roles: string[]): boolean {
+  return (
+    roles.some((r) => r === "back_office" || r === "ops") &&
+    !roles.some((r) => r === "owner" || r === "branch_head")
+  );
+}
+
 export function seesAllBranches(session: SessionUser): boolean {
   return session.roles.some((r) => ALL_BRANCH_ROLES.includes(r));
 }
@@ -206,7 +218,7 @@ export type MeetingScope = { scope: DataScope; delegatedIds: string[]; userId: s
  */
 export async function resolveMeetingScope(tx: any, session: SessionUser): Promise<MeetingScope> {
   const [scope, delegatedIds] = await Promise.all([
-    resolveDataScope(tx, session),
+    resolveSalesDataScope(tx, session),
     loadDelegatedUserIds(tx, session.tenantId, session.userId),
   ]);
   // Research (RA) works only the meetings assigned to them — booked by them or
@@ -279,6 +291,20 @@ export function isMeetingInScope(
   if (row.ownerId && ms.delegatedIds.includes(row.ownerId)) return true;
   if (row.createdById && ms.delegatedIds.includes(row.createdById)) return true;
   return isInScope(ms.scope, { branchId: row.branchId, ownerId: row.ownerId ?? row.createdById });
+}
+
+/**
+ * The wall for LEADS and MEETINGS.
+ *
+ * Same as resolveDataScope except that back office / ops — firm-wide for clients
+ * because that is their job — see only their own leads and meetings. An admin's
+ * explicit "sees everything" on their employee record still wins.
+ */
+export async function resolveSalesDataScope(tx: any, session: SessionUser): Promise<DataScope> {
+  const scope = await resolveDataScope(tx, session);
+  if (scope.kind !== "all" || !isBackOfficeOnly(session.roles)) return scope;
+  const { override } = await loadScopeRow(tx, session.tenantId, session.userId);
+  return override === "all" ? scope : { kind: "own", userId: session.userId };
 }
 
 /** Resolve the wall for this session. Call inside the tenant transaction. */

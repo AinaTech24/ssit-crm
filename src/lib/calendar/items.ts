@@ -44,6 +44,8 @@ export type CalendarScope = {
   leadsAll: boolean;
   /** can(roles, "investor.view.all") — also gates compliance (NISM/KYC). */
   investorsAll: boolean;
+  /** Back office / ops only: firm-wide for clients, but their own meetings. */
+  backOfficeOnly?: boolean;
   /**
    * Colleagues whose diary this user runs (users.delegates_for, migration
    * 0220). Widens MEETINGS only — an EA who books for a partner gets that
@@ -80,7 +82,7 @@ export async function getCalendarItems(
     ? sql` OR rm.rm_id IN (${sql.join(delegated.map((u) => sql`${u}::uuid`), sql`, `)})
         OR rm.created_by_id IN (${sql.join(delegated.map((u) => sql`${u}::uuid`), sql`, `)})`
     : sql``;
-  const meetingScope = scope.investorsAll
+  const meetingScope = scope.investorsAll && !scope.backOfficeOnly
     ? sql``
     : sql` AND (
         rm.created_by_id = ${scope.userId}::uuid

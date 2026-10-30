@@ -4,7 +4,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import type { Tx } from "@/db/client";
 import {
-  resolveDataScope,
+  resolveSalesDataScope,
   dataScopeSqlViaOwnerBranch,
   isInScopeViaOwnerBranch,
 } from "@/lib/auth/data-scope";
@@ -58,7 +58,7 @@ export async function leadScopeSql(tx: Tx, session: SessionUser, alias = "leads"
   // current branch — not the lead's own branch_id column, which is stamped at
   // creation and drifts the moment a lead is reassigned or its owner moves
   // branch. Same rule as clients (lib/investors/access.ts).
-  return dataScopeSqlViaOwnerBranch(await resolveDataScope(tx, session), LEAD_COLS(alias).owner);
+  return dataScopeSqlViaOwnerBranch(await resolveSalesDataScope(tx, session), LEAD_COLS(alias).owner);
 }
 
 export async function loadEditableLead(tx: Tx, session: SessionUser, leadId: string) {
@@ -69,7 +69,7 @@ export async function loadEditableLead(tx: Tx, session: SessionUser, leadId: str
     .where(and(eq(leads.id, leadId), eq(leads.tenantId, session.tenantId)))
     .limit(1);
   if (!lead) throw Object.assign(new Error("lead not found"), { status: 404 });
-  const scope = await resolveDataScope(tx, session);
+  const scope = await resolveSalesDataScope(tx, session);
   if (!(await isInScopeViaOwnerBranch(tx, scope, [lead.ownerId]))) {
     throw Object.assign(
       new Error("forbidden: this lead belongs to another branch or team member"),
@@ -87,6 +87,6 @@ export async function loadViewableLead(tx: Tx, session: SessionUser, leadId: str
     .where(and(eq(leads.id, leadId), eq(leads.tenantId, session.tenantId)))
     .limit(1);
   if (!lead) return null;
-  const scope = await resolveDataScope(tx, session);
+  const scope = await resolveSalesDataScope(tx, session);
   return (await isInScopeViaOwnerBranch(tx, scope, [lead.ownerId])) ? lead : null;
 }
