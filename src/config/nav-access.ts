@@ -116,6 +116,9 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
       { key: "/dashboard/sub-distributors", label: "Sub-Distributors" },
       { key: "/dashboard/legal-registrations", label: "Legal Registrations" },
       { key: "/dashboard/amc-empanelments", label: "AMC Empanelments" },
+      // Ticking this gives a person the AMC meetings dashboard AND the right to
+      // create a meeting (see lib/amc/meeting-access.ts) — without the AMC details.
+      { key: "/dashboard/amc-meetings", label: "AMC Meetings" },
       { key: "/dashboard/schemes", label: "Scheme Master" },
       { key: "/dashboard/product-offerings", label: "Products & Services" },
     ],

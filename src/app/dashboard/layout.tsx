@@ -252,6 +252,9 @@ const NAV: NavSection[] = [
       // on the page. Compliance and back office lose the link they had; they
       // never needed the negotiated trail rates.
       { href: "/dashboard/amc-empanelments", label: "AMC Empanelments", icon: Building2, roles: ["owner", "branch_head", "rm"] },
+      // The AMC meeting log on its own. Roles are only the default — an owner can
+      // tick it for anyone in Sidebar Access, and that tick also lets them create.
+      { href: "/dashboard/amc-meetings", label: "AMC Meetings", icon: CalendarClock, roles: ["owner", "branch_head", "rm", "ria", "ra_research"] },
       { href: "/dashboard/schemes", label: "Scheme Master", icon: Boxes, roles: ["owner", "compliance", "back_office", "branch_head", "rm"] },
       { href: "/dashboard/product-offerings", label: "Products & Services", icon: Package, roles: ["owner", "compliance"] },
     ],

@@ -80,6 +80,7 @@ export const SIDEBAR_REGISTRY: SidebarEntry[] = [
   { group: "Compliance & Team", href: "/dashboard/sub-distributors", label: "Sub-Distributors" },
   { group: "Compliance & Team", href: "/dashboard/legal-registrations", label: "Legal Registrations" },
   { group: "Compliance & Team", href: "/dashboard/amc-empanelments", label: "AMC Empanelments" },
+  { group: "Compliance & Team", href: "/dashboard/amc-meetings", label: "AMC Meetings" },
   { group: "Compliance & Team", href: "/dashboard/schemes", label: "Scheme Master" },
   { group: "Compliance & Team", href: "/dashboard/product-offerings", label: "Products & Services" },
   // Insights

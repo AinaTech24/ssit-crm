@@ -20,6 +20,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
+import { hasAmcMeetingsNavGrant } from "@/lib/amc/meeting-access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { amcEmpanelments, amcMeetings, announcements, AMC_MEETING_MODES, AMC_MODE_LABEL } from "@/db/schema";
 
@@ -45,7 +46,10 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1).trim
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    requireAny(session.roles, ["amc_meeting.add"], session.permissions);
+    // The capability, or an owner's explicit "AMC Meetings" tick in Sidebar Access.
+    if (!(await hasAmcMeetingsNavGrant(session))) {
+      requireAny(session.roles, ["amc_meeting.add"], session.permissions);
+    }
     await assertActiveLicense(session.tenantId, session.roles);
 
     const parse = Body.safeParse(await req.json().catch(() => ({})));

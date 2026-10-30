@@ -8,13 +8,13 @@
 
 import Link from "next/link";
 import { Plus, Phone, Mail, FileUp } from "lucide-react";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
-import { AddAmcMeetingButton } from "@/components/amc-empanelments/AddAmcMeetingButton";
-import { amcEmpanelments, AMC_MODE_LABEL, EMPANELMENT_CATEGORIES, EMPANELMENT_CATEGORY_LABEL } from "@/db/schema";
+import { AmcMeetingsView } from "@/components/amc-empanelments/AmcMeetingsView";
+import { amcEmpanelments, EMPANELMENT_CATEGORIES, EMPANELMENT_CATEGORY_LABEL } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -83,94 +83,7 @@ export default async function AmcEmpanelmentsListPage({
   );
 
   if (view === "meetings") {
-    // The picker offers the firm's AMC catalogue merged with the standard list
-    // (done in the picker), so it is never empty on a firm with no empanelments.
-    const { catalog, branchOptions } = await withTenant(session.tenantId, async (tx) => {
-      const c = await tx.execute(sql`
-        SELECT code, name, (COALESCE(is_active, true) = false) AS inactive FROM amc_master
-         WHERE tenant_id = ${session.tenantId}::uuid
-         ORDER BY name ASC LIMIT 400
-      `);
-      const b = await tx.execute(sql`SELECT id, name FROM branches WHERE tenant_id = ${session.tenantId}::uuid ORDER BY name ASC`);
-      return {
-        catalog: c.rows as Array<{ code: string; name: string; inactive?: boolean }>,
-        branchOptions: b.rows as Array<{ id: string; name: string }>,
-      };
-    });
-    const meetings = await withTenant(session.tenantId, async (tx) => {
-      const r = await tx.execute(sql`
-        SELECT m.id, m.meeting_date, m.subject, m.attendees, m.notes, m.follow_up, m.mode,
-               e.id AS amc_id, e.amc_name, u.name AS author_name,
-               (SELECT string_agg(cu.name, ', ' ORDER BY cu.name) FROM users cu
-                 WHERE m.collaborator_user_ids ? cu.id::text) AS collaborator_names
-          FROM amc_meetings m
-          JOIN amc_empanelments e ON e.id = m.amc_empanelment_id
-          LEFT JOIN users u ON u.id = m.created_by_user_id
-         WHERE m.tenant_id = ${session.tenantId}::uuid
-         ORDER BY m.meeting_date DESC, m.created_at DESC
-         LIMIT 300
-      `);
-      return r.rows as Array<{
-        id: string; meeting_date: string; subject: string; attendees: string | null;
-        notes: string | null; follow_up: string | null; mode: string | null; collaborator_names: string | null;
-        amc_id: string; amc_name: string; author_name: string | null;
-      }>;
-    });
-    return (
-      <div className="space-y-5">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-semibold">AMC empanelments</h1>
-          {canAddMeeting && <AddAmcMeetingButton catalog={catalog} branches={branchOptions} currentUserId={session.userId} />}
-        </div>
-        {tabs}
-        {meetings.length === 0 ? (
-          <div className="card-surface p-12 text-center text-sm text-muted-foreground">
-            No AMC meetings recorded yet.{canAddMeeting ? " Use “Create meeting” to add the first one." : ""}
-          </div>
-        ) : (
-          <div className="card-surface table-scroll">
-            <table className="w-full text-xs min-w-[1100px]">
-              <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
-                <tr>
-                  <th className="px-3 py-2 text-left">Date</th>
-                  <th className="px-3 py-2 text-left">AMC</th>
-                  <th className="px-3 py-2 text-left">Subject</th>
-                  <th className="px-3 py-2 text-left">Mode</th>
-                  <th className="px-3 py-2 text-left">Attendees</th>
-                  <th className="px-3 py-2 text-left">Collaborators</th>
-                  <th className="px-3 py-2 text-left">Notes</th>
-                  <th className="px-3 py-2 text-left">Follow-up</th>
-                  <th className="px-3 py-2 text-left">Added by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {meetings.map((m) => (
-                  <tr key={m.id} className="border-t hover:bg-slate-50/60 align-top">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {new Date(m.meeting_date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Link href={`/dashboard/amc-empanelments/${m.amc_id}?tab=meetings`} className="font-medium hover:underline">
-                        {m.amc_name}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2">{m.subject}</td>
-                    <td className="px-3 py-2">
-                      {m.mode ? <span className="chip bg-secondary text-[10px]">{AMC_MODE_LABEL[m.mode] ?? m.mode}</span> : <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-muted-foreground">{m.attendees || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{m.collaborator_names || "—"}</td>
-                    <td className="px-3 py-2 max-w-xs whitespace-pre-wrap">{m.notes || "—"}</td>
-                    <td className="px-3 py-2 max-w-xs whitespace-pre-wrap">{m.follow_up || "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{m.author_name || "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    );
+    return <AmcMeetingsView session={session} title="AMC empanelments" canAdd={canAddMeeting} linkAmc tabs={tabs} />;
   }
   const statusFilter = sp.status ?? "empanelled";
   const categoryFilter = sp.category ?? "all";
