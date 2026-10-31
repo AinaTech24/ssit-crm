@@ -369,7 +369,9 @@ export async function POST(req: NextRequest) {
     let calendly: CalendlyOutcome | null = null;
     if (result.id && result.meetingDate) {
       const cfg = await withTenant(session.tenantId, (tx) => getCalendlyConfig(tx, session.tenantId, session.userId));
-      if (cfg) {
+      if (!cfg) {
+        calendly = { status: "not_connected" };
+      } else {
         calendly = await bookOnCalendly(cfg, {
           startsAt: result.meetingDate,
           inviteeName: result.aboutName ?? "",

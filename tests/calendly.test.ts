@@ -114,10 +114,15 @@ describe("bookOnCalendly", () => {
 
 describe("meetingCreatedNotice", () => {
   const when = new Date("2026-11-03T10:30:00.000Z");
-  it("is a plain success when Calendly is not connected", () => {
+  it("is a plain success when the API says nothing about Calendly", () => {
     const n = meetingCreatedNotice(when, null);
     expect(n.type).toBe("success");
     expect(n.title).toBe("Meeting created");
+  });
+  it("says so when the scheduler has not connected Calendly", () => {
+    const n = meetingCreatedNotice(when, { status: "not_connected" });
+    expect(n.type).toBe("info");
+    expect(n.message).toMatch(/My Calendly/);
   });
   it("confirms the Calendly booking", () => {
     expect(meetingCreatedNotice(when, { status: "booked" }).title).toMatch(/added to Calendly/);

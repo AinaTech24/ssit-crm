@@ -36,6 +36,7 @@ export interface CalendlyConfig {
 
 export type CalendlyOutcome =
   | { status: "booked"; eventTypeName?: string; durationMinutes?: number }
+  | { status: "not_connected" }
   | { status: "skipped"; reason: string }
   | { status: "failed"; reason: string };
 
