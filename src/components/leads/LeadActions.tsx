@@ -14,6 +14,8 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
+import { useToast } from "@/components/ui/Toast";
+import { meetingCreatedNotice } from "@/lib/integrations/calendly-notice";
 import { ProductInterestDialog } from "@/components/leads/ProductInterestDialog";
 
 type Props = {
@@ -625,6 +627,7 @@ export function ScheduleMeetingDialog({
   const [rmId, setRmId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
 
   async function submit() {
     setBusy(true);
@@ -649,6 +652,8 @@ export function ScheduleMeetingDialog({
         setErr(j.error ?? `Save failed (${res.status})`);
         return;
       }
+      const notice = meetingCreatedNotice(new Date(meetingDate), j?.calendly);
+      toast.toast({ type: notice.type, title: notice.title, message: notice.message });
       onDone();
     } finally {
       setBusy(false);

@@ -15,7 +15,7 @@ export const tenantIntegrations = pgTable(
       // "fintech_primitives" is LEGACY — that integration was removed. It stays
       // in the union only so the one surviving stored row still type-checks;
       // no code reads or writes it any more.
-      enum: ["resend", "vartify", "msg91", "mailbox", "zoho", "fintech_primitives", "rta_mailback"],
+      enum: ["resend", "vartify", "msg91", "mailbox", "zoho", "fintech_primitives", "rta_mailback", "calendly"],
     }).notNull(),
     encryptedConfig: text("encrypted_config").notNull(),
     senderConfig: jsonb("sender_config").$type<{

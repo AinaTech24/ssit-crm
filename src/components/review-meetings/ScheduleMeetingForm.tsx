@@ -7,6 +7,8 @@ import { CollaboratorSelect } from "@/components/common/CollaboratorSelect";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
+import { useToast } from "@/components/ui/Toast";
+import { meetingCreatedNotice } from "@/lib/integrations/calendly-notice";
 import { MeetingAttachmentPicker, uploadMeetingAttachments } from "./MeetingAttachments";
 
 /** 15-minute time slots across the day, labelled in 12-hour form. */
@@ -99,6 +101,7 @@ export function ScheduleMeetingForm({
   preselectedCategory?: string;
 }) {
   const router = useRouter();
+  const toast = useToast();
   const [subjectKind, setSubjectKind] = useState<Kind>(preselectedLeadId ? "lead" : "client");
   const def = defaultDateTimeParts();
   const [form, setForm] = useState({
@@ -204,6 +207,8 @@ export function ScheduleMeetingForm({
         }
       }
 
+      const notice = meetingCreatedNotice(new Date(body.meetingDate), j?.calendly);
+      toast.toast({ type: notice.type, title: notice.title, message: notice.message });
       if (onSuccess) onSuccess({ id: j?.id, day: form.meetingDay, time: form.meetingTime, subject: form.subject });
       else router.push("/dashboard/review-meetings");
     } finally {

@@ -57,6 +57,8 @@ const SKIP_FILES = new Set([
   // Self-service — the handler is hard-scoped to session.userId; a user may only
   // ever touch their own row, so a capability check would be meaningless.
   "me/password/route.ts",
+  // Calendly — each user connects their OWN Calendly; hard-scoped to session.userId.
+  "integrations/calendly/route.ts",
   "me/profile/route.ts",
   // Session keep-alive — re-signs the caller's OWN already-valid, non-revoked
   // token (same claims, same sid); it grants nothing the cookie didn't already.

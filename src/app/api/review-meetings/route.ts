@@ -1,4 +1,5 @@
 import { handleApiError } from "@/lib/api/error-handler";
+import { bookOnCalendly, getCalendlyConfig, type CalendlyOutcome } from "@/lib/integrations/calendly";
 /**
  * Review meetings — collection endpoint.
  *
@@ -171,6 +172,7 @@ export async function POST(req: NextRequest) {
     const result = await withTenant(session.tenantId, async (tx) => {
       // Resolve the subject — investor OR lead. The XOR was enforced by zod.
       let subjectName = "";
+      let subjectEmail: string | null = null;
       let subjectRmId: string | null = null;
       let subjectType: "investor" | "lead" = "investor";
       let subjectId = "";
@@ -178,6 +180,7 @@ export async function POST(req: NextRequest) {
         const inv = (await tx.select().from(investors).where(and(eq(investors.id, body.investorId), eq(investors.tenantId, session.tenantId))).limit(1))[0];
         if (!inv) throw Object.assign(new Error("investor not found"), { status: 404 });
         subjectName = inv.name;
+        subjectEmail = inv.email ?? null;
         subjectRmId = inv.rmId ?? null;
         subjectType = "investor";
         subjectId = body.investorId;
@@ -185,6 +188,7 @@ export async function POST(req: NextRequest) {
         const ld = (await tx.select().from(leads).where(and(eq(leads.id, body.leadId!), eq(leads.tenantId, session.tenantId))).limit(1))[0];
         if (!ld) throw Object.assign(new Error("lead not found"), { status: 404 });
         subjectName = ld.name;
+        subjectEmail = ld.email ?? null;
         subjectRmId = (ld as any).ownerId ?? null;
         subjectType = "lead";
         subjectId = body.leadId!;
@@ -321,7 +325,7 @@ export async function POST(req: NextRequest) {
         aboutName = ((who.rows[0] as { name?: string } | undefined)?.name) ?? null;
       }
 
-      return { id, createdById, reminderTaskId, aboutName, meetingDate, meetingType: body.meetingType, durationMinutes: body.durationMinutes };
+      return { id, createdById, reminderTaskId, aboutName, subjectEmail, meetingDate, meetingType: body.meetingType, durationMinutes: body.durationMinutes };
     });
 
     // Email the collaborators AFTER the meeting is committed: a bounced mailbox
@@ -359,7 +363,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "rm_conflict", conflicts: result.conflicts }, { status: 409 });
     }
 
-    return NextResponse.json({ ...result, collaboratorsEmailed: invited.sent }, { status: 201 });
+    // Book it on the scheduler's Calendly, if they have connected one. Done after
+    // the commit and outside the transaction (it is a network call), and a Calendly
+    // refusal is reported, never allowed to undo the saved meeting.
+    let calendly: CalendlyOutcome | null = null;
+    if (result.id && result.meetingDate) {
+      const cfg = await withTenant(session.tenantId, (tx) => getCalendlyConfig(tx, session.tenantId, session.userId));
+      if (cfg) {
+        calendly = await bookOnCalendly(cfg, {
+          startsAt: result.meetingDate,
+          inviteeName: result.aboutName ?? "",
+          inviteeEmail: result.subjectEmail,
+        });
+      }
+    }
+
+    return NextResponse.json({ ...result, collaboratorsEmailed: invited.sent, calendly }, { status: 201 });
   } catch (err: any) {
     return handleApiError(err);
   }

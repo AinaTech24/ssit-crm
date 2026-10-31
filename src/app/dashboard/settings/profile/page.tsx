@@ -9,6 +9,7 @@ import { buildLeaveBalanceRows, currentFyStart } from "@/lib/leave/policy";
 import { loadLeavePolicy } from "@/lib/leave/settings";
 import { formatRelative } from "@/lib/utils";
 import ProfileForm from "./ProfileForm";
+import { CalendlyCard } from "@/components/integrations/CalendlyCard";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,9 @@ export default async function ProfilePage() {
         initialPhone={me?.phone ?? ""}
         initialAvatarUrl={me?.avatarUrl ?? ""}
       />
+
+      {/* Calendly — meetings scheduled in the CRM are booked on the user's own Calendly. */}
+      <CalendlyCard />
 
       {/* Targets */}
       <div className="border rounded-lg bg-card p-5">
