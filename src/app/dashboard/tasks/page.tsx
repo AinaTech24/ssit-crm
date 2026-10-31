@@ -253,7 +253,7 @@ export default async function TasksPage({
           </Link>
           <OtherActivityButton />
           <Link
-            href="/dashboard/tasks/new"
+            href={view === "other" ? "/dashboard/tasks/new?activity=other" : "/dashboard/tasks/new"}
             className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium flex items-center gap-1.5"
           >
             <Plus className="size-4" /> New task

@@ -67,9 +67,31 @@ const KNOWN_TYPES = [
 ];
 
 
+/**
+ * "Other activity" kinds — day-to-day work that is not a client task. Opening
+ * this form as /dashboard/tasks/new?activity=<key> files the result under
+ * Tasks → Other activity instead of the normal task list.
+ */
+const ACTIVITY_KINDS = [
+  { key: "bank_work", label: "Bank work" },
+  { key: "amc_work", label: "AMC work" },
+  { key: "ba_service", label: "BA service" },
+  { key: "other", label: "Other" },
+] as const;
+type ActivityKey = (typeof ACTIVITY_KINDS)[number]["key"];
+
 export default function NewTaskPage() {
   const router = useRouter();
   const toast = useToast();
+  // Read from the URL after mount (not useSearchParams, which would force a
+  // Suspense boundary around the whole page).
+  const [activityKind, setActivityKind] = useState<ActivityKey | "">("");
+  useEffect(() => {
+    const k = new URLSearchParams(window.location.search).get("activity");
+    const hit = ACTIVITY_KINDS.find((a) => a.key === k);
+    if (hit) setActivityKind(hit.key);
+  }, []);
+  const activity = ACTIVITY_KINDS.find((a) => a.key === activityKind) ?? null;
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -224,8 +246,16 @@ export default function NewTaskPage() {
     setBusy(true);
     setErr(null);
     try {
+      // Other-activity titles carry their kind ("Bank work: …") — that is how
+      // the Other activity list tells them apart.
+      const cleanTitle = form.title.trim();
+      const title =
+        activity && !cleanTitle.toLowerCase().startsWith(activity.label.toLowerCase())
+          ? `${activity.label}: ${cleanTitle}`.slice(0, 300)
+          : cleanTitle;
       const payload: any = {
-        title: form.title,
+        title,
+        activityKind: activity ? activity.key : undefined,
         description: form.description || undefined,
         type: form.type === "custom" ? form.customType.trim() : form.type,
         priority: form.priority,
@@ -234,9 +264,9 @@ export default function NewTaskPage() {
         assigneeId: form.assigneeId || undefined,
         remarks: form.remarks || undefined,
         requiresApproval: form.requiresApproval || undefined,
-        contentKind: form.contentKind || undefined,
-        eventKey: form.contentKind && form.eventKey ? form.eventKey : undefined,
-        eventLabel: form.contentKind && form.eventLabel ? form.eventLabel : undefined,
+        contentKind: activity ? undefined : form.contentKind || undefined,
+        eventKey: !activity && form.contentKind && form.eventKey ? form.eventKey : undefined,
+        eventLabel: !activity && form.contentKind && form.eventLabel ? form.eventLabel : undefined,
         estimateMinutes: form.estimateMinutes ? Math.max(0, parseInt(form.estimateMinutes, 10) || 0) : undefined,
         tags: form.tags.length ? form.tags : undefined,
       };
@@ -281,7 +311,7 @@ export default function NewTaskPage() {
           return;
         }
       }
-      router.push(`/dashboard/tasks`);
+      router.push(activity ? `/dashboard/tasks?view=other` : `/dashboard/tasks`);
     } finally {
       setBusy(false);
     }
@@ -298,8 +328,13 @@ export default function NewTaskPage() {
 
       <div>
         <h1 className="page-title">
-          <ListChecks className="size-6 text-brand-cyan" /> New task
+          <ListChecks className="size-6 text-brand-cyan" /> {activity ? `New activity — ${activity.label}` : "New task"}
         </h1>
+        {activity && (
+          <p className="page-subtitle mt-1">
+            Day-to-day work that is not a client task. It is saved under Tasks → Other activity.
+          </p>
+        )}
       </div>
 
       {/* Start from a template */}
@@ -315,7 +350,7 @@ export default function NewTaskPage() {
           </button>
         </div>
       )}
-      {templates.length > 0 && (
+      {!activity && templates.length > 0 && (
         <div className="card-surface p-5 space-y-3">
           <div className="flex items-center gap-2">
             <div className="h-4 w-1 rounded-full brand-bar" />
@@ -347,6 +382,20 @@ export default function NewTaskPage() {
           <div className="h-4 w-1 rounded-full brand-bar" />
           <h2 className="section-title">1. What</h2>
         </div>
+        {activity && (
+          <label className="block">
+            <div className="text-xs font-medium mb-1">Kind of activity</div>
+            <SelectField
+              value={activityKind}
+              onChange={(e) => setActivityKind(e.target.value as ActivityKey)}
+              className="w-full sm:max-w-xs"
+            >
+              {ACTIVITY_KINDS.map((a) => (
+                <option key={a.key} value={a.key}>{a.label}</option>
+              ))}
+            </SelectField>
+          </label>
+        )}
         <label className="block">
           <div className="text-xs font-medium mb-1">
             Title <span className="text-rose-600">*</span>
@@ -482,6 +531,7 @@ export default function NewTaskPage() {
           <h2 className="section-title">3. Routing + schedule</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {!activity && (
           <label className="block">
             <div className="text-xs font-medium mb-1">Type</div>
             <SelectField
@@ -507,6 +557,7 @@ export default function NewTaskPage() {
               />
             )}
           </label>
+          )}
           <label className="block">
             <div className="text-xs font-medium mb-1">Department</div>
             <SelectField
@@ -619,6 +670,7 @@ export default function NewTaskPage() {
 
         {/* Marketing content request: post / reel / carousel, optionally for an event.
             Goes to the marketing person; their upload is signed off by the content approver. */}
+        {!activity && (
         <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <div className="text-xs font-medium mb-1">Marketing content</div>
@@ -670,6 +722,7 @@ export default function NewTaskPage() {
             </p>
           ) : null}
         </div>
+        )}
 
         {/* Reminder + approval */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
