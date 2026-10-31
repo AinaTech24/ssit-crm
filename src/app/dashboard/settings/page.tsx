@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, Building2, Database, Users, CreditCard, MessageCircle, Mail, Webhook, ShieldCheck, Workflow, KeyRound, Palette, UserCircle, GitBranch, Target, Network, BellRing, ClipboardCheck, SlidersHorizontal } from "lucide-react";
+import { Activity, CalendarCheck, Building2, Database, Users, CreditCard, MessageCircle, Mail, Webhook, ShieldCheck, Workflow, KeyRound, Palette, UserCircle, GitBranch, Target, Network, BellRing, ClipboardCheck, SlidersHorizontal } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -14,6 +14,13 @@ const SECTIONS = [
     title: "My profile",
     desc: "Your details, change password, targets & leave entitlements.",
     href: "/dashboard/settings/profile",
+    group: "You",
+  },
+  {
+    icon: CalendarCheck,
+    title: "My Calendly",
+    desc: "Add your Calendly booking link — meetings you schedule here are booked on it too.",
+    href: "/dashboard/settings/calendly",
     group: "You",
   },
   {

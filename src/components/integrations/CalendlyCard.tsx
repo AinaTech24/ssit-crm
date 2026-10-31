@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { CalendarCheck, Loader2, Check } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 
 type Status = {
   connected: boolean;
@@ -18,6 +19,7 @@ type Status = {
 };
 
 export function CalendlyCard() {
+  const toast = useToast();
   const [status, setStatus] = useState<Status | null>(null);
   const [token, setToken] = useState("");
   const [link, setLink] = useState("");
@@ -47,6 +49,10 @@ export function CalendlyCard() {
       }
       setStatus(j);
       setToken("");
+      toast.success(
+        `Your Calendly link is set up (${j.schedulingUrl}). Meetings you schedule from now on are booked on it.`,
+        "Calendly link set up"
+      );
     } finally {
       setBusy(false);
     }
@@ -56,7 +62,10 @@ export function CalendlyCard() {
     setBusy(true);
     try {
       const res = await fetch("/api/integrations/calendly", { method: "DELETE" });
-      if (res.ok) setStatus({ connected: false });
+      if (res.ok) {
+        setStatus({ connected: false });
+        toast.info("Meetings you schedule will no longer be added to Calendly.", "Calendly disconnected");
+      }
     } finally {
       setBusy(false);
     }
