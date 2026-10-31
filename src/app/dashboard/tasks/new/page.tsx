@@ -235,7 +235,7 @@ export default function NewTaskPage() {
   }
 
   async function save() {
-    if (!form.title.trim()) {
+    if (!activity && !form.title.trim()) {
       setErr("Title is required.");
       return;
     }
@@ -249,10 +249,13 @@ export default function NewTaskPage() {
       // Other-activity titles carry their kind ("Bank work: …") — that is how
       // the Other activity list tells them apart.
       const cleanTitle = form.title.trim();
-      const title =
-        activity && !cleanTitle.toLowerCase().startsWith(activity.label.toLowerCase())
-          ? `${activity.label}: ${cleanTitle}`.slice(0, 300)
-          : cleanTitle;
+      const title = !activity
+        ? cleanTitle
+        : !cleanTitle
+          ? activity.label
+          : cleanTitle.toLowerCase().startsWith(activity.label.toLowerCase())
+            ? cleanTitle.slice(0, 300)
+            : `${activity.label}: ${cleanTitle}`.slice(0, 300);
       const payload: any = {
         title,
         activityKind: activity ? activity.key : undefined,
@@ -382,33 +385,45 @@ export default function NewTaskPage() {
           <div className="h-4 w-1 rounded-full brand-bar" />
           <h2 className="section-title">1. What</h2>
         </div>
-        {activity && (
-          <label className="block">
-            <div className="text-xs font-medium mb-1">Kind of activity</div>
-            <SelectField
-              value={activityKind}
-              onChange={(e) => setActivityKind(e.target.value as ActivityKey)}
-              className="w-full sm:max-w-xs"
-            >
-              {ACTIVITY_KINDS.map((a) => (
-                <option key={a.key} value={a.key}>{a.label}</option>
-              ))}
-            </SelectField>
-          </label>
-        )}
+        {/* In Other-activity mode the kind IS the title: pick it from the dropdown,
+            optionally add what was done after it ("Bank work: mandate added"). */}
         <label className="block">
           <div className="text-xs font-medium mb-1">
-            Title <span className="text-rose-600">*</span>
+            Title {!activity && <span className="text-rose-600">*</span>}
           </div>
-          <input
-            value={form.title}
-            onChange={(e) => {
-              setTitleTouched(true);
-              set("title", e.target.value);
-            }}
-            // placeholder="Call client to share quarterly review"
-            className="input-base"
-          />
+          {activity ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <SelectField
+                value={activityKind}
+                onChange={(e) => setActivityKind(e.target.value as ActivityKey)}
+                className="w-full sm:w-52 shrink-0"
+              >
+                {ACTIVITY_KINDS.map((a) => (
+                  <option key={a.key} value={a.key}>{a.label}</option>
+                ))}
+              </SelectField>
+              <input
+                value={form.title}
+                onChange={(e) => {
+                  setTitleTouched(true);
+                  set("title", e.target.value);
+                }}
+                maxLength={250}
+                placeholder="What was done — e.g. Bank mandate added for DM025 (optional)"
+                className="input-base flex-1"
+              />
+            </div>
+          ) : (
+            <input
+              value={form.title}
+              onChange={(e) => {
+                setTitleTouched(true);
+                set("title", e.target.value);
+              }}
+              // placeholder="Call client to share quarterly review"
+              className="input-base"
+            />
+          )}
         </label>
         <label className="block">
           <div className="text-xs font-medium mb-1">Description</div>
