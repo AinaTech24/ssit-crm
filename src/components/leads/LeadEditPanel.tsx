@@ -14,6 +14,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Save, X, Loader2 } from "lucide-react";
+import { RmSelector } from "@/components/common/RmSelector";
 
 const SOURCES = [
   ["referral", "Referral"],
@@ -33,7 +34,18 @@ const SOURCES = [
   ["manual", "Manual"],
 ] as const;
 
-export function LeadEditPanel({ lead }: { lead: any }) {
+export function LeadEditPanel({
+  lead,
+  ownerName,
+  serviceRmName,
+  canAssign,
+}: {
+  lead: any;
+  ownerName?: string | null;
+  serviceRmName?: string | null;
+  /** Whether this person may reassign the lead's RMs (lead.edit.all). */
+  canAssign?: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -53,6 +65,8 @@ export function LeadEditPanel({ lead }: { lead: any }) {
     followUpNotes: lead.followUpNotes ?? "",
     notes: lead.notes ?? "",
     lostReason: lead.lostReason ?? "",
+    ownerId: (lead.ownerId ?? "") as string,
+    serviceRmId: (lead.serviceRmId ?? "") as string,
   });
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
@@ -76,6 +90,11 @@ export function LeadEditPanel({ lead }: { lead: any }) {
       };
       if (form.nextFollowUpAt) payload.nextFollowUpAt = new Date(form.nextFollowUpAt).toISOString();
       if (lead.stage === "lost") payload.lostReason = form.lostReason;
+      if (canAssign) {
+        // Only send what changed, so saving never wipes or reassigns by accident.
+        if (form.ownerId && form.ownerId !== (lead.ownerId ?? "")) payload.ownerId = form.ownerId;
+        if (form.serviceRmId !== (lead.serviceRmId ?? "")) payload.serviceRmId = form.serviceRmId || null;
+      }
 
       const res = await fetch(`/api/leads/${lead.id}`, {
         method: "PATCH",
@@ -108,6 +127,8 @@ export function LeadEditPanel({ lead }: { lead: any }) {
       followUpNotes: lead.followUpNotes ?? "",
       notes: lead.notes ?? "",
       lostReason: lead.lostReason ?? "",
+      ownerId: lead.ownerId ?? "",
+      serviceRmId: lead.serviceRmId ?? "",
     });
     setEditing(false);
     setErr(null);
@@ -207,6 +228,30 @@ export function LeadEditPanel({ lead }: { lead: any }) {
               />
             ) : (
               <span>{lead.city ?? "—"}</span>
+            )}
+          </Row>
+
+          <Row label="Assigned RM">
+            {editing && canAssign ? (
+              <RmSelector
+                value={form.ownerId || null}
+                onChange={(id) => set("ownerId", id ?? "")}
+                placeholder="— Unassigned —"
+              />
+            ) : (
+              <span>{ownerName ?? "—"}</span>
+            )}
+          </Row>
+
+          <Row label="Service RM">
+            {editing && canAssign ? (
+              <RmSelector
+                value={form.serviceRmId || null}
+                onChange={(id) => set("serviceRmId", id ?? "")}
+                placeholder="— Same as assigned RM —"
+              />
+            ) : (
+              <span>{serviceRmName ?? "Same as assigned RM"}</span>
             )}
           </Row>
 

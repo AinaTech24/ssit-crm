@@ -43,6 +43,8 @@ const Patch = z.object({
   sourceCampaign: z.string().optional(),
   stage: z.string().optional(),
   ownerId: z.string().uuid().optional(),
+  /** null clears it. */
+  serviceRmId: z.string().uuid().nullable().optional(),
   intendedAmount: z.string().optional(),
   followUpNotes: z.string().optional(),
   nextFollowUpAt: z.string().optional(),
@@ -75,7 +77,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const result = await withTenant(session.tenantId, async (tx) => {
       const before = await loadEditableLead(tx, session, id);
       const patch: Record<string, any> = { ...parse.data };
-      if (!canEditAllLeads(session)) delete patch.ownerId;
+      if (!canEditAllLeads(session)) {
+        delete patch.ownerId;
+        delete patch.serviceRmId;
+      }
       // Reassigning the owner must stay inside the firm — a uuid from another
       // tenant would orphan the lead under someone who can't see it.
       if (patch.ownerId && patch.ownerId !== before.ownerId) {
@@ -83,6 +88,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           .select({ id: users.id })
           .from(users)
           .where(and(eq(users.id, patch.ownerId), eq(users.tenantId, session.tenantId)))
+          .limit(1);
+        if (!u) return "bad_owner" as const;
+      }
+      if (patch.serviceRmId && patch.serviceRmId !== before.serviceRmId) {
+        const [u] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, patch.serviceRmId), eq(users.tenantId, session.tenantId)))
           .limit(1);
         if (!u) return "bad_owner" as const;
       }

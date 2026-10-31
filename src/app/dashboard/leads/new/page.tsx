@@ -74,6 +74,7 @@ export default function NewLeadPage() {
     referredByInvestorId: "" as string | null | "",
     referredByName: "" as string | null | "",
     ownerId: "" as string | null | "",
+    serviceRmId: "" as string | null | "",
     subDistributorId: "" as string | null | "",
     subDistributorName: "" as string | null | "",
     // RA sales: where this lead is in the subscription journey.
@@ -276,6 +277,7 @@ export default function NewLeadPage() {
         payload.referredByName = form.referredByName;
       }
       if (form.ownerId) payload.ownerId = form.ownerId;
+      if (form.serviceRmId) payload.serviceRmId = form.serviceRmId;
       if (!raSales && form.subDistributorId) payload.subDistributorId = form.subDistributorId;
       if (raSales) {
         payload.subscriptionCategory = form.subscriptionCategory;
@@ -574,6 +576,20 @@ export default function NewLeadPage() {
           <p className="text-[10px] text-muted-foreground mt-1">
             You own every lead you create. Change this only to hand it to a colleague.
           </p>
+        </div>
+
+        <div className="sm:col-span-2">
+          <div className="text-xs font-medium mb-1">
+            Service RM
+            <span className="ml-1 text-[10px] text-muted-foreground font-normal">
+              · handles day-to-day follow-up
+            </span>
+          </div>
+          <RmSelector
+            value={form.serviceRmId || null}
+            onChange={(id) => setForm((s) => ({ ...s, serviceRmId: id ?? "" }))}
+            placeholder="— Same as assigned RM —"
+          />
         </div>
 
         {/* RA sales: subscription category. Subscribing converts the lead to a

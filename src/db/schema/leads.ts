@@ -190,6 +190,9 @@ export const leads = pgTable(
     subscriptionRenewalAt: date("subscription_renewal_at"),
 
     ownerId: uuid("owner_id").references(() => users.id),
+    /** RM who SERVICES this lead day-to-day (migration 0251). Distinct from
+     *  ownerId; carried onto the client's service_rm_id at conversion. */
+    serviceRmId: uuid("service_rm_id").references(() => users.id),
     /** Soft delete — the source of truth. See migration 0213. */
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     deletedBy: uuid("deleted_by").references(() => users.id),

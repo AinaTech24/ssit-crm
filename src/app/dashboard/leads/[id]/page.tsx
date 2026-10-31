@@ -16,7 +16,7 @@ import {
 import { withTenant } from "@/db/client";
 import { users, tasks, communications, riskProfileResponses, proposals, reviewMeetings } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
-import { loadViewableLead } from "@/lib/leads/access";
+import { canEditAllLeads, loadViewableLead } from "@/lib/leads/access";
 import { formatDate, formatRelative } from "@/lib/utils";
 import { LeadActions } from "@/components/leads/LeadActions";
 import { EmailRelatedList } from "@/components/comms/EmailRelatedList";
@@ -100,9 +100,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     // Run the 5 secondary queries in parallel — they're all independent of
     // each other and only depend on `lead.id`. This cuts the page's TTFB
     // from ~5x query-latency to ~1x query-latency on slow links.
-    const [owner, relatedTasks, relatedComms, latestRiskList, latestProposalList, meetings] = await Promise.all([
+    const [owner, serviceRm, relatedTasks, relatedComms, latestRiskList, latestProposalList, meetings] = await Promise.all([
       lead.ownerId
         ? tx.select().from(users).where(eq(users.id, lead.ownerId)).limit(1).then((r) => r[0])
+        : Promise.resolve(null),
+      lead.serviceRmId
+        ? tx.select().from(users).where(eq(users.id, lead.serviceRmId)).limit(1).then((r) => r[0])
         : Promise.resolve(null),
       tx
         .select()
@@ -148,6 +151,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
     return {
       lead,
       owner,
+      serviceRm,
       relatedTasks,
       relatedComms,
       latestRisk: latestRiskList[0],
@@ -208,6 +212,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
               </span>
               <span className="text-muted-foreground">via {l.source}</span>
               {data.owner && <span className="text-muted-foreground">· owned by {data.owner.name}</span>}
+              {data.serviceRm && <span className="text-muted-foreground">· serviced by {data.serviceRm.name}</span>}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 shrink-0">
@@ -377,7 +382,12 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
 
       {/* Editable record — every spec field, inline edit */}
       <RelatedListSection moduleKey="leads-detail" sectionKey="edit_panel">
-        <LeadEditPanel lead={JSON.parse(JSON.stringify(l))} />
+        <LeadEditPanel
+          lead={JSON.parse(JSON.stringify(l))}
+          ownerName={data.owner?.name ?? null}
+          serviceRmName={data.serviceRm?.name ?? null}
+          canAssign={canEditAllLeads(session)}
+        />
       </RelatedListSection>
 
       {/* MFD-defined custom fields (renders only if the firm has defined any). */}

@@ -11,7 +11,7 @@ import { Briefcase } from "lucide-react";
 export function OtherActivityButton() {
   return (
     <Link
-      href="/dashboard/tasks/new?activity=bank_work"
+      href="/dashboard/tasks/new?activity=select"
       className="rounded-md border px-3 py-1.5 text-sm font-medium flex items-center gap-1.5 hover:bg-accent"
     >
       <Briefcase className="size-4" /> Other activity

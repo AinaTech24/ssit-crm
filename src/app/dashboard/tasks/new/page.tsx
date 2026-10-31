@@ -86,8 +86,13 @@ export default function NewTaskPage() {
   // Read from the URL after mount (not useSearchParams, which would force a
   // Suspense boundary around the whole page).
   const [activityKind, setActivityKind] = useState<ActivityKey | "">("");
+  // True for any ?activity=… URL, even when no kind is chosen yet ("Select a
+  // service" placeholder) — it is what switches the page into activity mode.
+  const [activityMode, setActivityMode] = useState(false);
   useEffect(() => {
     const k = new URLSearchParams(window.location.search).get("activity");
+    if (k === null) return;
+    setActivityMode(true);
     const hit = ACTIVITY_KINDS.find((a) => a.key === k);
     if (hit) setActivityKind(hit.key);
   }, []);
@@ -235,7 +240,11 @@ export default function NewTaskPage() {
   }
 
   async function save() {
-    if (!activity && !form.title.trim()) {
+    if (activityMode && !activity) {
+      setErr("Select a service.");
+      return;
+    }
+    if (!activityMode && !form.title.trim()) {
       setErr("Title is required.");
       return;
     }
@@ -248,14 +257,7 @@ export default function NewTaskPage() {
     try {
       // Other-activity titles carry their kind ("Bank work: …") — that is how
       // the Other activity list tells them apart.
-      const cleanTitle = form.title.trim();
-      const title = !activity
-        ? cleanTitle
-        : !cleanTitle
-          ? activity.label
-          : cleanTitle.toLowerCase().startsWith(activity.label.toLowerCase())
-            ? cleanTitle.slice(0, 300)
-            : `${activity.label}: ${cleanTitle}`.slice(0, 300);
+      const title = activity ? activity.label : form.title.trim();
       const payload: any = {
         title,
         activityKind: activity ? activity.key : undefined,
@@ -267,9 +269,9 @@ export default function NewTaskPage() {
         assigneeId: form.assigneeId || undefined,
         remarks: form.remarks || undefined,
         requiresApproval: form.requiresApproval || undefined,
-        contentKind: activity ? undefined : form.contentKind || undefined,
-        eventKey: !activity && form.contentKind && form.eventKey ? form.eventKey : undefined,
-        eventLabel: !activity && form.contentKind && form.eventLabel ? form.eventLabel : undefined,
+        contentKind: activityMode ? undefined : form.contentKind || undefined,
+        eventKey: !activityMode && form.contentKind && form.eventKey ? form.eventKey : undefined,
+        eventLabel: !activityMode && form.contentKind && form.eventLabel ? form.eventLabel : undefined,
         estimateMinutes: form.estimateMinutes ? Math.max(0, parseInt(form.estimateMinutes, 10) || 0) : undefined,
         tags: form.tags.length ? form.tags : undefined,
       };
@@ -314,7 +316,7 @@ export default function NewTaskPage() {
           return;
         }
       }
-      router.push(activity ? `/dashboard/tasks?view=other` : `/dashboard/tasks`);
+      router.push(activityMode ? `/dashboard/tasks?view=other` : `/dashboard/tasks`);
     } finally {
       setBusy(false);
     }
@@ -331,9 +333,9 @@ export default function NewTaskPage() {
 
       <div>
         <h1 className="page-title">
-          <ListChecks className="size-6 text-brand-cyan" /> {activity ? `New activity — ${activity.label}` : "New task"}
+          <ListChecks className="size-6 text-brand-cyan" /> {activityMode ? "New activity" : "New task"}
         </h1>
-        {activity && (
+        {activityMode && (
           <p className="page-subtitle mt-1">
             Day-to-day work that is not a client task. It is saved under Tasks → Other activity.
           </p>
@@ -353,7 +355,7 @@ export default function NewTaskPage() {
           </button>
         </div>
       )}
-      {!activity && templates.length > 0 && (
+      {!activityMode && templates.length > 0 && (
         <div className="card-surface p-5 space-y-3">
           <div className="flex items-center gap-2">
             <div className="h-4 w-1 rounded-full brand-bar" />
@@ -385,34 +387,22 @@ export default function NewTaskPage() {
           <div className="h-4 w-1 rounded-full brand-bar" />
           <h2 className="section-title">1. What</h2>
         </div>
-        {/* In Other-activity mode the kind IS the title: pick it from the dropdown,
-            optionally add what was done after it ("Bank work: mandate added"). */}
+        {/* In Other-activity mode the title is the service, picked from a dropdown. */}
         <label className="block">
           <div className="text-xs font-medium mb-1">
-            Title {!activity && <span className="text-rose-600">*</span>}
+            Title <span className="text-rose-600">*</span>
           </div>
-          {activity ? (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <SelectField
-                value={activityKind}
-                onChange={(e) => setActivityKind(e.target.value as ActivityKey)}
-                className="w-full sm:w-52 shrink-0"
-              >
-                {ACTIVITY_KINDS.map((a) => (
-                  <option key={a.key} value={a.key}>{a.label}</option>
-                ))}
-              </SelectField>
-              <input
-                value={form.title}
-                onChange={(e) => {
-                  setTitleTouched(true);
-                  set("title", e.target.value);
-                }}
-                maxLength={250}
-                placeholder="What was done — e.g. Bank mandate added for DM025 (optional)"
-                className="input-base flex-1"
-              />
-            </div>
+          {activityMode ? (
+            <SelectField
+              value={activityKind}
+              onChange={(e) => setActivityKind(e.target.value as ActivityKey)}
+              placeholder="Select a service"
+              className="w-full"
+            >
+              {ACTIVITY_KINDS.map((a) => (
+                <option key={a.key} value={a.key}>{a.label}</option>
+              ))}
+            </SelectField>
           ) : (
             <input
               value={form.title}
@@ -420,7 +410,6 @@ export default function NewTaskPage() {
                 setTitleTouched(true);
                 set("title", e.target.value);
               }}
-              // placeholder="Call client to share quarterly review"
               className="input-base"
             />
           )}
@@ -546,7 +535,7 @@ export default function NewTaskPage() {
           <h2 className="section-title">3. Routing + schedule</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {!activity && (
+          {!activityMode && (
           <label className="block">
             <div className="text-xs font-medium mb-1">Type</div>
             <SelectField
@@ -685,7 +674,7 @@ export default function NewTaskPage() {
 
         {/* Marketing content request: post / reel / carousel, optionally for an event.
             Goes to the marketing person; their upload is signed off by the content approver. */}
-        {!activity && (
+        {!activityMode && (
         <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="block">
             <div className="text-xs font-medium mb-1">Marketing content</div>

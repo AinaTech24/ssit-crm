@@ -64,6 +64,7 @@ const CreateBody = z.object({
   followUpDate: z.string().datetime().optional().or(z.literal("")),
   notes: z.string().optional(),
   ownerId: z.string().uuid().optional(),
+  serviceRmId: z.string().uuid().optional(),
   /** When source is 'referral' or 'existing_client' — link to the referrer in the Clients module. */
   referredByInvestorId: z.string().uuid().optional(),
   referredByName: z.string().max(200).optional(),
@@ -181,6 +182,7 @@ export async function POST(req: NextRequest) {
     const clientMeta = clientMetaFromHeaders(req.headers);
     let assignedOwnerId: string | null = null;
     let assignedVia: "manual" | "creator" = "creator";
+    let assignedServiceRmId: string | null = null;
 
     await withTenant(session.tenantId, async (tx) => {
       // Owner: whoever CREATES the lead owns it. Round-robin / assignment-rule
@@ -195,6 +197,17 @@ export async function POST(req: NextRequest) {
       } else {
         assignedOwnerId = session.userId;
         assignedVia = "creator";
+      }
+
+      // Service RM: same rule as the owner — only someone who manages every lead
+      // can name it, and it must be a user of this firm.
+      if (body.serviceRmId && canEditAllLeads(session)) {
+        const [u] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.id, body.serviceRmId), eq(users.tenantId, session.tenantId)))
+          .limit(1);
+        if (u) assignedServiceRmId = u.id;
       }
 
       // Canonical pipeline value wins; keep intended_amount populated (from it)
@@ -242,6 +255,7 @@ export async function POST(req: NextRequest) {
           nextFollowUpAt: followUpAt,
           notes: body.notes,
           ownerId: assignedOwnerId,
+          serviceRmId: assignedServiceRmId,
           referredByInvestorId: body.referredByInvestorId ?? null,
           referredByName: body.referredByName ?? null,
           subDistributorId: body.subDistributorId ?? null,
