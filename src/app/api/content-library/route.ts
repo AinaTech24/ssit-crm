@@ -52,6 +52,9 @@ export async function GET() {
   try {
     const session = await requireSession();
     const platformAdmin = isPlatformAdmin(session.roles);
+    if (!platformAdmin && !can(session.roles, "content_library.view", session.permissions)) {
+      return NextResponse.json({ error: "forbidden — insufficient capabilities" }, { status: 403 });
+    }
     // Platform admins see all assets; normal users see global assets + their tenant assets.
     // Query uses withTenant for normal users to automatically trigger Postgres RLS.
     const rows = platformAdmin
@@ -98,7 +101,7 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
     const platformAdmin = isPlatformAdmin(session.roles);
-    const canUpload = platformAdmin || can(session.roles, "template.edit", session.permissions);
+    const canUpload = platformAdmin || can(session.roles, "content_library.add", session.permissions);
     if (!canUpload) {
       return NextResponse.json({ error: "forbidden — insufficient capabilities" }, { status: 403 });
     }

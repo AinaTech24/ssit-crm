@@ -81,7 +81,7 @@ import { audienceUserSql } from "@/lib/announcements/access";
 import { withTenant } from "@/db/client";
 import { tenants, users, tenantUiLayouts } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
-import { primaryRoleLabel, can } from "@/lib/auth/rbac";
+import { primaryRoleLabel, can, type Capability } from "@/lib/auth/rbac";
 import { loadTenantLicense } from "@/lib/auth/license";
 import { tenantAccessibleNavKeys, isGatableNav, gatedNavKeyForPath, roleDefaultNavKeys, ALL_NAV_KEYS } from "@/config/nav-access";
 import { NavAccessProvider } from "@/components/layout/NavAccess";
@@ -251,10 +251,10 @@ const NAV: NavSection[] = [
       // Branch heads only (owner always passes) — matches amc_empanelment.view
       // on the page. Compliance and back office lose the link they had; they
       // never needed the negotiated trail rates.
-      { href: "/dashboard/amc-empanelments", label: "AMC Empanelments", icon: Building2, roles: ["owner", "branch_head", "rm"] },
-      // The AMC meeting log on its own. Roles are only the default — an owner can
-      // tick it for anyone in Sidebar Access, and that tick also lets them create.
-      { href: "/dashboard/amc-meetings", label: "AMC Meetings", icon: CalendarClock, roles: ["owner", "branch_head", "rm", "ria", "ra_research"] },
+      // The meetings tab lives inside this page, so a person an owner gives the
+      // AMC meeting / empanelment permissions to (Customize Access Permissions)
+      // gets the link too — see CAP_VISIBLE below.
+      { href: "/dashboard/amc-empanelments", label: "AMC Empanelments", icon: Building2, roles: ["owner", "branch_head", "rm", "ria", "ra_research"] },
       { href: "/dashboard/schemes", label: "Scheme Master", icon: Boxes, roles: ["owner", "compliance", "back_office", "branch_head", "rm"] },
       { href: "/dashboard/product-offerings", label: "Products & Services", icon: Package, roles: ["owner", "compliance"] },
     ],
@@ -546,6 +546,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // landing page.
   const showDashboards = moduleControls["/dashboard"] !== "disabled";
 
+    // Items a person may also see because an admin ticked a capability for them,
+  // whatever their role. The page still shows only the parts they hold.
+  const CAP_VISIBLE: Record<string, Capability[]> = {
+    "/dashboard/amc-empanelments": ["amc_meeting.view", "amc_meeting.add", "amc_empanelment.view", "amc_empanelment.add"],
+  };
+  const holdsVisibleCap = (href: string) =>
+    (CAP_VISIBLE[href] ?? []).some((c) => can(session.roles, c, session.permissions));
+
   const visible = NAV.map((section) => ({
     ...section,
     items: section.items.filter((i) => {
@@ -554,6 +562,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       if (
         i.roles &&
         !explicitlyGranted(i.href) &&
+        !holdsVisibleCap(i.href) &&
         !session.roles.some((r) => i.roles!.includes(r) || r === "owner")
       )
         return false;

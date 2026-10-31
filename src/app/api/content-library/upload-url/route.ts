@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     // per-user grants count; omitting it silently ignored those grants.
     const canUpload =
       platformAdmin ||
-      ["template.edit", "template.view", "communication.send", "workflow.edit"].some((c) =>
+      ["content_library.add", "template.edit", "template.view", "communication.send", "workflow.edit"].some((c) =>
         can(session.roles, c as any, session.permissions)
       );
     if (!canUpload) {

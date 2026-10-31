@@ -41,10 +41,11 @@ export default async function AmcEmpanelmentsListPage({
   // only see its meetings (RIA / research). The second group gets the list of
   // AMCs and a way into the meetings tab — never the contacts or the controls.
   const canDetails = can(session.roles, "amc_empanelment.view", session.permissions);
-  const canMeetings = can(session.roles, "amc_meeting.view", session.permissions);
   // Viewing is wider than adding: only RMs (and the owner) can record AMC details and meetings.
   const canAddDetails = can(session.roles, "amc_empanelment.add", session.permissions);
   const canAddMeeting = can(session.roles, "amc_meeting.add", session.permissions);
+  // Being allowed to add a meeting implies being allowed to see the log it goes into.
+  const canMeetings = can(session.roles, "amc_meeting.view", session.permissions) || canAddMeeting;
   if (!canDetails && !canMeetings) {
     return (
       <div className="card-surface p-8 text-center max-w-xl mx-auto mt-10">

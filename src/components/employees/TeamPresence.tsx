@@ -6,11 +6,20 @@
  * Realtime active/inactive presence for the MFD side.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export function TeamPresence({ members }: { members: { id: string; name: string }[] }) {
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const badgeRef = useRef<HTMLDivElement>(null);
+
+  function show() {
+    const r = badgeRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom, right: Math.max(8, window.innerWidth - r.right) });
+    setOpen(true);
+  }
 
   async function load() {
     try {
@@ -31,7 +40,7 @@ export function TeamPresence({ members }: { members: { id: string; name: string 
   const count = onlineMembers.length;
 
   return (
-    <div className="relative" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div ref={badgeRef} className="relative" onMouseEnter={show} onMouseLeave={() => setOpen(false)}>
       <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium">
         <span className="relative flex size-2">
           {count > 0 && <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60" />}
@@ -39,19 +48,30 @@ export function TeamPresence({ members }: { members: { id: string; name: string 
         </span>
         {count} online
       </span>
-      {open && count > 0 && (
-        <div className="absolute right-0 z-30 mt-1 w-52 rounded-lg border border-border bg-card p-2 shadow-lg">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Online now</div>
-          <ul className="space-y-0.5 max-h-56 overflow-y-auto">
-            {onlineMembers.map((m) => (
-              <li key={m.id} className="flex items-center gap-2 text-xs">
-                <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
-                <span className="truncate">{m.name}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Rendered in a portal, fixed to the viewport: inside the page it slid
+          under the sticky filter bar and table header that follow it. */}
+      {open && count > 0 && pos && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 1000 }}
+            onMouseEnter={() => setOpen(true)}
+            onMouseLeave={() => setOpen(false)}
+          >
+            <div className="mt-1 w-52 rounded-lg border border-border bg-card p-2 shadow-lg">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Online now</div>
+              <ul className="space-y-0.5 max-h-56 overflow-y-auto">
+                {onlineMembers.map((m) => (
+                  <li key={m.id} className="flex items-center gap-2 text-xs">
+                    <span className="size-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="truncate">{m.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>,
+          document.body
+        )}
+
     </div>
   );
 }

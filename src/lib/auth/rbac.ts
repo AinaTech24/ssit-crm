@@ -173,6 +173,9 @@ export type Capability =
   | "amc_empanelment.add"
   | "amc_meeting.view"
   | "amc_meeting.add"
+  | "content_library.view"
+  | "content_library.add"
+  | "content_library.edit"
   | "induction.view"
   | "induction.manage"
   | "compliance.edit"
@@ -411,6 +414,17 @@ const MATRIX: Record<Capability, Role[]> = {
   "amc_meeting.view": ["branch_head", "ria", "ra_research", "rm"],
   // Recording or deleting an AMC meeting / note: RMs only (see above).
   "amc_meeting.add": ["rm"],
+  // Equitywala Content Library — three separate levels so an owner can hand out
+  // exactly one of them. View: browse, co-brand, download and send the firm's
+  // creatives (everyone on staff, as before — the page was not gated at all).
+  // Add: upload the firm's own creatives. Edit: rename, re-categorise or remove
+  // the firm's OWN uploads — never the Equitywala-supplied shared ones.
+  "content_library.view": [
+    "rm", "branch_head", "back_office", "ops", "marketing", "compliance",
+    "sub_broker", "ra_sales", "ra_research", "ria", "insurance", "assistant", "gifting_hr",
+  ],
+  "content_library.add": ["marketing"],
+  "content_library.edit": ["marketing"],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
   "risk_profile.manage": ["compliance", "back_office", "ops", "rm", "ra_sales", "ria"],

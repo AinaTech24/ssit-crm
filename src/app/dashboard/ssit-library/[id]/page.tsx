@@ -12,8 +12,10 @@ import {
   File,
 } from "lucide-react";
 import { withTenant } from "@/db/client";
-import { contentLibraryAssets, tenants } from "@/db/schema";
+import { contentLibraryAssets, tenants, ASSET_CATEGORIES } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
+import { AssetEditPanel } from "@/components/content-library/AssetEditPanel";
 import { assetVisibleTo } from "@/lib/content/asset-url";
 import { formatDate } from "@/lib/utils";
 import { BrandingLayoutPicker } from "@/components/content-library/BrandingLayoutPicker";
@@ -49,6 +51,8 @@ export default async function EquitywalaLibraryDetailPage({
 }) {
   const { id } = await params;
   const session = await requireSession();
+  if (!can(session.roles, "content_library.view", session.permissions)) notFound();
+  const canEditAsset = can(session.roles, "content_library.edit", session.permissions);
   // Tenant context: the bespoke RLS policy (global OR own tenant) scopes the
   // lookup; the explicit predicate is belt-and-suspenders. (withSystem would
   // crash here — it leaves app.tenant_id at the role's empty-string default,
@@ -104,6 +108,17 @@ export default async function EquitywalaLibraryDetailPage({
           )}
         </div>
       </div>
+
+      {/* Only the firm's own uploads are editable — the shared assets are Equitywala's. */}
+      {canEditAsset && asset.tenantId === session.tenantId && (
+        <AssetEditPanel
+          assetId={asset.id}
+          title={asset.title}
+          description={asset.description}
+          category={asset.category}
+          categories={[...ASSET_CATEGORIES]}
+        />
+      )}
 
       {/* The actual co-brand / download UX, per asset type */}
       {asset.type === "image" ? (

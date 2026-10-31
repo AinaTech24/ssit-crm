@@ -22,7 +22,17 @@ export default async function EquitywalaLibraryPage({
   const categoryFilter = (sp.category ?? "").split(",").filter(Boolean);
   const typeFilter = (sp.type ?? "").split(",").filter(Boolean);
 
-  const canUpload = can(session.roles, "template.edit", session.permissions);
+  if (!can(session.roles, "content_library.view", session.permissions)) {
+    return (
+      <div className="card-surface p-8 text-center max-w-xl mx-auto mt-10">
+        <h1 className="text-lg font-semibold">Equitywala Content Library</h1>
+        <p className="text-sm text-muted-foreground mt-2">
+          You do not have access to this page. Ask your firm admin to enable “Content Library — view” on your employee record.
+        </p>
+      </div>
+    );
+  }
+  const canUpload = can(session.roles, "content_library.add", session.permissions);
 
   // Platform-shared assets (tenant_id IS NULL) PLUS this tenant's own uploads.
   // Run in tenant context: the bespoke RLS policy on content_library_assets
