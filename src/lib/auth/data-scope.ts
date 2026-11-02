@@ -294,6 +294,28 @@ export function isMeetingInScope(
 }
 
 /**
+ * Is this ONE meeting inside my wall? The async counterpart of the list predicate.
+ *
+ * `isMeetingInScope` is synchronous, so for a sub-branch (desk) head it cannot
+ * tell which desk the meeting's owner sits in and refuses — which showed up as a
+ * 404 when a sub-branch head clicked a meeting that the LIST had just shown them
+ * (the list asks the database which desk the booker is in). This does the same
+ * lookup, through the owner/booker's user row, so the two can never disagree.
+ */
+export async function isMeetingVisible(
+  tx: any,
+  ms: MeetingScope,
+  row: {
+    ownerId?: string | null;
+    createdById?: string | null;
+    collaboratorIds?: unknown;
+  }
+): Promise<boolean> {
+  if (isMeetingInScope(ms, { ...row, branchId: null })) return true;
+  return isInScopeViaOwnerBranch(tx, ms.scope, [row.createdById, row.ownerId]);
+}
+
+/**
  * The wall for LEADS and MEETINGS.
  *
  * Same as resolveDataScope except that back office / ops — firm-wide for clients

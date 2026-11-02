@@ -19,7 +19,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession, type SessionUser } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
-import { resolveMeetingScope, isMeetingInScope, isInScopeViaOwnerBranch } from "@/lib/auth/data-scope";
+import { resolveMeetingScope, isMeetingVisible, isInScopeViaOwnerBranch } from "@/lib/auth/data-scope";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { notifyClientTeam } from "@/lib/notifications/client-team";
@@ -112,12 +112,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         // only their own.
         const scope = await resolveMeetingScope(tx, session);
         if (
-          !isMeetingInScope(scope, {
-            branchId: m.rm_branch_id ?? null,
+          !(await isMeetingVisible(tx, scope, {
             ownerId: m.rm_id,
             createdById: m.created_by_id,
             collaboratorIds: m.collaborator_ids,
-          })
+          }))
         ) {
           return { forbidden: true as const };
         }

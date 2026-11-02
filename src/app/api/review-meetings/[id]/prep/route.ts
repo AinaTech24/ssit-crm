@@ -18,6 +18,7 @@ import { sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
+import { resolveMeetingScope, isMeetingVisible } from "@/lib/auth/data-scope";
 import { generateMeetingPrepPoints } from "@/lib/ai/assistant";
 import { isAiConfigured } from "@/lib/ai/provider";
 
@@ -39,7 +40,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       session.tenantId,
       async (tx) => {
         const m = (await tx.execute(sql`
-          SELECT m.id, m.investor_id, m.lead_id, m.rm_id, m.meeting_date, m.status,
+          SELECT m.id, m.investor_id, m.lead_id, m.rm_id, m.created_by_id, m.collaborator_ids, m.meeting_date, m.status,
                  COALESCE(i.name, l.name, m.other_party_name) AS subject_name
           FROM review_meetings m
           LEFT JOIN investors i ON i.id = m.investor_id
@@ -48,7 +49,18 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           LIMIT 1
         `)).rows[0] as any;
         if (!m) return null;
-        if (!canAll && m.rm_id !== session.userId) return { forbidden: true as const };
+        // rm_id is legacy and NULL on everything booked since, so "rm_id is me" refused
+        // an RM their own meetings. Use the same wall the list and the meeting page use.
+        if (
+          !canAll &&
+          !(await isMeetingVisible(tx, await resolveMeetingScope(tx, session), {
+            ownerId: m.rm_id,
+            createdById: m.created_by_id,
+            collaboratorIds: m.collaborator_ids,
+          }))
+        ) {
+          return { forbidden: true as const };
+        }
 
         const isLead = !m.investor_id && !!m.lead_id;
 

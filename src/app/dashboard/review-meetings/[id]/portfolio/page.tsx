@@ -21,6 +21,7 @@ import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny, can } from "@/lib/auth/rbac";
+import { resolveMeetingScope, isMeetingVisible } from "@/lib/auth/data-scope";
 import {
   reviewMeetings,
   folios,
@@ -53,8 +54,19 @@ export default async function MeetingPortfolioPage({
       )
       .limit(1);
     if (!meeting) return null;
-    // manage.assigned RMs may only open their OWN meeting's worksheet.
-    if (!canAll && meeting.rmId !== session.userId) return null;
+    // manage.assigned RMs may only open meetings inside their wall. (rm_id is
+    // legacy and NULL on everything booked since — checking it alone refused an RM
+    // their own meetings.)
+    if (
+      !canAll &&
+      !(await isMeetingVisible(tx, await resolveMeetingScope(tx, session), {
+        ownerId: meeting.rmId,
+        createdById: meeting.createdById,
+        collaboratorIds: meeting.collaboratorIds,
+      }))
+    ) {
+      return null;
+    }
 
     const [investor] = meeting.investorId
       ? await tx
