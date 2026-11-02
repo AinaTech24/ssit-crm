@@ -91,6 +91,9 @@ export const reviewMeetings = pgTable(
      */
     investorId: uuid("investor_id"),
     leadId: uuid("lead_id"),
+    /** A meeting with someone who is neither a client nor a lead (migration 0252):
+     *  the name typed in the "Other" option. Then investorId and leadId are both null. */
+    otherPartyName: text("other_party_name"),
     /** Family-level review (when set, investorId points at the primary). */
     familyId: uuid("family_id"),
     /**

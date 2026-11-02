@@ -13,6 +13,13 @@
 
 import { and, ilike, inArray, or, sql } from "drizzle-orm";
 import { investors } from "@/db/schema";
+import { CROSS_SELL_PRODUCT_KEYS, CROSS_SELL_STATUS_KEYS } from "@/lib/investors/cross-sell";
+
+/** Filter value for "this product has no status recorded for the client yet". */
+export const CROSS_SELL_UNSET = "unset";
+
+/** URL param carrying the chosen statuses for one cross-sell product. */
+export const crossSellParam = (productKey: string) => `xs_${productKey}`;
 
 export type InvestorListParams = Record<string, string | undefined>;
 
@@ -153,6 +160,27 @@ export function buildInvestorConditions(
         WHERE cs.v IN ('held_elsewhere', 'interested', 'not_held')
       )
     )`);
+  }
+
+  // Per-product holdings filter (Cross-sell / holdings): ?xs_<product>=held_with_us,interested…
+  // Statuses OR together within a product; different products AND together, so
+  // "mutual fund held with us" + "PMS interested" narrows to clients with both.
+  // Product and status keys are checked against the catalog — nothing from the
+  // URL reaches the SQL except as a bound parameter.
+  for (const product of CROSS_SELL_PRODUCT_KEYS) {
+    const wanted = csv(sp[crossSellParam(product)]);
+    if (!wanted.length) continue;
+    const statuses = wanted.filter((v) => (CROSS_SELL_STATUS_KEYS as readonly string[]).includes(v));
+    const parts: any[] = [];
+    if (statuses.length) {
+      parts.push(
+        sql`(${investors.crossSell} ->> ${product}::text) IN (${sql.join(statuses.map((s) => sql`${s}`), sql`, `)})`
+      );
+    }
+    if (wanted.includes(CROSS_SELL_UNSET)) {
+      parts.push(sql`((${investors.crossSell} ->> ${product}::text) IS NULL OR (${investors.crossSell} ->> ${product}::text) = '')`);
+    }
+    if (parts.length) conditions.push(sql`(${sql.join(parts, sql` OR `)})`);
   }
 
   for (const gap of gaps) {

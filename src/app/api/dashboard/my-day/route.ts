@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
         const [meetings, followups, tasks, touchpoints, agenda] = await Promise.all([
           rows(sql`
             SELECT m.id, m.meeting_date AS at, m.subject, m.meeting_type, m.meeting_mode, m.status,
-                   COALESCE(i.name, l.name) AS client_name,
+                   COALESCE(i.name, l.name, m.other_party_name) AS client_name,
                    COALESCE(i.phone, l.phone) AS phone,
                    m.investor_id, m.lead_id
             FROM review_meetings m

@@ -95,7 +95,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       session.tenantId,
       async (tx) => {
         const r = await tx.execute(sql`
-          SELECT m.*, COALESCE(i.name, l.name) AS investor_name, l.name AS lead_name,
+          SELECT m.*, COALESCE(i.name, l.name, m.other_party_name) AS investor_name, l.name AS lead_name,
                  i.segment_tag, i.pan AS investor_pan, u.name AS rm_name, u.branch_id AS rm_branch_id
           FROM review_meetings m
           LEFT JOIN investors i ON i.id = m.investor_id
@@ -293,7 +293,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const reviewedAt = patch.meetingDate ?? before.meetingDate;
         // Link spawned tasks to whichever party this meeting is about — a lead
         // meeting must NOT create investor-typed tasks with a null subjectId.
-        const taskSubjectType: "investor" | "lead" = before.leadId ? "lead" : "investor";
+        const taskSubjectType: "investor" | "lead" | "internal" = before.leadId ? "lead" : before.investorId ? "investor" : "internal";
         const taskSubjectId = before.leadId ?? before.investorId;
         // Next review date: an explicit one from the form wins; otherwise derive
         // it from THIS client's configured review cadence (preset or custom days)

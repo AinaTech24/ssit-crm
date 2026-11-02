@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Loader2, Save, Users, Sparkles, Home, ChevronsUpDown, Video, AlertTriangle } from "lucide-react";
+import { Calendar, Loader2, Save, Users, Sparkles, User, ChevronsUpDown, Video, AlertTriangle } from "lucide-react";
 import { CollaboratorSelect } from "@/components/common/CollaboratorSelect";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
@@ -60,7 +60,7 @@ function labelType(t: string): string {
 type InvestorOpt = { id: string; name: string; pan: string; segment_tag: string | null };
 type LeadOpt = { id: string; name: string; phone: string | null; stage: string };
 type FamilyOpt = { id: string; family_name: string; primary_investor_id: string; primary_name: string };
-type Kind = "client" | "lead" | "family";
+type Kind = "client" | "lead" | "other";
 type MeetingConflict = {
   id: string;
   subject: string | null;
@@ -107,7 +107,7 @@ export function ScheduleMeetingForm({
   const [form, setForm] = useState({
     investorId: preselectedInvestorId ?? "",
     leadId: preselectedLeadId ?? "",
-    familyId: "",
+    otherPartyName: "",
     subject: defaultSubject ?? "",
     category: (["new", "review", "follow_up"].includes(preselectedCategory ?? "") ? preselectedCategory! : "review"),
     meetingDay: def.day,
@@ -135,8 +135,6 @@ export function ScheduleMeetingForm({
 
   function pickKind(k: Kind) {
     setSubjectKind(k);
-    // Family meetings are reviews.
-    if (k === "family" && form.category !== "review") set("category", "review");
   }
 
   /** Generate a ready-to-use video room (Jitsi — no account/setup needed). */
@@ -168,13 +166,7 @@ export function ScheduleMeetingForm({
       };
       if (subjectKind === "client") body.investorId = form.investorId;
       else if (subjectKind === "lead") body.leadId = form.leadId;
-      else {
-        // Family → attach to the primary investor + the familyId.
-        const fam = families.find((f) => f.id === form.familyId);
-        body.investorId = fam?.primary_investor_id;
-        body.familyId = form.familyId;
-        body.category = "review";
-      }
+      else body.otherPartyName = form.otherPartyName.trim();
 
       const res = await fetch("/api/review-meetings", {
         method: "POST",
@@ -218,13 +210,13 @@ export function ScheduleMeetingForm({
 
   const canSave =
     !!form.meetingDay && !!form.meetingTime &&
-    (subjectKind === "client" ? !!form.investorId : subjectKind === "lead" ? !!form.leadId : !!form.familyId);
+    (subjectKind === "client" ? !!form.investorId : subjectKind === "lead" ? !!form.leadId : !!form.otherPartyName.trim());
   const subjectLocked = !!(preselectedInvestorId || preselectedLeadId);
 
   const TABS: Array<{ k: Kind; label: string; Icon: any }> = [
     { k: "client", label: "Client", Icon: Users },
     { k: "lead", label: "Lead", Icon: Sparkles },
-    { k: "family", label: "Family", Icon: Home },
+    { k: "other", label: "Other", Icon: User },
   ];
 
   return (
@@ -241,7 +233,7 @@ export function ScheduleMeetingForm({
         />
       </Field>
 
-      {/* Subject toggle — Client | Lead | Family */}
+      {/* Subject toggle — Client | Lead | Other (type a name) */}
       <div>
         <div className="text-xs font-semibold text-foreground/80 mb-1.5">Who is the meeting with?</div>
         <div className="inline-flex rounded-lg border border-border bg-secondary/40 p-1 gap-1">
@@ -289,20 +281,18 @@ export function ScheduleMeetingForm({
           )}
         </Field>
       )}
-      {subjectKind === "family" && (
-        <Field label="Family">
-          <SearchSelect
-            options={families.map((f) => ({ value: f.id, label: f.family_name, sub: `Head: ${f.primary_name}` }))}
-            value={form.familyId}
-            onChange={(v) => set("familyId", v)}
-            placeholder="Search a family group…"
+      {subjectKind === "other" && (
+        <Field label="Who is the meeting with?">
+          <input
+            value={form.otherPartyName}
+            onChange={(e) => set("otherPartyName", e.target.value)}
+            maxLength={200}
+            placeholder="Type the person's or organisation's name"
+            className="input-base"
           />
-          {families.length === 0 && (
-            <div className="text-[11px] text-muted-foreground mt-1.5">
-              No families with a primary client set. Link one from{" "}
-              <a href="/dashboard/families" className="text-brand-cyan hover:underline">Families</a>.
-            </div>
-          )}
+          <div className="text-[11px] text-muted-foreground mt-1.5">
+            For anyone who is not a client or a lead — an AMC contact, a vendor, a prospect&apos;s relative.
+          </div>
         </Field>
       )}
 
@@ -457,8 +447,8 @@ export function ScheduleMeetingForm({
 
       <p className="text-[11px] text-muted-foreground leading-relaxed pt-2 border-t border-border flex items-start gap-1.5">
         <Calendar className="size-3.5 mt-0.5 flex-shrink-0" />
-        A reminder task auto-fires the day before. After completion, action items become tasks and the{" "}
-        {subjectKind === "lead" ? "lead's last-contact date" : "client's next review date"} gets updated.
+        A reminder task auto-fires the day before. After completion, action items become tasks
+        {subjectKind === "other" ? "." : <>{" "}and the {subjectKind === "lead" ? "lead's last-contact date" : "client's next review date"} gets updated.</>}
       </p>
     </div>
   );

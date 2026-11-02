@@ -187,7 +187,7 @@ export function CircularsFeed({
       {/* Equitywala Curated Circulars */}
       <div className="space-y-3">
         <h2 className="text-sm font-semibold flex items-center gap-2">
-          <ScrollText className="size-4 text-muted-foreground" /> Equitywala-curated digest ({filteredAmfiCirculars.length})
+          <ScrollText className="size-4 text-muted-foreground" /> Regulatory digest — curated by Equitywala + latest from SEBI ({filteredAmfiCirculars.length})
         </h2>
         <div className="space-y-3">
           {filteredAmfiCirculars.length === 0 ? (

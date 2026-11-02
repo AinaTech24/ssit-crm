@@ -73,7 +73,7 @@ export default async function ReviewMeetingDetailPage({
     return { meeting: m, investor: inv, lead: ld, rm, prep };
   });
   if (!data) notFound();
-  const subjectName = data.investor?.name ?? data.lead?.name ?? "Subject";
+  const subjectName = data.investor?.name ?? data.lead?.name ?? data.meeting.otherPartyName ?? "Subject";
   const subjectKind: "Client" | "Lead" = data.lead ? "Lead" : "Client";
 
   return (

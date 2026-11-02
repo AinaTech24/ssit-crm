@@ -11,6 +11,9 @@ import { CustomViews } from "@/components/common/CustomViews";
 import { ContactQuickActions } from "@/components/common/ContactQuickActions";
 import { LogActivityButton } from "@/components/activities/ActivityLogger";
 import { dateRangeCond, dateRangeFilter } from "@/lib/filters/date-range";
+import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
+import { ScopeBreakdownCards } from "@/components/common/ScopeBreakdownCards";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, loadScopeBreakdown, canPickScope } from "@/lib/scope/view-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +38,8 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
   const q = (sp.q ?? "").trim();
   const kind = (sp.kind ?? "").split(",").filter(Boolean);
   const mine = sp.mine === "1" || !firmWide;
+  const scopeSel = parseScope(sp);
+  const showScopePicker = canPickScope(session);
 
   const data = await withTenant(
     session.tenantId,
@@ -47,6 +52,8 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
       if (q) conds.push(sql`(a.subject_name ILIKE ${`%${q}%`} OR a.subject ILIKE ${`%${q}%`} OR a.notes ILIKE ${`%${q}%`})`);
       if (kind.length) conds.push(sql`a.kind IN (${sql.join(kind.map((k) => sql`${k}`), sql`, `)})`);
       if (mine) conds.push(sql`a.owner_user_id = ${session.userId}::uuid`);
+      // Sub-branch / RM view filter, layered on the wall above (never past it).
+      conds.push(scopeFilterSql(scopeSel, session.tenantId, "a.owner_user_id"));
       const dr = dateRangeCond(sp, "created", "a.occurred_at");
       if (dr) conds.push(dr);
       const whereSql = sql`WHERE ${sql.join(conds, sql` AND `)}`;
@@ -76,7 +83,16 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
           COUNT(*) FILTER (WHERE next_followup_at IS NOT NULL AND next_followup_at::date <= current_date)::int AS followups_due
         FROM activities WHERE tenant_id = ${session.tenantId}::uuid ${mineSql}
       `);
-      return { rows: rows.rows as any[], stats: stats.rows[0] as any };
+      const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
+      const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
+      const breakdown = showScopePicker
+        ? await loadScopeBreakdown(tx, {
+            from: sql`activities a`,
+            owner: "a.owner_user_id",
+            where: sql`${sql.join(conds, sql` AND `)}`,
+          })
+        : { byDesk: [], byRm: [] };
+      return { rows: rows.rows as any[], stats: stats.rows[0] as any, scopeUnits, scopeMembers, breakdown };
     },
     { userId: session.userId, branchId: session.branchId, roles: session.roles }
   );
@@ -99,6 +115,24 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
         <Stat icon={MapPin} label="Visits this week" value={s?.visits_week ?? 0} tone="emerald" />
         <Stat icon={StickyNote} label="Follow-ups due" value={s?.followups_due ?? 0} tone="amber" />
       </div>
+
+      {showScopePicker && (
+        <>
+          <ScopeFilterBar
+            basePath="/dashboard/activities"
+            units={data.scopeUnits}
+            members={data.scopeMembers}
+            selectedUnit={scopeSel.unit}
+            selectedMember={scopeSel.rm}
+          />
+          <ScopeBreakdownCards
+            basePath="/dashboard/activities"
+            noun="activities"
+            byUnit={(data.breakdown.byDesk ?? []).map((d) => ({ label: d.label, count: d.n, unitValue: d.desk_id ? `d:${d.desk_id}` : null }))}
+            byMember={(data.breakdown.byRm ?? []).map((r) => ({ label: r.label, count: r.n, memberId: r.rm_id }))}
+          />
+        </>
+      )}
 
       <CompactFilterBar
         totalCount={data.rows.length}

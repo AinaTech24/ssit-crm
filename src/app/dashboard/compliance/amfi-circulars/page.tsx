@@ -12,6 +12,7 @@ import { requireSession } from "@/lib/auth/session";
 import { amfiCirculars, tenantCirculars } from "@/db/schema";
 import { CircularSummarizer } from "@/components/compliance/CircularSummarizer";
 import { CircularsFeed } from "@/components/compliance/CircularsFeed";
+import { refreshSebiCirculars } from "@/lib/compliance/sebi-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ export default async function AmfiCircularsPage() {
   const session = await requireSession();
   // Regulatory digest is informational staff content — any authenticated user.
   const canDraft = session.roles.some((r) => ["owner", "compliance"].includes(r));
+
+  // Pull SEBI's latest circulars into the shared digest (throttled to once per
+  // six hours per server; a SEBI outage just means nothing new is added).
+  await refreshSebiCirculars();
 
   // Platform-shared table (no tenant_id / no RLS) — a plain select returns the
   // curated set for everyone.

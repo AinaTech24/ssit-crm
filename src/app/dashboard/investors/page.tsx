@@ -24,7 +24,8 @@ import { isFieldAllowed } from "@/lib/auth/field-gate";
 import { dormancyDays, type HealthBand } from "@/lib/investors/health";
 import { InvestorsTable, type InvestorTableRow } from "@/components/investors/InvestorsTable";
 import { InvestorSortSelect } from "@/components/investors/InvestorSortSelect";
-import { buildInvestorWhere } from "@/lib/investors/list-filters";
+import { buildInvestorWhere, crossSellParam, CROSS_SELL_UNSET } from "@/lib/investors/list-filters";
+import { CROSS_SELL_PRODUCTS, CROSS_SELL_STATUSES } from "@/lib/investors/cross-sell";
 import { Pager } from "@/components/common/Pager";
 import { countPossibleDuplicates } from "@/lib/investors/duplicates";
 import { clientCompleteness } from "@/lib/investors/completeness";
@@ -530,6 +531,17 @@ export default async function InvestorsPage({
             ? [{ type: "multi" as const, key: "rm", label: "RM", options: rmOptions }]
             : []),
           dateRangeFilter("created", "Added"),
+          // One filter per Cross-sell / holdings product (Mutual Fund, Demat, PMS…),
+          // each offering the same statuses the holdings card uses.
+          ...CROSS_SELL_PRODUCTS.map(([key, label]) => ({
+            type: "multi" as const,
+            key: crossSellParam(key),
+            label: `${label} — holding`,
+            options: [
+              ...CROSS_SELL_STATUSES.map(([value, text]) => ({ value, label: text })),
+              { value: CROSS_SELL_UNSET, label: "Not recorded" },
+            ],
+          })),
         ]}
         rightSlot={
           <div className="flex items-center gap-2">

@@ -7,6 +7,7 @@ import { ChevronLeft } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
 import { PartnerSelect } from "@/components/service-requests/PartnerSelect";
+import { AttachmentPicker, uploadAttachments } from "@/components/common/EntityAttachments";
 
 const DEPARTMENTS = [
   { value: "motilal_oswal", label: "Motilal Oswal" },
@@ -80,6 +81,7 @@ export default function NewServiceRequestPage() {
   const [hits, setHits] = useState<ClientHit[]>([]);
   const [picked, setPicked] = useState<ClientHit | null>(null);
   const [showHits, setShowHits] = useState(false);
+  const [docs, setDocs] = useState<File[]>([]);
   const [form, setForm] = useState({
     investorId: "",
     clientName: "",
@@ -177,6 +179,21 @@ export default function NewServiceRequestPage() {
       if (!res.ok) {
         setErr(j.error ?? "Create failed");
         return;
+      }
+      // The ticket exists now — attach the documents picked on the form. If an
+      // upload fails the ticket is still saved, so say so and open it so the
+      // files can be added there.
+      if (docs.length && j?.id) {
+        try {
+          await uploadAttachments(`/api/service-requests/${j.id}/attachments`, docs);
+        } catch (e: any) {
+          setErr(
+            (e?.message ?? "Attachment upload failed") +
+              " — the ticket was created, but its documents were not attached. Open it to add them."
+          );
+          router.push(`/dashboard/service-requests/${j.id}`);
+          return;
+        }
       }
       router.push(form.type === "complaint" ? "/dashboard/complaints" : "/dashboard/service-requests");
     } finally {
@@ -352,6 +369,12 @@ export default function NewServiceRequestPage() {
             <p className="text-[11px] text-amber-700">Complaints carry a 21-day resolution SLA and feed the monthly disclosure statement.</p>
           </div>
         )}
+        <AttachmentPicker
+          files={docs}
+          onChange={setDocs}
+          disabled={busy}
+          hint="Drop a signed form, statement or the partner's reply here — or use “Add files”. They upload when the ticket is created. Max 25 MB each."
+        />
         {err && <div className="text-sm text-rose-600">{err}</div>}
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Link href="/dashboard/service-requests" className="rounded-md border px-4 py-2 text-sm">Cancel</Link>

@@ -121,7 +121,7 @@ export async function getCalendarItems(
       SELECT rm.id, rm.meeting_type, rm.subject, rm.meeting_date,
              rm.meeting_date::date AS d, rm.status, rm.meeting_mode,
              rm.investor_id, rm.lead_id,
-             COALESCE(i.name, l.name) AS person_name,
+             COALESCE(i.name, l.name, rm.other_party_name) AS person_name,
              COALESCE(i.avatar_url, l.avatar_url) AS avatar_url
       FROM review_meetings rm
       LEFT JOIN investors i ON i.id = rm.investor_id

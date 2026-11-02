@@ -29,7 +29,7 @@ export async function GET() {
                AND due_at IS NOT NULL AND due_at <= now() + interval '2 hours'
              ORDER BY due_at ASC LIMIT 8`),
           tx.execute(sql`
-            SELECT m.id, m.subject, m.meeting_date, COALESCE(i.name, l.name) AS party
+            SELECT m.id, m.subject, m.meeting_date, COALESCE(i.name, l.name, m.other_party_name) AS party
               FROM review_meetings m
               LEFT JOIN investors i ON i.id = m.investor_id
               LEFT JOIN leads l ON l.id = m.lead_id

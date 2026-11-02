@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { ModuleKpis } from "@/components/modules/ModuleKpis";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
-import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, loadScopeBreakdown, canPickScope } from "@/lib/scope/view-filter";
+import { ScopeBreakdownCards } from "@/components/common/ScopeBreakdownCards";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
@@ -107,7 +108,7 @@ export default async function ReviewMeetingsPage({
     ];
     if (q) {
       filters.push(
-        sql`(i.name ILIKE ${`%${q}%`} OR l.name ILIKE ${`%${q}%`} OR u.name ILIKE ${`%${q}%`} OR m.discussion_points ILIKE ${`%${q}%`} OR m.meeting_notes ILIKE ${`%${q}%`})`
+        sql`(i.name ILIKE ${`%${q}%`} OR l.name ILIKE ${`%${q}%`} OR m.other_party_name ILIKE ${`%${q}%`} OR u.name ILIKE ${`%${q}%`} OR m.discussion_points ILIKE ${`%${q}%`} OR m.meeting_notes ILIKE ${`%${q}%`})`
       );
     }
     if (categoryFilter.length) {
@@ -156,10 +157,11 @@ export default async function ReviewMeetingsPage({
              m.created_at,
              -- A meeting is tied to EITHER an investor or a lead (pre-conversion).
              -- Surface whichever name exists so the Client column is never blank.
-             COALESCE(i.name, l.name) AS party_name,
+             COALESCE(i.name, l.name, m.other_party_name) AS party_name,
              COALESCE(i.avatar_url, l.avatar_url) AS party_avatar_url,
              CASE WHEN i.id IS NOT NULL THEN 'investor'
-                  WHEN l.id IS NOT NULL THEN 'lead' END AS party_kind,
+                  WHEN l.id IS NOT NULL THEN 'lead'
+                  WHEN m.other_party_name IS NOT NULL THEN 'other' END AS party_kind,
              i.pan AS investor_pan, i.segment_tag,
              u.name AS rm_name,
              -- Who it was booked FOR. Collaborators are how an assignment is
@@ -234,7 +236,18 @@ export default async function ReviewMeetingsPage({
         `);
     const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
     const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
-    return { rows: meetings.rows as any[], stats: s, rms: rmRows.rows as any[], scopeUnits, scopeMembers };
+    // Meetings per sub-branch and per person, under the same wall + filters as the list.
+    const breakdown = showScopePicker
+      ? await loadScopeBreakdown(tx, {
+          from: sql`review_meetings m
+            LEFT JOIN investors i ON i.id = m.investor_id
+            LEFT JOIN leads l ON l.id = m.lead_id
+            LEFT JOIN users u ON u.id = COALESCE(m.rm_id, m.created_by_id)`,
+          owner: "COALESCE(m.rm_id, m.created_by_id)",
+          where: sql`${sql.join(filters, sql` AND `)}`,
+        })
+      : { byDesk: [], byRm: [] };
+    return { rows: meetings.rows as any[], stats: s, rms: rmRows.rows as any[], scopeUnits, scopeMembers, breakdown };
   });
 
   const rmOptions = (data.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -316,6 +329,14 @@ export default async function ReviewMeetingsPage({
           members={data.scopeMembers}
           selectedUnit={scopeSel.unit}
           selectedMember={scopeSel.rm}
+        />
+      )}
+      {showScopePicker && (
+        <ScopeBreakdownCards
+          basePath="/dashboard/review-meetings"
+          noun="meetings"
+          byUnit={(data.breakdown.byDesk ?? []).map((d) => ({ label: d.label, count: d.n, unitValue: d.desk_id ? `d:${d.desk_id}` : null }))}
+          byMember={(data.breakdown.byRm ?? []).map((r) => ({ label: r.label, count: r.n, memberId: r.rm_id }))}
         />
       )}
 

@@ -20,7 +20,6 @@ import { imapFetchSince, type InboundEmail, type ImapConfig } from "@/lib/comms/
 import { describeMailError } from "@/lib/comms/connection-error";
 import { tenantIntegrations } from "@/db/schema/tenant_integrations";
 import { communications, investors, leads, users } from "@/db/schema";
-import { maybeRouteEmailToTicket } from "@/lib/comms/email-to-ticket";
 import { refreshAccessToken, getProviderDef, type OAuthProvider } from "@/lib/comms/oauth";
 import { sql } from "drizzle-orm";
 import { captureError } from "@/lib/observability/capture";
@@ -167,14 +166,8 @@ async function ingest(
           .where(and(eq(communications.id, replyToOutboundId), inArray(communications.status, ["sent", "delivered", "read"])));
       }
 
-      // Email → Service Request auto-routing (parity with WhatsApp intake).
-      await maybeRouteEmailToTicket(tx, {
-        tenantId,
-        investorId,
-        subject: m.subject ?? null,
-        text: m.text ?? null,
-        messageId: ext,
-      });
+      // Inbound email is logged above and nothing more: it no longer opens a
+      // service request on its own. Requests are created by a person.
     }
   });
   return { ingested, maxUid };

@@ -7,6 +7,7 @@ import { serviceRequests, investors, users } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { ServiceRequestDetailEditor } from "@/components/service-requests/ServiceRequestDetailEditor";
 import { RecordProvenance } from "@/components/common/RecordProvenance";
+import { EntityAttachments } from "@/components/common/EntityAttachments";
 
 export const dynamic = "force-dynamic";
 
@@ -79,6 +80,10 @@ export default async function ServiceRequestDetailPage({ params }: { params: Pro
             className="mt-2"
           />
         </div>
+      </div>
+
+      <div className="border rounded-lg bg-card p-5">
+        <EntityAttachments basePath={`/api/service-requests/${sr.id}/attachments`} />
       </div>
 
       <ServiceRequestDetailEditor sr={JSON.parse(JSON.stringify(sr))} userMap={userMap} />

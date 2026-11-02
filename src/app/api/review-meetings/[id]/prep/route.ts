@@ -40,7 +40,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       async (tx) => {
         const m = (await tx.execute(sql`
           SELECT m.id, m.investor_id, m.lead_id, m.rm_id, m.meeting_date, m.status,
-                 COALESCE(i.name, l.name) AS subject_name
+                 COALESCE(i.name, l.name, m.other_party_name) AS subject_name
           FROM review_meetings m
           LEFT JOIN investors i ON i.id = m.investor_id
           LEFT JOIN leads l ON l.id = m.lead_id

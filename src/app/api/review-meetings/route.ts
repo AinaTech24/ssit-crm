@@ -44,6 +44,8 @@ const Body = z
     // Exactly one of these must be set — refined below.
     investorId: z.string().uuid().optional(),
     leadId: z.string().uuid().optional(),
+    /** "Other" — a meeting with someone who is neither a client nor a lead. */
+    otherPartyName: z.string().trim().min(1).max(200).optional(),
     familyId: z.string().uuid().optional(),
     collaboratorIds: z.array(z.string().uuid()).max(20).optional(),
     category: z.enum(MEETING_CATEGORIES).default("review"),
@@ -61,8 +63,8 @@ const Body = z
     /** Override the RM double-booking guard (user clicked "Schedule anyway"). */
     force: z.boolean().default(false),
   })
-  .refine((b) => Boolean(b.investorId) !== Boolean(b.leadId), {
-    message: "Provide exactly one of investorId or leadId",
+  .refine((b) => [b.investorId, b.leadId, b.otherPartyName].filter(Boolean).length === 1, {
+    message: "Provide exactly one of investorId, leadId or otherPartyName",
     path: ["investorId"],
   });
 
@@ -174,7 +176,7 @@ export async function POST(req: NextRequest) {
       let subjectName = "";
       let subjectEmail: string | null = null;
       let subjectRmId: string | null = null;
-      let subjectType: "investor" | "lead" = "investor";
+      let subjectType: "investor" | "lead" | "internal" = "investor";
       let subjectId = "";
       if (body.investorId) {
         const inv = (await tx.select().from(investors).where(and(eq(investors.id, body.investorId), eq(investors.tenantId, session.tenantId))).limit(1))[0];
@@ -184,6 +186,10 @@ export async function POST(req: NextRequest) {
         subjectRmId = inv.rmId ?? null;
         subjectType = "investor";
         subjectId = body.investorId;
+      } else if (body.otherPartyName) {
+        // Someone who is neither a client nor a lead: just the typed name.
+        subjectName = body.otherPartyName;
+        subjectType = "internal";
       } else {
         const ld = (await tx.select().from(leads).where(and(eq(leads.id, body.leadId!), eq(leads.tenantId, session.tenantId))).limit(1))[0];
         if (!ld) throw Object.assign(new Error("lead not found"), { status: 404 });
@@ -224,7 +230,7 @@ export async function POST(req: NextRequest) {
         branchId: session.branchId ?? null,
         assigneeId: createdById,
         subjectType,
-        subjectId,
+        subjectId: subjectId || null,
         type: "review_meeting_reminder",
         title: `Reminder: ${labelForType(body.meetingType)} with ${subjectName} tomorrow`,
         description: `Mode: ${labelForMode(body.meetingMode)}${body.locationOrLink ? " · " + body.locationOrLink : ""}.${body.discussionPoints ? " Agenda: " + body.discussionPoints : ""}`,
@@ -238,6 +244,7 @@ export async function POST(req: NextRequest) {
         tenantId: session.tenantId,
         investorId: body.investorId ?? null,
         leadId: body.leadId ?? null,
+        otherPartyName: body.otherPartyName ?? null,
         familyId: body.familyId ?? null,
         createdById,
         collaboratorIds: body.collaboratorIds ?? [],
@@ -260,7 +267,9 @@ export async function POST(req: NextRequest) {
       // message. `reminderAt` (meeting − 1 day, already computed above for the
       // RM reminder task) lets a recipe wait_until_date and fire a day-before
       // reminder. Meeting linkage stays in `after`.
-      await tx.insert(eventsOutbox).values({
+      // The outbox points at the person (client / lead); an "Other" attendee has
+      // no record to point at, so no automation event is raised for them.
+      if (subjectType !== "internal") await tx.insert(eventsOutbox).values({
         tenantId: session.tenantId,
         kind: "review_meeting.scheduled",
         entityType: subjectType,
@@ -287,6 +296,7 @@ export async function POST(req: NextRequest) {
         after: {
           investorId: body.investorId ?? null,
           leadId: body.leadId ?? null,
+          otherPartyName: body.otherPartyName ?? null,
           meetingType: body.meetingType,
           mode: body.meetingMode,
         } as any,
@@ -315,7 +325,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Name of whoever the meeting is about, for the notice.
-      let aboutName: string | null = null;
+      let aboutName: string | null = subjectType === "internal" ? subjectName : null;
       if (subjectId) {
         const who = await tx.execute(
           subjectType === "lead"

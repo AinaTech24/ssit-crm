@@ -11,7 +11,8 @@ import { taskScopeSql } from "@/lib/tasks/access";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
 import { usersInScopeSql } from "@/lib/auth/data-scope";
-import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, canPickScope } from "@/lib/scope/view-filter";
+import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, loadScopeBreakdown, canPickScope } from "@/lib/scope/view-filter";
+import { ScopeBreakdownCards } from "@/components/common/ScopeBreakdownCards";
 import { Pager } from "@/components/common/Pager";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
@@ -226,7 +227,16 @@ export default async function TasksPage({
         AND ${scopeFilterSql(scopeSel, session.tenantId, ["tasks.assignee_id", "tasks.created_by_id"])}
     `);
     const kpi = (kpiRes.rows[0] as { total: number; open: number; overdue: number; completed: number } | undefined) ?? { total: 0, open: 0, overdue: 0, completed: 0 };
-    return { rows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[], scopeUnits, scopeMembers, kpi };
+    // Tasks per sub-branch and per person (a task sits with its assignee, or its
+    // creator while unassigned), under the same wall + filters as the list.
+    const breakdown = showScopePicker
+      ? await loadScopeBreakdown(tx, {
+          from: sql`tasks LEFT JOIN users ON users.id = tasks.assignee_id`,
+          owner: "COALESCE(tasks.assignee_id, tasks.created_by_id)",
+          where: sql`${where ?? sql`TRUE`}`,
+        })
+      : { byDesk: [], byRm: [] };
+    return { rows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[], scopeUnits, scopeMembers, kpi, breakdown };
   });
 
   const rmOptions = (result.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
@@ -277,6 +287,14 @@ export default async function TasksPage({
           members={result.scopeMembers}
           selectedUnit={scopeSel.unit}
           selectedMember={scopeSel.rm}
+        />
+      )}
+      {showScopePicker && (
+        <ScopeBreakdownCards
+          basePath="/dashboard/tasks"
+          noun="tasks"
+          byUnit={(result.breakdown.byDesk ?? []).map((d) => ({ label: d.label, count: d.n, unitValue: d.desk_id ? `d:${d.desk_id}` : null }))}
+          byMember={(result.breakdown.byRm ?? []).map((r) => ({ label: r.label, count: r.n, memberId: r.rm_id }))}
         />
       )}
 

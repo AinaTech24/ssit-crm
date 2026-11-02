@@ -267,7 +267,7 @@ export async function buildCommandQueue(
   {
     const r = await tx.execute(sql`
       SELECT m.id, m.meeting_type, m.subject, m.meeting_date,
-             COALESCE(i.name, l.name) AS party_name, count(*) OVER() AS total
+             COALESCE(i.name, l.name, m.other_party_name) AS party_name, count(*) OVER() AS total
       FROM review_meetings m
       LEFT JOIN investors i ON i.id = m.investor_id
       LEFT JOIN leads l ON l.id = m.lead_id

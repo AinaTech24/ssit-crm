@@ -290,3 +290,47 @@ export function canPickScope(session: SessionUser): boolean {
     ["owner", "back_office", "ops", "branch_head"].includes(r)
   );
 }
+
+export type ScopeBreakdown = {
+  byDesk: { label: string; desk_id: string | null; n: number }[];
+  byRm: { label: string; rm_id: string | null; n: number }[];
+};
+
+/**
+ * Record counts per sub-branch and per person, for ScopeBreakdownCards.
+ *
+ * Counted with the SAME FROM / WHERE as the page's own list, so the cards can
+ * never disagree with the rows underneath them. `owner` is the SQL expression
+ * for the person a record belongs to (e.g. `COALESCE(m.rm_id, m.created_by_id)`)
+ * — a trusted constant from the calling page, never user input.
+ */
+export async function loadScopeBreakdown(
+  tx: any,
+  o: { from: SQL; owner: string; where: SQL }
+): Promise<ScopeBreakdown> {
+  const [byDeskRes, byRmRes] = await Promise.all([
+    tx.execute(sql`
+      SELECT COALESCE(sbd.name, 'No sub-branch') AS label, sbd.id AS desk_id, COUNT(*)::int AS n
+      FROM ${o.from}
+      LEFT JOIN users sbu ON sbu.id = ${sql.raw(o.owner)}
+      LEFT JOIN desks sbd ON sbd.id = sbu.desk_id
+      WHERE ${o.where}
+      GROUP BY sbd.id, sbd.name
+      ORDER BY n DESC
+      LIMIT 12
+    `),
+    tx.execute(sql`
+      SELECT COALESCE(sbu.name, 'Unassigned') AS label, sbu.id AS rm_id, COUNT(*)::int AS n
+      FROM ${o.from}
+      LEFT JOIN users sbu ON sbu.id = ${sql.raw(o.owner)}
+      WHERE ${o.where}
+      GROUP BY sbu.id, sbu.name
+      ORDER BY n DESC
+      LIMIT 12
+    `),
+  ]);
+  return {
+    byDesk: byDeskRes.rows as ScopeBreakdown["byDesk"],
+    byRm: byRmRes.rows as ScopeBreakdown["byRm"],
+  };
+}
