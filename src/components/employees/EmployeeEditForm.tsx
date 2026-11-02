@@ -55,6 +55,7 @@ const ROLES = [
   { key: "compliance", label: "Compliance / DDQ" },
   { key: "assistant", label: "Assistant" },
   { key: "gifting_hr", label: "Gifting / HR" },
+  { key: "accounts", label: "Accounts" },
 ];
 
 const STATUSES = [

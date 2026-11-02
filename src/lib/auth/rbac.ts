@@ -39,6 +39,9 @@ export type Role =
   // engagement programme. Neither owns a book.
   | "assistant"
   | "gifting_hr"
+  // The firm's bookkeeper: expense ledger, practice finances (P&L), commission
+  // reconciliation and the commission MIS. No book of clients, no leads.
+  | "accounts"
   // Distribution + advisory verticals. Each works its OWN book — none of them
   // gets a .all scope by default, because "sees every client in the firm" is a
   // decision an owner makes per person, not something a job title confers.
@@ -64,6 +67,7 @@ export const ROLE_LABELS: Record<string, string> = {
   branch_head: "Branch Head",
   assistant: "Assistant",
   gifting_hr: "Gifting / HR",
+  accounts: "Accounts",
   sub_broker: "Sub Broker",
   ra_research: "RA — Research",
   ra_sales: "RA — Sales",
@@ -318,15 +322,15 @@ const MATRIX: Record<Capability, Role[]> = {
   "attendance.grid.view": [],
   // The staff expense ledger, WITHOUT firm P&L / salaries — that stays behind
   // finances.view, which is deliberately owner-grade.
-  "expense.manage": ["back_office", "gifting_hr"],
+  "expense.manage": ["back_office", "gifting_hr", "accounts"],
   "gifting.manage": ["back_office", "ops", "gifting_hr", "assistant"],
 
   // Tasks — every working role, including the support desks that only ever
   // work what is handed to them.
   "task.view.all": ["compliance", "back_office", "ops", "marketing", "branch_head"],
-  "task.view.assigned": ["rm", "assistant", "gifting_hr", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
+  "task.view.assigned": ["rm", "assistant", "gifting_hr", "accounts", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
   "task.edit.all": ["back_office", "ops", "marketing"],
-  "task.edit.assigned": ["rm", "assistant", "gifting_hr", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
+  "task.edit.assigned": ["rm", "assistant", "gifting_hr", "accounts", "compliance", "branch_head", "sub_broker", "ra_sales", "ria", "insurance", "marketing", "ra_research"],
   // HANDING someone work is not the same as EDITING their work, and conflating
   // the two is why a sub-branch head could not give a task to their own team:
   // assigning was gated on task.edit.all, which exists so back office can edit
@@ -347,7 +351,7 @@ const MATRIX: Record<Capability, Role[]> = {
   "document.view": ["compliance", "back_office", "ops", "rm", "branch_head", "marketing", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
   // Induction (team training). Everyone can see their OWN track; managing
   // tracks/questions sits with compliance + branch heads (owner bypasses).
-  "induction.view": ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "assistant", "gifting_hr", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
+  "induction.view": ["rm", "branch_head", "back_office", "ops", "marketing", "compliance", "assistant", "gifting_hr", "accounts", "sub_broker", "ra_research", "ra_sales", "ria", "insurance"],
   "induction.manage": ["compliance", "branch_head"],
   "document.upload": ["back_office", "ops", "rm", "compliance", "assistant", "branch_head"],
   "document.delete": ["compliance"],
@@ -445,12 +449,12 @@ const MATRIX: Record<Capability, Role[]> = {
   // Commission/brokerage MIS — the back-office team that runs reconciliation,
   // branch heads (team payout view) and compliance. Owner sees all via the
   // hard-case in can(). RMs are intentionally excluded (firm-level economics).
-  "reports.commission": ["back_office", "ops", "branch_head", "compliance"],
+  "reports.commission": ["back_office", "ops", "branch_head", "compliance", "accounts"],
   // Practice finances (firm P&L + salaries) — owner-grade. Back-office keeps
   // access as the bookkeeper who maintains the expense ledger; ops / branch_head
   // / compliance are deliberately excluded (the firm's profit + team salaries are
   // owner-confidential). Owner wins via the hard-case in can().
-  "finances.view": ["back_office"],
+  "finances.view": ["back_office", "accounts"],
   // Custom report builder — can compose reports over any catalog field
   // (incl. PII columns), so it's limited to management/back-office roles.
   // Owner wins via can(). RM/ops excluded until per-field gating lands.
@@ -502,6 +506,7 @@ export const ASSIGNABLE_ROLES: Role[] = [
   "branch_head",
   "assistant",
   "gifting_hr",
+  "accounts",
   "sub_broker",
   "ra_research",
   "ra_sales",
@@ -640,7 +645,7 @@ export function requirePlatform(userRoles: string[] | undefined, cap: PlatformCa
 export function primaryRoleLabel(roles: string[]): string {
   if (roles.includes("platform_admin")) return ROLE_LABELS.platform_admin;
   if (roles.includes("platform_support")) return ROLE_LABELS.platform_support;
-  for (const r of ["owner", "compliance", "marketing", "back_office", "ops", "rm", "branch_head", "assistant", "gifting_hr"]) {
+  for (const r of ["owner", "compliance", "marketing", "back_office", "ops", "rm", "branch_head", "assistant", "gifting_hr", "accounts"]) {
     if (roles.includes(r)) return ROLE_LABELS[r] ?? r;
   }
   return roles[0] ?? "User";

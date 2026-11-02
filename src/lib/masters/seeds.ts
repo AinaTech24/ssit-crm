@@ -139,6 +139,7 @@ export const MASTER_SEEDS: Record<string, SeedRow[]> = {
     { key: "compliance", label: "Compliance / DDQ Executive" },
     { key: "assistant", label: "Assistant" },
     { key: "gifting_hr", label: "Gifting / HR" },
+    { key: "accounts", label: "Accounts" },
     { key: "branch_head", label: "Branch Head" },
   ],
 

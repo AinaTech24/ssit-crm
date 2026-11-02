@@ -267,7 +267,7 @@ const NAV: NavSection[] = [
   {
     title: "Insights",
     items: [
-      { href: "/dashboard/reports", label: "Reports & MIS", icon: BarChart3, module: "reports", roles: ["owner", "branch_head", "compliance"] },
+      { href: "/dashboard/reports", label: "Reports & MIS", icon: BarChart3, module: "reports", roles: ["owner", "branch_head", "compliance", "accounts"] },
       // NOTE: Trail Forecast / Churn-risk / Tax-Harvesting / Cross-sell (and
       // Nomination Tracker, removed from Compliance below) were standalone sidebar
       // items that only deep-linked into /dashboard/reports/* — the identical pages
@@ -275,8 +275,8 @@ const NAV: NavSection[] = [
       // duplicate nav entries are removed; every report is unchanged and still
       // reachable from Reports & MIS.
       { href: "/dashboard/portfolio-intelligence", label: "Portfolio Intelligence", icon: PieChart, roles: ["owner", "branch_head", "compliance", "rm", "back_office", "ops"] },
-      { href: "/dashboard/commission-reconciliation", label: "Commission Reconciliation", icon: CreditCard, module: "reports", roles: ["owner", "compliance", "back_office"] },
-      { href: "/dashboard/finances", label: "Practice Finances", icon: Wallet, module: "reports", roles: ["owner", "compliance", "back_office"] },
+      { href: "/dashboard/commission-reconciliation", label: "Commission Reconciliation", icon: CreditCard, module: "reports", roles: ["owner", "compliance", "back_office", "accounts"] },
+      { href: "/dashboard/finances", label: "Practice Finances", icon: Wallet, module: "reports", roles: ["owner", "compliance", "back_office", "accounts"] },
       { href: "/dashboard/ai-assistant", label: "Equitywala Copilot", icon: Bot, module: "ai_assistant" },
       { href: "/dashboard/audit-log", label: "Audit Log", icon: ClipboardCheck, module: "audit_log", roles: ["owner", "compliance"] },
     ],

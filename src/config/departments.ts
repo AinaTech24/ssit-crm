@@ -42,7 +42,7 @@ export const DEPARTMENT_ROLES: Record<string, string[]> = {
   marketing: ["marketing"],
   // Fee-based advice and the research that feeds it.
   advisory: ["ria", "ra_research"],
-  support: ["assistant", "gifting_hr"],
+  support: ["assistant", "gifting_hr", "accounts"],
   leadership: ["owner", "branch_head"],
   // No role maps to "Other" — it matches on the department column only.
   other: [],

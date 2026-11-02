@@ -212,6 +212,21 @@ export const ROLE_DEFAULT_NAV: Record<string, string[]> = {
     "/dashboard/finances/expenses",
     "/dashboard/announcements",
   ],
+  // Accounts is the bookkeeper: the firm's finances, the staff expense tracker,
+  // commission reconciliation and the reports behind them, plus the employee
+  // self-service items every staff member needs. No clients, leads or pipeline.
+  accounts: [
+    "/dashboard/finances",
+    "/dashboard/finances/expenses",
+    "/dashboard/commission-reconciliation",
+    "/dashboard/reports",
+    "/dashboard/tasks",
+    "/dashboard/calendar",
+    "/dashboard/attendance",
+    "/dashboard/dhandho",
+    "/dashboard/leave-applications",
+    "/dashboard/announcements",
+  ],
   back_office: [
     "/dashboard/investors",
     "/dashboard/tasks",

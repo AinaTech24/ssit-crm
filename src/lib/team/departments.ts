@@ -11,7 +11,7 @@ export const DEPT_ROLES: Array<[string, string[]]> = [
   ["marketing", ["marketing"]],
   ["advisory", ["ria", "ra_research"]],
   ["sales", ["rm", "sub_broker", "ra_sales", "insurance"]],
-  ["support", ["assistant", "gifting_hr"]],
+  ["support", ["assistant", "gifting_hr", "accounts"]],
 ];
 
 export const DEPARTMENT_LABEL: Record<string, string> = {

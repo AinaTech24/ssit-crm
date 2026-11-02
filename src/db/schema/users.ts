@@ -34,6 +34,7 @@ export const users = pgTable(
         "marketing",
         "assistant",
         "gifting_hr",
+        "accounts",
         "branch_head",
         "sub_broker",
         "ra_research",
