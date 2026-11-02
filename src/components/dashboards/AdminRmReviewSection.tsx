@@ -23,28 +23,42 @@ import { investorScopeSql } from "@/lib/investors/access";
 import { can } from "@/lib/auth/rbac";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
 import { ResearchRmFilter } from "./ResearchRmFilter";
+import { MeetingTypeFilter } from "./MeetingTypeFilter";
 
 /** A review this far past due is the one research is being asked about. */
 const REVIEW_OVERDUE_DAYS = 100;
+/**
+ * How far back "held" and "done" look: ONE day short of the overdue line. A
+ * review 99 days old still counts as done and the 100th day is overdue, so every
+ * client falls in exactly one of the two columns — a 90-day window left days
+ * 91–99 in neither.
+ */
+const WINDOW_DAYS = REVIEW_OVERDUE_DAYS - 1;
+const MEETING_CATEGORIES = ["review", "new", "follow_up"];
+const MEETING_TYPE_LABEL: Record<string, string> = { review: "Review", new: "New", follow_up: "Follow-up" };
 
 type RmRow = {
   rm_id: string | null;
   rm_name: string | null;
   clients: number;
   reviews_due: number;
-  meetings_held_90d: number;
+  meetings_held: number;
   meetings_upcoming: number;
-  reviews_done_90d: number;
+  reviews_done: number;
 };
 
 export async function AdminRmReviewSection({
   session,
   rmId,
+  meetingType,
 }: {
   session: SessionUser;
   /** ?rm= — narrows the table to one relationship manager. */
   rmId?: string;
+  /** ?mtype= — count only review / new / follow_up meetings. Default: all of them. */
+  meetingType?: string;
 }) {
+  const mtype = MEETING_CATEGORIES.includes(meetingType ?? "") ? meetingType : undefined;
   let byRm: RmRow[] = [];
   // Roster for the filter. Loaded WITHOUT the rm filter applied, or selecting
   // someone would leave a dropdown containing only them and no way back.
@@ -75,8 +89,8 @@ export async function AdminRmReviewSection({
                  )::int AS reviews_due,
                  COUNT(*) FILTER (
                    WHERE investors.last_review_at IS NOT NULL
-                     AND investors.last_review_at >= now() - interval '90 days'
-                 )::int AS reviews_done_90d
+                     AND investors.last_review_at >= now() - (${WINDOW_DAYS} || ' days')::interval
+                 )::int AS reviews_done
             FROM investors
            WHERE investors.deleted_at IS NULL
              AND investors.status = 'active'
@@ -88,9 +102,9 @@ export async function AdminRmReviewSection({
           SELECT COALESCE(m.created_by_id, m.rm_id) AS uid,
                  COUNT(*) FILTER (
                    WHERE m.status = 'completed'
-                     AND m.meeting_date >= now() - interval '90 days'
+                     AND m.meeting_date >= now() - (${WINDOW_DAYS} || ' days')::interval
                      AND m.meeting_date <= now()
-                 )::int AS held_90d,
+                 )::int AS held,
                  COUNT(*) FILTER (
                    WHERE m.status IN ('scheduled', 'confirmed', 'rescheduled')
                      AND m.meeting_date >= now()
@@ -98,6 +112,7 @@ export async function AdminRmReviewSection({
             FROM review_meetings m
            WHERE m.tenant_id = ${session.tenantId}::uuid
              AND COALESCE(m.created_by_id, m.rm_id) IS NOT NULL
+             AND ${mtype ? sql`m.category = ${mtype}` : sql`TRUE`}
              AND ${meetingScope}
            GROUP BY COALESCE(m.created_by_id, m.rm_id)
         ),
@@ -105,20 +120,20 @@ export async function AdminRmReviewSection({
           SELECT u.id, u.name,
                  COALESCE(c.clients, 0) AS clients,
                  COALESCE(c.reviews_due, 0) AS reviews_due,
-                 COALESCE(c.reviews_done_90d, 0) AS reviews_done_90d,
-                 COALESCE(pm.held_90d, 0) AS meetings_held_90d,
+                 COALESCE(c.reviews_done, 0) AS reviews_done,
+                 COALESCE(pm.held, 0) AS meetings_held,
                  COALESCE(pm.upcoming, 0) AS meetings_upcoming
             FROM users u
             LEFT JOIN per_client c ON c.uid = u.id
             LEFT JOIN per_meeting pm ON pm.uid = u.id
            WHERE u.tenant_id = ${session.tenantId}::uuid
-             AND (c.uid IS NOT NULL OR COALESCE(pm.held_90d, 0) + COALESCE(pm.upcoming, 0) > 0)
+             AND (c.uid IS NOT NULL OR COALESCE(pm.held, 0) + COALESCE(pm.upcoming, 0) > 0)
         )
-        SELECT id AS rm_id, name AS rm_name, clients, reviews_due, reviews_done_90d,
-               meetings_held_90d, meetings_upcoming,
+        SELECT id AS rm_id, name AS rm_name, clients, reviews_due, reviews_done,
+               meetings_held, meetings_upcoming,
                (${validRm ? sql`id = ${validRm}::uuid` : sql`TRUE`}) AS in_filter
           FROM roster
-         ORDER BY meetings_held_90d DESC, clients DESC, name ASC
+         ORDER BY meetings_held DESC, clients DESC, name ASC
          LIMIT 100
       `);
 
@@ -155,6 +170,7 @@ export async function AdminRmReviewSection({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <MeetingTypeFilter selected={mtype} />
           <ResearchRmFilter options={rmOptions} selected={validRm} />
           <Link
             href="/dashboard/review-meetings"
@@ -169,10 +185,12 @@ export async function AdminRmReviewSection({
           <thead>
             <tr>
               <th className="text-left py-1.5 px-3">RM</th>
-              <th className="text-right py-1.5 px-3">Meetings held (90d)</th>
+              <th className="text-right py-1.5 px-3">
+                {mtype ? `${MEETING_TYPE_LABEL[mtype]} meetings held` : "Meetings held"} ({WINDOW_DAYS}d)
+              </th>
               <th className="text-right py-1.5 px-3">Upcoming</th>
               <th className="text-right py-1.5 px-3">Clients</th>
-              <th className="text-right py-1.5 px-3">Reviews done (90d)</th>
+              <th className="text-right py-1.5 px-3">Reviews done ({WINDOW_DAYS}d)</th>
               <th className="text-right py-1.5 px-3">Reviews {REVIEW_OVERDUE_DAYS}d+ overdue</th>
             </tr>
           </thead>
@@ -187,10 +205,10 @@ export async function AdminRmReviewSection({
               byRm.map((r) => (
                 <tr key={r.rm_id ?? "unassigned"}>
                   <td className="py-2 px-3 font-medium">{r.rm_name ?? "Unassigned"}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{r.meetings_held_90d}</td>
+                  <td className="py-2 px-3 text-right tabular-nums">{r.meetings_held}</td>
                   <td className="py-2 px-3 text-right tabular-nums">{r.meetings_upcoming}</td>
                   <td className="py-2 px-3 text-right tabular-nums">{r.clients}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">{r.reviews_done_90d}</td>
+                  <td className="py-2 px-3 text-right tabular-nums">{r.reviews_done}</td>
                   <td
                     className={`py-2 px-3 text-right tabular-nums ${
                       Number(r.reviews_due) > 0 ? "text-rose-600 font-semibold" : ""

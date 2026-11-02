@@ -353,7 +353,7 @@ export default async function DashboardPage({
       {showReviewOverdue && (
         <div className="mt-6">
           <Suspense fallback={null}>
-            {await AdminRmReviewSection({ session, rmId: rmParam || undefined })}
+            {await AdminRmReviewSection({ session, rmId: rmParam || undefined, meetingType: (sp.mtype ?? "").trim() || undefined })}
           </Suspense>
         </div>
       )}

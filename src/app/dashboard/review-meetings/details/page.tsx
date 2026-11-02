@@ -38,7 +38,7 @@ export default async function MeetingDetailsPage({
           <ArrowLeft className="size-3.5" /> Back to meetings
         </Link>
       </div>
-      {await AdminRmReviewSection({ session, rmId: sp.rm || undefined })}
+      {await AdminRmReviewSection({ session, rmId: sp.rm || undefined, meetingType: sp.mtype || undefined })}
     </div>
   );
 }
