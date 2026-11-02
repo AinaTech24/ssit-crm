@@ -30,6 +30,7 @@ export const SIDEBAR_REGISTRY: SidebarEntry[] = [
   { group: "General", href: "/dashboard/review-meetings", label: "Meetings" },
   { group: "General", href: "/dashboard/calendar", label: "Calendar" },
   { group: "General", href: "/dashboard/attendance", label: "Attendance" },
+  { group: "General", href: "/dashboard/dhandho", label: "Dhandho" },
   { group: "General", href: "/dashboard/trash", label: "Trash" },
   // CRM
   { group: "CRM", href: "/dashboard/leads", label: "Leads" },

@@ -215,7 +215,7 @@ export function Select({
           role="listbox"
           data-floating-popup
           style={menuStyle}
-          className={`w-max max-w-[min(20rem,90vw)] max-h-72 overflow-y-auto scrollbar-none card-elevated bg-card p-1 animate-scale-in ${flipUp ? "origin-bottom" : "origin-top"} ${menuClassName}`}
+          className={`w-max max-w-[min(20rem,90vw)] max-h-72 overflow-y-auto scrollbar-thin card-elevated bg-card p-1 animate-scale-in ${flipUp ? "origin-bottom" : "origin-top"} ${menuClassName}`}
         >
           {canSearch && (
             <li className="sticky -top-1 bg-card px-1 pt-1 pb-1.5 -mx-1 -mt-1 mb-1 border-b border-border z-10">

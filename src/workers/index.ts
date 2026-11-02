@@ -17,6 +17,7 @@ import { startBlueprintSLAWorker } from "./blueprint-sla-worker";
 import { startScheduledCommsWorker } from "./scheduled-comms";
 import { startReportSchedulerWorker } from "./report-scheduler";
 import { startTaskReminderScannerWorker } from "./task-reminder-scanner";
+import { startDhandhoReminderWorker } from "./dhandho-reminder";
 import { startVartifyTemplateSyncWorker } from "./vartify-template-sync";
 import { startCampaignDispatcherWorker } from "./campaign-dispatcher";
 import { startImapPollerWorker } from "./imap-poller";
@@ -121,6 +122,8 @@ if (groups.includes("sched")) {
   // Task due-date/reminder sweep — fires overdue alerts (previously never
   // triggered) + per-task reminders every 5 min.
   stops.push(startTaskReminderScannerWorker());
+  // Dhandho: "today's speaker" reminder to the whole team (pop-up + email).
+  stops.push(startDhandhoReminderWorker());
 }
 if (groups.includes("wa_sync")) stops.push(startVartifyTemplateSyncWorker());
 if (groups.includes("mail")) {
