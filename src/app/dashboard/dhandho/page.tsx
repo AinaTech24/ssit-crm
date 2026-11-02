@@ -34,7 +34,9 @@ export default async function DhandhoPage() {
       .limit(10),
   }));
 
-  const todays = upcoming.find((s) => s.sessionDate === today) ?? null;
+  const todaysRow = upcoming.find((s) => s.sessionDate === today) ?? null;
+  const todayOff = todaysRow?.offReason ?? null;
+  const todays = todayOff ? null : todaysRow;
   const time = meetingTimeLabel(today);
   const iAmSpeaker = !!todays && todays.speakerUserId === session.userId;
 
@@ -63,6 +65,8 @@ export default async function DhandhoPage() {
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Today</div>
         {time === null ? (
           <p className="mt-1 text-sm">No session on Sundays.</p>
+        ) : todayOff ? (
+          <p className="mt-1 text-sm">No session today — {todayOff}.</p>
         ) : todays ? (
           <>
             <div className="mt-1 text-lg font-semibold">
@@ -93,13 +97,23 @@ export default async function DhandhoPage() {
               <table className="w-full text-sm">
                 <tbody>
                   {m.rows.map((s) => (
-                    <tr key={s.id} className={`border-t ${s.sessionDate === today ? "bg-primary/5" : ""}`}>
+                    <tr
+                      key={s.id}
+                      className={`border-t ${s.offReason ? "bg-rose-50/60 text-muted-foreground" : s.sessionDate === today ? "bg-primary/5" : ""}`}
+                    >
                       <td className="px-4 py-2 whitespace-nowrap">{fmt(s.sessionDate)}</td>
                       <td className="py-2 text-muted-foreground whitespace-nowrap">
-                        {dayName(s.sessionDate)} · {meetingTimeLabel(s.sessionDate)}
+                        {dayName(s.sessionDate)}
+                        {s.offReason ? "" : ` · ${meetingTimeLabel(s.sessionDate)}`}
                       </td>
-                      <td className="py-2 font-medium">{s.speakerName}</td>
-                      <td className="py-2 text-muted-foreground">{s.topic ?? ""}</td>
+                      {s.offReason ? (
+                        <td className="py-2 font-medium" colSpan={2}>{s.offReason}</td>
+                      ) : (
+                        <>
+                          <td className="py-2 font-medium">{s.speakerName}</td>
+                          <td className="py-2 text-muted-foreground">{s.topic ?? ""}</td>
+                        </>
+                      )}
                       <td className="py-2 pr-4 text-right">{canManage && <DeleteSessionButton id={s.id} />}</td>
                     </tr>
                   ))}
@@ -116,7 +130,7 @@ export default async function DhandhoPage() {
           <div className="border rounded-lg bg-card overflow-hidden">
             <table className="w-full text-sm">
               <tbody>
-                {recent.map((s) => (
+                {recent.filter((s) => !s.offReason).map((s) => (
                   <tr key={s.id} className="border-t first:border-t-0">
                     <td className="px-4 py-2 whitespace-nowrap">{fmt(s.sessionDate)}</td>
                     <td className="py-2 font-medium">{s.speakerName}</td>

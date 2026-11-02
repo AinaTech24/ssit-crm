@@ -15,7 +15,7 @@ import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { dhandhoSessions, users } from "@/db/schema";
 import { istDate } from "@/lib/dhandho/schedule";
-import { matchSpeaker, parseSheetFile, type SheetProblem } from "@/lib/dhandho/sheet";
+import { matchSpeakerDetailed, parseSheetFile, type SheetProblem } from "@/lib/dhandho/sheet";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
     const byDate = new Map<string, (typeof parsed.rows)[number]>();
     for (const r of parsed.rows) {
       if (r.date < today) {
-        problems.push({ row: r.row, reason: `${r.date} is already in the past` });
+        // A past holiday is just a calendar note — only a missed speaker is worth a warning.
+        if (!r.off) problems.push({ row: r.row, reason: `${r.date} is already in the past` });
         continue;
       }
       byDate.set(r.date, r);
@@ -58,10 +59,36 @@ export async function POST(req: NextRequest) {
         .from(users)
         .where(eq(users.tenantId, session.tenantId));
       let saved = 0;
+      let offDays = 0;
       const unmatched: string[] = [];
+      const matched: Array<{ sheetName: string; userName: string; how: string }> = [];
       for (const r of byDate.values()) {
-        const u = matchSpeaker(r.speaker, people);
+        if (r.off) {
+          // A day with no session: no speaker, no reminder.
+          await tx
+            .insert(dhandhoSessions)
+            .values({
+              tenantId: session.tenantId,
+              sessionDate: r.date,
+              speakerUserId: null,
+              speakerName: r.off,
+              topic: null,
+              offReason: r.off,
+              createdBy: session.userId,
+            })
+            .onConflictDoUpdate({
+              target: [dhandhoSessions.tenantId, dhandhoSessions.sessionDate],
+              set: { speakerUserId: null, speakerName: r.off, topic: null, offReason: r.off, updatedAt: new Date() },
+            });
+          offDays++;
+          continue;
+        }
+        const m = matchSpeakerDetailed(r.speaker, people);
+        const u = m?.user ?? null;
         if (!u) unmatched.push(r.speaker);
+        else if (!matched.some((x) => x.sheetName === r.speaker)) {
+          matched.push({ sheetName: r.speaker, userName: u.name ?? r.speaker, how: m!.how });
+        }
         await tx
           .insert(dhandhoSessions)
           .values({
@@ -70,6 +97,7 @@ export async function POST(req: NextRequest) {
             speakerUserId: u?.id ?? null,
             speakerName: u?.name ?? r.speaker,
             topic: r.topic,
+            offReason: null,
             createdBy: session.userId,
           })
           .onConflictDoUpdate({
@@ -78,13 +106,14 @@ export async function POST(req: NextRequest) {
               speakerUserId: u?.id ?? null,
               speakerName: u?.name ?? r.speaker,
               topic: r.topic,
+              offReason: null,
               remindedAt: sql`CASE WHEN ${dhandhoSessions.speakerName} IS DISTINCT FROM ${u?.name ?? r.speaker} THEN NULL ELSE ${dhandhoSessions.remindedAt} END`,
               updatedAt: new Date(),
             },
           });
         saved++;
       }
-      return { saved, unmatched: [...new Set(unmatched)] };
+      return { saved, offDays, matched, unmatched: [...new Set(unmatched)] };
     });
 
     return NextResponse.json({ ...result, skipped: problems });

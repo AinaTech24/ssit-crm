@@ -11,7 +11,13 @@ import { Download, Loader2, Trash2, Upload } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
 import { useToast } from "@/components/ui/Toast";
 
-type ImportResult = { saved: number; unmatched: string[]; skipped: Array<{ row: number; reason: string }> };
+type ImportResult = {
+  saved: number;
+  offDays: number;
+  matched: Array<{ sheetName: string; userName: string; how: string }>;
+  unmatched: string[];
+  skipped: Array<{ row: number; reason: string }>;
+};
 
 export function DhandhoAdmin() {
   const router = useRouter();
@@ -45,7 +51,7 @@ export function DhandhoAdmin() {
         return;
       }
       setResult(j);
-      toast.success(`${j.saved} day${j.saved === 1 ? "" : "s"} added to the speaker rota.`, "Rota uploaded");
+      toast.success(`${j.saved} day${j.saved === 1 ? "" : "s"} added to the speaker rota (${j.offDays} holiday/no-session).`, "Rota uploaded");
       if (fileRef.current) fileRef.current.value = "";
       router.refresh();
     } finally {
@@ -109,14 +115,26 @@ export function DhandhoAdmin() {
           </a>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Columns: <b>Date</b>, <b>Speaker</b> (name or email), <b>Topic</b> (optional). A date that already has a speaker
-          is replaced. Sundays and past dates are skipped.
+          Columns: <b>Date</b>, <b>Name</b> (the speaker — a first name such as &quot;Payal&quot; or &quot;Hitesh sir&quot; is fine) and{" "}
+          <b>Topic</b>. A row saying <b>Holiday</b> or <b>no 10 AM</b> in the Name column is a day with no session and no
+          reminder. A date that already has a speaker is replaced. Past dates are skipped.
         </p>
       </div>
 
       {result && (
         <div className="rounded-md border bg-secondary/40 p-3 text-xs space-y-1">
-          <div className="font-medium">{result.saved} day(s) saved.</div>
+          <div className="font-medium">
+            {result.saved} day(s) saved, including {result.offDays} holiday / no-session day(s).
+          </div>
+          {result.matched.length > 0 && (
+            <div className="text-muted-foreground">
+              Speakers matched to CRM users:{" "}
+              {result.matched
+                .map((m) => (m.how === "email" || m.how === "name" ? `${m.sheetName}` : `${m.sheetName} → ${m.userName} (${m.how})`))
+                .join(", ")}
+              . Check any marked “first name” or “close spelling”.
+            </div>
+          )}
           {result.unmatched.length > 0 && (
             <div className="text-amber-800">
               Not matched to a CRM user (announced to everyone, but no personal reminder): {result.unmatched.join(", ")}

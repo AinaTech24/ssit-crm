@@ -14,14 +14,20 @@ export interface SheetRow {
   /** 1-based row number in the sheet, for error messages. */
   row: number;
   date: string;
+  /** The speaker as written. Empty on an off day. */
   speaker: string;
   topic: string | null;
+  /** Set when the row says there is no session ("Holiday", "no 10 AM"…). */
+  off: string | null;
 }
 
 export interface SheetProblem {
   row: number;
   reason: string;
 }
+
+/** A "speaker" cell that is really a note that there is no session that day. */
+const OFF_RE = /^\s*(holiday|no\b|off\b|cancel|closed|leave\b)/i;
 
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
@@ -97,6 +103,13 @@ export function parseSheetRows(cells: unknown[][]): { rows: SheetRow[]; problems
       problems.push({ row: rowNo, reason: `Could not read the date "${String(r[dateCol] ?? "")}"` });
       continue;
     }
+    const topic = topicCol >= 0 ? String(r[topicCol] ?? "").trim() : "";
+    // "Holiday" / "no 10 AM" in the speaker cell: a day with no session. On a
+    // Sunday there was never going to be one, so it is not worth recording.
+    if (OFF_RE.test(speaker)) {
+      if (dayOfWeek(date) !== 0) rows.push({ row: rowNo, date, speaker: "", topic: null, off: speaker });
+      continue;
+    }
     if (!speaker) {
       problems.push({ row: rowNo, reason: "No speaker named" });
       continue;
@@ -105,8 +118,7 @@ export function parseSheetRows(cells: unknown[][]): { rows: SheetRow[]; problems
       problems.push({ row: rowNo, reason: `${date} is a Sunday — there is no session` });
       continue;
     }
-    const topic = topicCol >= 0 ? String(r[topicCol] ?? "").trim() : "";
-    rows.push({ row: rowNo, date, speaker, topic: topic || null });
+    rows.push({ row: rowNo, date, speaker, topic: topic || null, off: null });
   }
   return { rows, problems };
 }
@@ -128,11 +140,72 @@ export interface UserLite {
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9@.]+/g, " ").trim();
 
-/** The CRM user a speaker cell refers to — by email, else by exact name. Null if nobody or ambiguous. */
-export function matchSpeaker(raw: string, users: UserLite[]): UserLite | null {
+/** "Hitesh sir" → "hitesh". Honorifics people add when writing a name down. */
+const HONORIFICS = new Set(["sir", "mam", "maam", "madam", "ma", "mr", "mrs", "ms", "miss", "dr", "shri", "smt", "bhai", "ben"]);
+function nameTokens(s: string): string[] {
+  return norm(s)
+    .split(" ")
+    .filter((t) => t && !HONORIFICS.has(t));
+}
+
+function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (a.length < b.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+export type SpeakerMatch = { user: UserLite; how: "email" | "name" | "first name" | "close spelling" };
+
+/**
+ * The CRM user a speaker cell refers to, with how it was matched. Tries, in order:
+ * email; the full name; the first name alone ("Payal" → Payal Shah); a first name
+ * one letter off ("Priyanaka"). Each step needs EXACTLY ONE candidate — two people
+ * called Denis means "no match", never a guess, so a reminder never goes to the
+ * wrong person. Honorifics ("Hitesh sir") are ignored.
+ */
+export function matchSpeakerDetailed(raw: string, users: UserLite[]): SpeakerMatch | null {
   const q = norm(raw);
   if (!q) return null;
-  if (q.includes("@")) return users.find((u) => u.email && norm(u.email) === q) ?? null;
-  const hits = users.filter((u) => u.name && norm(u.name) === q);
-  return hits.length === 1 ? hits[0] : null;
+  if (q.includes("@")) {
+    const u = users.find((x) => x.email && norm(x.email) === q);
+    return u ? { user: u, how: "email" } : null;
+  }
+  const want = nameTokens(raw);
+  if (!want.length) return null;
+  const full = want.join(" ");
+  const one = <T,>(xs: T[]): T | null => (xs.length === 1 ? xs[0] : null);
+
+  const byFull = one(users.filter((u) => u.name && nameTokens(u.name).join(" ") === full));
+  if (byFull) return { user: byFull, how: "name" };
+
+  const first = want[0];
+  const byFirst = one(users.filter((u) => u.name && nameTokens(u.name)[0] === first));
+  if (byFirst) return { user: byFirst, how: "first name" };
+
+  if (first.length >= 4) {
+    const close = one(users.filter((u) => u.name && withinOneEdit(nameTokens(u.name)[0] ?? "", first)));
+    if (close) return { user: close, how: "close spelling" };
+  }
+  return null;
+}
+
+export function matchSpeaker(raw: string, users: UserLite[]): UserLite | null {
+  return matchSpeakerDetailed(raw, users)?.user ?? null;
 }

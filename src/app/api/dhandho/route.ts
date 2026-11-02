@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
           speakerUserId,
           speakerName,
           topic: b.topic || null,
+          offReason: null,
           createdBy: session.userId,
         })
         .onConflictDoUpdate({
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
             speakerUserId,
             speakerName,
             topic: b.topic || null,
+            offReason: null,
             // A changed speaker is announced again; the same one is not.
             remindedAt: sql`CASE WHEN ${dhandhoSessions.speakerName} IS DISTINCT FROM ${speakerName} THEN NULL ELSE ${dhandhoSessions.remindedAt} END`,
             updatedAt: new Date(),

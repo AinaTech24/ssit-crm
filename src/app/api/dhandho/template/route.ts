@@ -9,8 +9,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   await requireSession();
   const ws = XLSX.utils.aoa_to_sheet([
-    ["Date", "Speaker", "Topic"],
-    ["02-11-2026", "Speaker name or email", "What they will talk about (optional)"],
+    ["Date", "Name", "Topic"],
+    ["02-11-2026", "Speaker name", "What they will talk about"],
+    ["07-11-2026", "Holiday", ""],
   ]);
   ws["!cols"] = [{ wch: 14 }, { wch: 30 }, { wch: 44 }];
   const wb = XLSX.utils.book_new();

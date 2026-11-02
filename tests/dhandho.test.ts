@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { istDate, meetingStart, meetingTime, meetingTimeLabel, reminderDue } from "@/lib/dhandho/schedule";
-import { coerceDate, matchSpeaker, parseSheetRows } from "@/lib/dhandho/sheet";
+import { coerceDate, matchSpeaker, matchSpeakerDetailed, parseSheetRows } from "@/lib/dhandho/sheet";
 
 describe("Dhandho schedule", () => {
   it("meets Mon–Fri at 10:00, Saturday at 10:30, never on Sunday", () => {
@@ -54,8 +54,8 @@ describe("Dhandho sheet", () => {
       ["05-11-2026", "hitesh@equitywala.com", ""],
     ]);
     expect(rows).toEqual([
-      { row: 2, date: "2026-11-02", speaker: "Asha Rao", topic: "SIP basics" },
-      { row: 7, date: "2026-11-05", speaker: "hitesh@equitywala.com", topic: null },
+      { row: 2, date: "2026-11-02", speaker: "Asha Rao", topic: "SIP basics", off: null },
+      { row: 7, date: "2026-11-05", speaker: "hitesh@equitywala.com", topic: null, off: null },
     ]);
     expect(problems.map((p) => p.row)).toEqual([4, 5, 6]);
     expect(problems[0].reason).toMatch(/Sunday/);
@@ -77,5 +77,45 @@ describe("Dhandho sheet", () => {
     expect(matchSpeaker("Asha Rao", users)).toBeNull(); // ambiguous
     expect(matchSpeaker("asha@x.com", users)?.id).toBe("1");
     expect(matchSpeaker("Someone Else", users)).toBeNull();
+  });
+});
+
+describe("Dhandho sheet — the firm's real format", () => {
+  const sheet = [
+    ["Date", "Name", "Topic"],
+    ["1/11/2026", "Holiday", ""], // a Sunday
+    ["2/11/2026", "Hitesh sir", "The HNI Client Connect – Personal Touch Matters"],
+    ["7/11/2026", "Holiday", ""], // a Saturday
+    ["9/11/2026", "no 10 AM", ""],
+    ["12/11/2026", "Denis", "how to find client gap in insurance"],
+    ["13/11/2026", "Priyanaka", "how to reduce communication gap"],
+  ];
+
+  it("turns Holiday and 'no 10 AM' into off days, and drops an off Sunday", () => {
+    const { rows, problems } = parseSheetRows(sheet);
+    expect(problems).toEqual([]);
+    expect(rows.map((r) => [r.date, r.off])).toEqual([
+      ["2026-11-02", null],
+      ["2026-11-07", "Holiday"],
+      ["2026-11-09", "no 10 AM"],
+      ["2026-11-12", null],
+      ["2026-11-13", null],
+    ]);
+    expect(rows[0].topic).toBe("The HNI Client Connect – Personal Touch Matters");
+  });
+
+  it("matches first names, ignores 'sir', and tolerates one wrong letter", () => {
+    const users = [
+      { id: "h", name: "Hitesh Mali", email: "hitesh@equitywala.com" },
+      { id: "d", name: "Denis Vaghela", email: null },
+      { id: "p", name: "Priyanka Shah", email: null },
+      { id: "x", name: "Payal Kapadia", email: null },
+      { id: "y", name: "Payal Mehta", email: null }, // two Payals
+    ];
+    expect(matchSpeakerDetailed("Hitesh sir", users)).toMatchObject({ user: { id: "h" }, how: "first name" });
+    expect(matchSpeakerDetailed("Denis", users)?.user.id).toBe("d");
+    expect(matchSpeakerDetailed("Priyanaka", users)).toMatchObject({ user: { id: "p" }, how: "close spelling" });
+    expect(matchSpeakerDetailed("Payal", users)).toBeNull(); // ambiguous: never a guess
+    expect(matchSpeakerDetailed("Noor", users)).toBeNull();
   });
 });

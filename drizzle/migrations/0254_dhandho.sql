@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS dhandho_sessions (
   speaker_user_id  uuid REFERENCES users(id),
   speaker_name     text NOT NULL,
   topic            text,
+  -- Set on a holiday / "no session" day: there is no meeting and no reminder.
+  off_reason       text,
   reminded_at      timestamptz,
   created_by       uuid REFERENCES users(id),
   created_at       timestamptz NOT NULL DEFAULT now(),

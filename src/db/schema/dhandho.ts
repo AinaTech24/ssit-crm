@@ -19,6 +19,8 @@ export const dhandhoSessions = pgTable(
     speakerUserId: uuid("speaker_user_id").references(() => users.id),
     speakerName: text("speaker_name").notNull(),
     topic: text("topic"),
+    /** Set on a holiday / "no session" day — no meeting, no reminder. */
+    offReason: text("off_reason"),
     remindedAt: timestamp("reminded_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id),
     ...timestamps,

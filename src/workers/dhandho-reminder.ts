@@ -43,6 +43,7 @@ export async function remindTenant(tenantId: string, now: Date = new Date()): Pr
        WHERE tenant_id = ${tenantId}::uuid
          AND session_date = ${today}::date
          AND reminded_at IS NULL
+         AND off_reason IS NULL
       RETURNING speaker_user_id, speaker_name, topic
     `);
     const s = claimed.rows[0] as { speaker_user_id: string | null; speaker_name: string; topic: string | null } | undefined;
@@ -55,13 +56,14 @@ export async function remindTenant(tenantId: string, now: Date = new Date()): Pr
       `)
     ).rows as Array<{ id: string; name: string | null; email: string | null }>;
 
-    const topicLine = s.topic ? ` Topic: ${s.topic}.` : "";
+    const topicSentence = s.topic ? ` Topic: ${s.topic}.` : "";
+    const topicLine = s.topic ? `\nTopic: ${s.topic}` : "";
     for (const p of people) {
       const isSpeaker = !!s.speaker_user_id && p.id === s.speaker_user_id;
       const title = isSpeaker ? "You are today's Dhandho speaker" : `Today's Dhandho speaker: ${s.speaker_name}`;
       const body = isSpeaker
-        ? `Dhandho is at ${time}. You are speaking today — please be ready.${topicLine}`
-        : `Dhandho is at ${time}. ${s.speaker_name} is speaking today.${topicLine}`;
+        ? `Dhandho is at ${time}. You are speaking today — please be ready.${topicSentence}`
+        : `Dhandho is at ${time}. ${s.speaker_name} is speaking today.${topicSentence}`;
       await createNotification(tx, {
         tenantId,
         userId: p.id,
@@ -76,8 +78,8 @@ export async function remindTenant(tenantId: string, now: Date = new Date()): Pr
         email: p.email,
         subject: isSpeaker ? `You are today's Dhandho speaker (${time})` : `Today's Dhandho speaker: ${s.speaker_name} (${time})`,
         text: isSpeaker
-          ? `Hi ${p.name ?? ""},\n\nYou are the Dhandho speaker today. The session is at ${time}.${topicLine}\n\nPlease be ready a few minutes early.`
-          : `Hi ${p.name ?? ""},\n\nToday's Dhandho speaker is ${s.speaker_name}. The session is at ${time}.${topicLine}\n\nSee you there.`,
+          ? `Hi ${p.name ?? ""},\n\nYou are the Dhandho speaker today.\nTime: ${time}${topicLine}\n\nPlease be ready a few minutes early.`
+          : `Hi ${p.name ?? ""},\n\nToday's Dhandho speaker: ${s.speaker_name}\nTime: ${time}${topicLine}\n\nSee you there.`,
         key: `dhandho:${tenantId}:${today}:${p.id}`,
       });
     }
