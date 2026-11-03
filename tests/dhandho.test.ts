@@ -149,11 +149,12 @@ describe("Dhandho calendar + override", () => {
 });
 
 describe("Dhandho permissions", () => {
-  it("everyone can view by default; only the office-admin desk and the owner can edit", () => {
+  it("everyone can view by default; only the owner / admin can edit", () => {
     expect(can(["rm"], "dhandho.view")).toBe(true);
     expect(can(["marketing"], "dhandho.view")).toBe(true);
     expect(can(["rm"], "dhandho.manage")).toBe(false);
-    expect(can(["gifting_hr"], "dhandho.manage")).toBe(true);
+    expect(can(["gifting_hr"], "dhandho.manage")).toBe(false);
+    expect(can(["branch_head"], "dhandho.manage")).toBe(false);
     expect(can(["owner"], "dhandho.manage")).toBe(true);
   });
 

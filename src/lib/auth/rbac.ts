@@ -432,14 +432,14 @@ const MATRIX: Record<Capability, Role[]> = {
   "content_library.add": ["marketing"],
   "content_library.edit": ["marketing"],
   // Dhandho speaker rota: everyone can SEE it by default; loading or changing the
-  // rota is the office-administration desk and the owner. Both are separate
-  // capabilities so an owner can hand "add / edit" to one person, or take "view"
+  // rota is the owner / admin only (an empty list = owner-only). Both are separate
+  // capabilities so the owner can hand "add / edit" to one person, or take "view"
   // away from one, on the employee record (Customize access permissions).
   "dhandho.view": [
     "rm", "branch_head", "back_office", "ops", "marketing", "compliance", "assistant", "gifting_hr",
     "accounts", "sub_broker", "ra_research", "ra_sales", "ria", "insurance",
   ],
-  "dhandho.manage": ["gifting_hr"],
+  "dhandho.manage": [],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
   "risk_profile.manage": ["compliance", "back_office", "ops", "rm", "ra_sales", "ria"],
