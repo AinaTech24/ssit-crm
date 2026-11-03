@@ -37,7 +37,8 @@ import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
 import { SelectField } from "@/components/ui/SelectField";
 import { DEPARTMENTS } from "@/config/departments";
-import { AttachmentPicker, uploadAttachments } from "@/components/common/EntityAttachments";
+import { AttachmentPicker, uploadAttachments, MAX_MARKETING_ATTACHMENT_BYTES } from "@/components/common/EntityAttachments";
+import { CONTENT_KIND_OPTIONS, MARKETING_EVENT_OPTIONS, OTHER_EVENT_KEY, resolveMarketingEvent } from "@/lib/tasks/marketing-content";
 import { useToast } from "@/components/ui/Toast";
 import { readApiError, readThrownError } from "@/lib/api/client-error";
 import { DateField } from "@/components/ui/DateField";
@@ -125,13 +126,8 @@ export default function NewTaskPage() {
     relatedMeetingId: "",
     relatedMeetingLabel: "",
   });
-  const [events, setEvents] = useState<{ key: string; label: string }[]>([]);
-  useEffect(() => {
-    fetch("/api/lead-events")
-      .then((r) => (r.ok ? r.json() : { events: [] }))
-      .then((j) => setEvents(j?.events ?? []))
-      .catch(() => setEvents([]));
-  }, []);
+  // A marketing creative (post, reel, video…) — no client/lead behind it.
+  const isMarketing = !activityMode && !!form.contentKind;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState("");
@@ -258,6 +254,7 @@ export default function NewTaskPage() {
       // Other-activity titles carry their kind ("Bank work: …") — that is how
       // the Other activity list tells them apart.
       const title = activity ? activity.label : form.title.trim();
+      const ev = isMarketing ? resolveMarketingEvent(form.eventKey, form.eventLabel) : null;
       const payload: any = {
         title,
         activityKind: activity ? activity.key : undefined,
@@ -270,8 +267,8 @@ export default function NewTaskPage() {
         remarks: form.remarks || undefined,
         requiresApproval: form.requiresApproval || undefined,
         contentKind: activityMode ? undefined : form.contentKind || undefined,
-        eventKey: !activityMode && form.contentKind && form.eventKey ? form.eventKey : undefined,
-        eventLabel: !activityMode && form.contentKind && form.eventLabel ? form.eventLabel : undefined,
+        eventKey: ev?.eventKey,
+        eventLabel: ev?.eventLabel,
         estimateMinutes: form.estimateMinutes ? Math.max(0, parseInt(form.estimateMinutes, 10) || 0) : undefined,
         tags: form.tags.length ? form.tags : undefined,
       };
@@ -438,11 +435,95 @@ export default function NewTaskPage() {
           files={attachments}
           onChange={setAttachments}
           disabled={busy}
-          hint="Drop a brief, artwork or a form here — or use “Add files”. One file or many. They upload once the task is created. Max 25 MB each."
+          maxBytes={isMarketing ? MAX_MARKETING_ATTACHMENT_BYTES : undefined}
+          hint={`Drop a brief, artwork or a form here — or use “Add files”. One file or many. They upload once the task is created. Max ${isMarketing ? 100 : 25} MB each.`}
         />
       </div>
 
-      {/* Related entities */}
+      {/* Marketing request — what is being made and what it is for. Choosing a content
+          type makes this a marketing task: the client/lead/SR/meeting section is hidden and
+          the task goes to the marketing person for sign-off. */}
+      {!activityMode && (
+      <div className="card-surface p-5 space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-1 rounded-full brand-bar" />
+          <h2 className="section-title">Marketing request <span className="text-[10px] text-muted-foreground font-normal">· only for a creative — leave blank for a normal task</span></h2>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <div className="text-xs font-medium mb-1">Content type</div>
+            <SelectField
+              value={form.contentKind}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((s) => ({
+                  ...s,
+                  contentKind: v,
+                  department: v ? "marketing" : s.department,
+                  assigneeId: v ? "" : s.assigneeId,
+                  // A creative has no client: drop anything already picked.
+                  ...(v
+                    ? {
+                        relatedInvestorId: "", relatedInvestorName: "",
+                        relatedLeadId: "", relatedLeadName: "",
+                        relatedServiceRequestId: "", relatedServiceRequestLabel: "",
+                        relatedMeetingId: "", relatedMeetingLabel: "",
+                      }
+                    : { eventKey: "", eventLabel: "" }),
+                }));
+              }}
+              className="w-full"
+            >
+              <option value="">Not a content request</option>
+              {CONTENT_KIND_OPTIONS.map((o) => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </SelectField>
+          </label>
+          {form.contentKind ? (
+            <label className="block">
+              <div className="text-xs font-medium mb-1">Event <span className="text-[10px] text-muted-foreground font-normal">· what it is for</span></div>
+              <SelectField
+                value={form.eventKey}
+                onChange={(e) => {
+                  const r = resolveMarketingEvent(e.target.value, "");
+                  setForm((s) => ({
+                    ...s,
+                    eventKey: r?.eventKey ?? "",
+                    // "Other" starts empty so the requester types their own.
+                    eventLabel: r && r.eventKey !== OTHER_EVENT_KEY ? r.eventLabel : "",
+                  }));
+                }}
+                className="w-full"
+              >
+                <option value="">Select event</option>
+                {MARKETING_EVENT_OPTIONS.map((ev) => (
+                  <option key={ev.key} value={ev.key}>{ev.label}</option>
+                ))}
+              </SelectField>
+              {form.eventKey === OTHER_EVENT_KEY && (
+                <input
+                  value={form.eventLabel}
+                  onChange={(e) => set("eventLabel", e.target.value)}
+                  placeholder="Type the event name"
+                  maxLength={200}
+                  autoFocus
+                  className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                />
+              )}
+            </label>
+          ) : null}
+        </div>
+        {form.contentKind ? (
+          <p className="text-[11px] text-muted-foreground">
+            Assign it to the marketing person. They upload the creative and submit it; it then waits for approval from Bhargavi Patnaik, and the marketing person is told once it is approved.
+          </p>
+        ) : null}
+      </div>
+      )}
+
+      {/* Related entities — not for marketing creatives (no client behind a post) */}
+      {!isMarketing && (
       <div className="card-surface p-5 space-y-3">
         <div className="flex items-center gap-2">
           <div className="h-4 w-1 rounded-full brand-bar" />
@@ -527,6 +608,7 @@ export default function NewTaskPage() {
           }
         />
       </div>
+      )}
 
       {/* Type + dept + priority + due */}
       <div className="card-surface p-5 space-y-3">
@@ -535,7 +617,7 @@ export default function NewTaskPage() {
           <h2 className="section-title">3. Routing + schedule</h2>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {!activityMode && (
+          {!activityMode && !isMarketing && (
           <label className="block">
             <div className="text-xs font-medium mb-1">Type</div>
             <SelectField
@@ -671,62 +753,6 @@ export default function NewTaskPage() {
             </div>
           )}
         </div>
-
-        {/* Marketing content request: post / reel / carousel, optionally for an event.
-            Goes to the marketing person; their upload is signed off by the content approver. */}
-        {!activityMode && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="block">
-            <div className="text-xs font-medium mb-1">Marketing content</div>
-            <SelectField
-              value={form.contentKind}
-              onChange={(e) => {
-                const v = e.target.value;
-                setForm((s) => ({ ...s, contentKind: v, department: v ? "marketing" : s.department, assigneeId: v ? "" : s.assigneeId }));
-              }}
-              className="w-full"
-            >
-              <option value="">Not a content request</option>
-              <option value="post">Post</option>
-              <option value="reel">Reel</option>
-              <option value="carousel">Carousel</option>
-              <option value="other">Other creative</option>
-            </SelectField>
-          </label>
-          {form.contentKind ? (
-            <label className="block">
-              <div className="text-xs font-medium mb-1">For event <span className="text-[10px] text-muted-foreground font-normal">· optional</span></div>
-              {events.length > 0 ? (
-                <SelectField
-                  value={form.eventKey}
-                  onChange={(e) => {
-                    const ev = events.find((x) => x.key === e.target.value);
-                    setForm((s) => ({ ...s, eventKey: ev?.key ?? "", eventLabel: ev?.label ?? "" }));
-                  }}
-                  className="w-full"
-                >
-                  <option value="">No event</option>
-                  {events.map((ev) => (
-                    <option key={ev.key} value={ev.key}>{ev.label}</option>
-                  ))}
-                </SelectField>
-              ) : (
-                <input
-                  value={form.eventLabel}
-                  onChange={(e) => setForm((s) => ({ ...s, eventLabel: e.target.value, eventKey: e.target.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 120) }))}
-                  placeholder="Event name"
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                />
-              )}
-            </label>
-          ) : null}
-          {form.contentKind ? (
-            <p className="sm:col-span-2 text-[11px] text-muted-foreground">
-              Assign it to the marketing person. They upload the creative and submit it; it then waits for approval from Bhargavi Patnaik, and the marketing person is told once it is approved.
-            </p>
-          ) : null}
-        </div>
-        )}
 
         {/* Reminder + approval */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

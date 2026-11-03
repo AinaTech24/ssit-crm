@@ -19,11 +19,15 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { tasks, taskAttachments, users } from "@/db/schema";
 import { putObject } from "@/lib/storage/s3";
+import { MAX_TASK_ATTACHMENT_BYTES, MAX_MARKETING_ATTACHMENT_BYTES } from "@/lib/tasks/marketing-content";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+// Ordinary task documents are capped at 25 MB; marketing creatives (video, reel)
+// get 100 MB. The hard ceiling is checked before the task is looked up; the
+// per-task cap is applied once its type is known.
+const MAX_BYTES = MAX_MARKETING_ATTACHMENT_BYTES;
 // Bound on ONE request, not on a task. The client chunks a larger pick.
 const MAX_FILES_PER_REQUEST = 20;
 
@@ -80,7 +84,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: `at most ${MAX_FILES_PER_REQUEST} files per request` }, { status: 400 });
     }
     const tooBig = picked.find((f) => f.size > MAX_BYTES);
-    if (tooBig) return NextResponse.json({ error: `"${tooBig.name}" exceeds 25 MB` }, { status: 400 });
+    if (tooBig) return NextResponse.json({ error: `"${tooBig.name}" exceeds ${MAX_BYTES / 1024 / 1024} MB` }, { status: 400 });
 
     // Read + name every file BEFORE opening the transaction, so a slow client
     // upload never holds a DB connection open.
@@ -105,12 +109,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const outcome = await withTenant(session.tenantId, async (tx) => {
       const [t] = await tx
-        .select({ assigneeId: tasks.assigneeId, createdById: tasks.createdById, approverId: sql<string | null>`${tasks.meta}->>'approverId'` })
+        .select({
+          assigneeId: tasks.assigneeId,
+          createdById: tasks.createdById,
+          approverId: sql<string | null>`${tasks.meta}->>'approverId'`,
+          type: tasks.type,
+          department: tasks.department,
+        })
         .from(tasks)
         .where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)))
         .limit(1);
       if (!t) return "not_found" as const;
       if (!canEditAll && !ownsTask(t, session.userId)) return "forbidden" as const;
+
+      const isMarketingTask = t.type === "marketing_content" || t.department === "marketing";
+      const cap = isMarketingTask ? MAX_MARKETING_ATTACHMENT_BYTES : MAX_TASK_ATTACHMENT_BYTES;
+      const over = staged.find((st) => st.file.size > cap);
+      if (over) return { tooBig: `"${over.safeName}" exceeds ${cap / 1024 / 1024} MB` } as const;
 
       for (const st of staged) {
         await putObject(st.storageKey, st.buf, st.file.type || "application/octet-stream");
@@ -145,6 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (outcome === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
     if (outcome === "forbidden") return NextResponse.json({ error: "you can only attach to your own tasks" }, { status: 403 });
+    if ("tooBig" in outcome) return NextResponse.json({ error: outcome.tooBig }, { status: 400 });
     return NextResponse.json(outcome, { status: 201 });
   } catch (err: any) {
     return handleApiError(err);

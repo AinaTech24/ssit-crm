@@ -1,4 +1,5 @@
 import { handleApiError } from "@/lib/api/error-handler";
+import { CONTENT_KIND_KEYS } from "@/lib/tasks/marketing-content";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
@@ -59,7 +60,7 @@ const Body = z.object({
    * submits it; the approver (explicit, else the firm's content approver) signs
    * off. Stored in tasks.meta so no schema change is needed.
    */
-  contentKind: z.enum(["post", "reel", "carousel", "other"]).optional(),
+  contentKind: z.enum(CONTENT_KIND_KEYS).optional(),
   eventKey: z.string().max(120).optional(),
   eventLabel: z.string().max(200).optional(),
   approverId: z.string().uuid().optional(),

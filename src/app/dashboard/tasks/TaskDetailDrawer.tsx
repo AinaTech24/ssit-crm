@@ -13,6 +13,7 @@ import { RecordProvenance } from "@/components/common/RecordProvenance";
 import { TaskComments } from "./TaskComments";
 import { TaskTimePanel } from "./TaskTimePanel";
 import { TaskAttachments } from "./TaskAttachments";
+import { contentKindLabel } from "@/lib/tasks/marketing-content";
 import { TaskWatchersDeps } from "./TaskWatchersDeps";
 
 interface TaskDetailDrawerProps {
@@ -620,7 +621,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
 
             {taskMeta.contentKind ? (
               <div className="text-[11px] text-slate-600">
-                Marketing {taskMeta.contentKind}
+                Marketing {contentKindLabel(taskMeta.contentKind)}
                 {taskMeta.eventLabel ? <> · for <span className="font-semibold">{taskMeta.eventLabel}</span></> : null}
               </div>
             ) : null}
@@ -963,7 +964,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
           <hr className="border-slate-100" />
 
           {/* Attachments */}
-          <TaskAttachments taskId={task.id} />
+          <TaskAttachments taskId={task.id} marketing={isMarketing} />
 
           <hr className="border-slate-100" />
 

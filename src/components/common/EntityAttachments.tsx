@@ -29,7 +29,11 @@ import { useToast } from "@/components/ui/Toast";
 import { DownloadButton } from "@/components/common/SecureLinkButtons";
 
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // keep in sync with the API
+export const MAX_MARKETING_ATTACHMENT_BYTES = 100 * 1024 * 1024; // marketing creatives (video, reel) — keep in sync with the API
 const MAX_FILES_PER_REQUEST = 20;
+const MAX_BYTES_PER_REQUEST = 100 * 1024 * 1024;
+
+const mbLabel = (bytes: number) => `${Math.round(bytes / 1024 / 1024)} MB`;
 
 export type Attachment = {
   id: string;
@@ -55,10 +59,24 @@ export function fmtSize(b: number | null | undefined): string {
 export async function uploadAttachments(basePath: string, files: File[]): Promise<Attachment[]> {
   if (files.length === 0) return [];
   const out: Attachment[] = [];
-  // Chunked so a long pick never trips the per-request file cap.
-  for (let i = 0; i < files.length; i += MAX_FILES_PER_REQUEST) {
+  // Chunked so a long pick never trips the per-request file cap, and so a few
+  // large videos are not buffered by the server in one request.
+  const batches: File[][] = [];
+  let cur: File[] = [];
+  let curBytes = 0;
+  for (const f of files) {
+    if (cur.length && (cur.length >= MAX_FILES_PER_REQUEST || curBytes + f.size > MAX_BYTES_PER_REQUEST)) {
+      batches.push(cur);
+      cur = [];
+      curBytes = 0;
+    }
+    cur.push(f);
+    curBytes += f.size;
+  }
+  if (cur.length) batches.push(cur);
+  for (const batch of batches) {
     const fd = new FormData();
-    for (const f of files.slice(i, i + MAX_FILES_PER_REQUEST)) fd.append("files", f);
+    for (const f of batch) fd.append("files", f);
     const res = await fetch(basePath, { method: "POST", body: fd });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j?.error ?? "Upload failed");
@@ -187,21 +205,25 @@ export function AttachmentPicker({
   onChange,
   disabled,
   label = "Attachments",
-  hint = "Drop files here — or use “Add files”. They upload when the record is saved. Max 25 MB each.",
+  hint,
+  maxBytes = MAX_ATTACHMENT_BYTES,
 }: {
   files: File[];
   onChange: (files: File[]) => void;
   disabled?: boolean;
   label?: string;
   hint?: string;
+  /** Per-file ceiling; defaults to 25 MB. */
+  maxBytes?: number;
 }) {
+  const hintText = hint ?? `Drop files here — or use “Add files”. They upload when the record is saved. Max ${mbLabel(maxBytes)} each.`;
   const toast = useToast();
 
   function add(picked: File[]) {
     const ok: File[] = [];
     for (const f of picked) {
-      if (f.size > MAX_ATTACHMENT_BYTES) {
-        toast.error(`"${f.name}" exceeds 25 MB`);
+      if (f.size > maxBytes) {
+        toast.error(`"${f.name}" exceeds ${mbLabel(maxBytes)}`);
         continue;
       }
       // Same name + size + mtime twice in one pick is a duplicate, not two docs.
@@ -214,7 +236,7 @@ export function AttachmentPicker({
   return (
     <DropZone label={`${label}${files.length ? ` (${files.length})` : ""}`} busy={!!disabled} onFiles={add}>
       {files.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">{hint}</p>
+        <p className="text-[11px] text-muted-foreground">{hintText}</p>
       ) : (
         <ul className="space-y-1.5">
           {files.map((f, i) => (
@@ -239,11 +261,14 @@ export function EntityAttachments({
   basePath,
   label = "Attachments",
   readOnly,
+  maxBytes = MAX_ATTACHMENT_BYTES,
 }: {
   /** e.g. `/api/tasks/<id>/attachments` — no trailing slash. */
   basePath: string;
   label?: string;
   readOnly?: boolean;
+  /** Per-file ceiling; defaults to 25 MB. */
+  maxBytes?: number;
 }) {
   const toast = useToast();
   const [items, setItems] = useState<Attachment[] | null>(null);
@@ -266,8 +291,8 @@ export function EntityAttachments({
 
   async function upload(picked: File[]) {
     const ok = picked.filter((f) => {
-      if (f.size > MAX_ATTACHMENT_BYTES) {
-        toast.error(`"${f.name}" exceeds 25 MB`);
+      if (f.size > maxBytes) {
+        toast.error(`"${f.name}" exceeds ${mbLabel(maxBytes)}`);
         return false;
       }
       return true;
@@ -307,7 +332,7 @@ export function EntityAttachments({
         </div>
       ) : items.length === 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          No documents yet. Drop files here or use “Add files”. Max 25 MB each.
+          No documents yet. Drop files here or use “Add files”. Max {mbLabel(maxBytes)} each.
         </p>
       ) : (
         <ul className="space-y-1.5">
