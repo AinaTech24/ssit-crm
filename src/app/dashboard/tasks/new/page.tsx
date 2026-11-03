@@ -152,6 +152,9 @@ export default function NewTaskPage() {
   // been filled in.
   // Null = not loaded yet; assume allowed so the picker doesn't flicker shut.
   const [canAssignOthers, setCanAssignOthers] = useState<boolean | null>(null);
+  // The marketing request card is for the marketing team. Anyone else reaches it
+  // by choosing Department = Marketing (an RM asking marketing for a creative).
+  const [isMarketingUser, setIsMarketingUser] = useState(false);
   useEffect(() => {
     let alive = true;
     fetch("/api/me")
@@ -160,6 +163,7 @@ export default function NewTaskPage() {
         if (!alive) return;
         const caps: string[] = j?.capabilities ?? [];
         setCanAssignOthers(caps.includes("task.assign.others"));
+        setIsMarketingUser(((j?.user?.roles ?? []) as string[]).includes("marketing"));
       })
       .catch(() => { if (alive) setCanAssignOthers(null); });
     return () => { alive = false; };
@@ -447,8 +451,9 @@ export default function NewTaskPage() {
 
       {/* Marketing request — what is being made and what it is for. Choosing a content
           type makes this a marketing task: the client/lead/SR/meeting section is hidden and
-          the task goes to the marketing person for sign-off. */}
-      {!activityMode && (
+          the task goes to the marketing person for sign-off. Shown to marketing users, and to
+          anyone who picks Department = Marketing; hidden for everyone else. */}
+      {!activityMode && (isMarketingUser || form.department === "marketing" || !!form.contentKind) && (
       <div className="card-surface p-5 space-y-3">
         <div className="flex items-center gap-2">
           <div className="h-4 w-1 rounded-full brand-bar" />
