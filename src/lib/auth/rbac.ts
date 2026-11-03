@@ -180,6 +180,7 @@ export type Capability =
   | "content_library.view"
   | "content_library.add"
   | "content_library.edit"
+  | "dhandho.view"
   | "dhandho.manage"
   | "induction.view"
   | "induction.manage"
@@ -430,8 +431,14 @@ const MATRIX: Record<Capability, Role[]> = {
   ],
   "content_library.add": ["marketing"],
   "content_library.edit": ["marketing"],
-  // Dhandho speaker rota: everyone can SEE it (the page is open to every member);
-  // loading or changing the rota is the office-administration desk and the owner.
+  // Dhandho speaker rota: everyone can SEE it by default; loading or changing the
+  // rota is the office-administration desk and the owner. Both are separate
+  // capabilities so an owner can hand "add / edit" to one person, or take "view"
+  // away from one, on the employee record (Customize access permissions).
+  "dhandho.view": [
+    "rm", "branch_head", "back_office", "ops", "marketing", "compliance", "assistant", "gifting_hr",
+    "accounts", "sub_broker", "ra_research", "ra_sales", "ria", "insurance",
+  ],
   "dhandho.manage": ["gifting_hr"],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],

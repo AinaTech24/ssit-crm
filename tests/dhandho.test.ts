@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { can } from "@/lib/auth/rbac";
 import { isMonthKey, istDate, meetingStart, meetingTime, meetingTimeLabel, monthGrid, reminderDue, shiftMonth } from "@/lib/dhandho/schedule";
 import { coerceDate, matchSpeaker, matchSpeakerDetailed, parseSheetRows, sheetDateRange } from "@/lib/dhandho/sheet";
 
@@ -144,5 +145,21 @@ describe("Dhandho calendar + override", () => {
   it("an upload replaces the span from its first to its last date", () => {
     expect(sheetDateRange(["2026-11-18", "2026-11-02", "2026-11-30"])).toEqual({ from: "2026-11-02", to: "2026-11-30" });
     expect(sheetDateRange([])).toBeNull();
+  });
+});
+
+describe("Dhandho permissions", () => {
+  it("everyone can view by default; only the office-admin desk and the owner can edit", () => {
+    expect(can(["rm"], "dhandho.view")).toBe(true);
+    expect(can(["marketing"], "dhandho.view")).toBe(true);
+    expect(can(["rm"], "dhandho.manage")).toBe(false);
+    expect(can(["gifting_hr"], "dhandho.manage")).toBe(true);
+    expect(can(["owner"], "dhandho.manage")).toBe(true);
+  });
+
+  it("an owner can hand edit to one person, or take view away, through their custom list", () => {
+    expect(can(["rm"], "dhandho.manage", ["task.view.assigned", "dhandho.manage"])).toBe(true);
+    expect(can(["rm"], "dhandho.view", ["task.view.assigned"])).toBe(false);
+    expect(can(["rm"], "dhandho.view", ["task.view.assigned", "dhandho.view"])).toBe(true);
   });
 });
