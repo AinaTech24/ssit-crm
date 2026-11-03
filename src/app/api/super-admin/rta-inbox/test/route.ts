@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth/session";
 import { requirePlatform } from "@/lib/auth/rbac";
 import { verifyImap } from "@/lib/comms/imap";
+import { testSesInbox } from "@/lib/rta/ses-inbox";
 import { loadRtaInboxConfig, invalidateRtaInboxConfigCache } from "@/lib/rta/inbox-config";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,14 @@ export async function POST() {
     const cfg = await loadRtaInboxConfig(true);
     if (!cfg.configured) {
       return NextResponse.json(
-        { ok: false, error: "Enter host, username and password, then Save before testing." },
+        { ok: false, error: "Save the settings first — for Amazon SES that means the region and bucket name." },
         { status: 400 }
       );
+    }
+    if (cfg.mode === "ses") {
+      const r = await testSesInbox(cfg.ses);
+      if (!r.ok) return NextResponse.json({ ok: false, error: r.error }, { status: 400 });
+      return NextResponse.json({ ok: true, waiting: r.waiting });
     }
     await verifyImap({ host: cfg.host!, port: cfg.port, secure: cfg.secure, user: cfg.user!, pass: cfg.pass! });
     return NextResponse.json({ ok: true });

@@ -49,6 +49,7 @@ import {
   type MailbackPasswords,
 } from "@/lib/rta/mailback-config";
 import { loadRtaInboxConfig } from "@/lib/rta/inbox-config";
+import { processSesInbox } from "@/lib/rta/ses-inbox";
 import { captureError } from "@/lib/observability/capture";
 
 // Background imports have no human uploader. A stable sentinel enables the
@@ -573,6 +574,10 @@ export async function pollRtaInboxOnce(): Promise<{ processed: number; configure
     if (!rc.configured) {
       return { processed: 0, configured: false, error: "RTA mailbox credentials are not configured in Admin settings." };
     }
+    if (rc.mode === "ses") {
+      const { processed } = await processSesInbox(rc.ses, handleMessage);
+      return { processed, configured: true };
+    }
     const cfg: ImapConfig = { host: rc.host!, port: rc.port, secure: rc.secure, user: rc.user!, pass: rc.pass! };
     const { processed } = await processUnseenMailback(cfg, handleMessage);
     return { processed, configured: true };
@@ -602,6 +607,11 @@ export function startRtaInboxPollerWorker() {
         return;
       }
       warnedIdle = false;
+      if (rc.mode === "ses") {
+        const { processed } = await processSesInbox(rc.ses, handleMessage);
+        if (processed) console.log(`[rta-inbox] processed ${processed} message(s) from Amazon SES (domain=${rc.domain})`);
+        return;
+      }
       const cfg: ImapConfig = { host: rc.host!, port: rc.port, secure: rc.secure, user: rc.user!, pass: rc.pass! };
       const { processed } = await processUnseenMailback(cfg, handleMessage);
       if (processed) console.log(`[rta-inbox] processed ${processed} message(s) (domain=${rc.domain})`);

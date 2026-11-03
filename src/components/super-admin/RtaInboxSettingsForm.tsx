@@ -4,6 +4,10 @@ import { useState } from "react";
 import { Inbox, KeyRound, Loader2, CheckCircle2, XCircle, Save, PlugZap, Eye, EyeOff } from "lucide-react";
 
 type Status = {
+  mode: "imap" | "ses";
+  sesRegion: string;
+  sesBucket: string;
+  sesPrefix: string;
   configured: boolean;
   source: string;
   host: string | null;
@@ -17,6 +21,10 @@ type Status = {
 };
 
 export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
+  const [mode, setMode] = useState<"imap" | "ses">(initial.mode ?? "imap");
+  const [sesRegion, setSesRegion] = useState(initial.sesRegion || "ap-south-1");
+  const [sesBucket, setSesBucket] = useState(initial.sesBucket || "");
+  const [sesPrefix, setSesPrefix] = useState(initial.sesPrefix ?? "rta-inbound/");
   const [host, setHost] = useState(initial.host ?? "");
   const [port, setPort] = useState(String(initial.port || 993));
   const [secure, setSecure] = useState(initial.secure);
@@ -36,13 +44,20 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
   const needsPass = !status.hasPassword && !pass.trim();
 
   async function save() {
-    if (!host.trim() || !user.trim()) {
-      setMsg({ kind: "err", text: "Host and username are required." });
-      return;
-    }
-    if (needsPass) {
-      setMsg({ kind: "err", text: "Enter the mailbox password." });
-      return;
+    if (mode === "ses") {
+      if (!sesBucket.trim() || !sesRegion.trim()) {
+        setMsg({ kind: "err", text: "Enter the AWS region and the S3 bucket name." });
+        return;
+      }
+    } else {
+      if (!host.trim() || !user.trim()) {
+        setMsg({ kind: "err", text: "Host and username are required." });
+        return;
+      }
+      if (needsPass) {
+        setMsg({ kind: "err", text: "Enter the mailbox password." });
+        return;
+      }
     }
     setSaving(true);
     setMsg(null);
@@ -51,10 +66,16 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          host,
+          mode,
+          sesRegion,
+          sesBucket,
+          sesPrefix,
+          // The mailbox fields are kept as they were when SES is chosen, so
+          // switching back needs no re-typing.
+          host: host || undefined,
           port: Number(port) || 993,
           secure,
-          user,
+          user: user || undefined,
           pass: pass || undefined,
           domain,
           deleteAfterImport,
@@ -102,7 +123,14 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
     try {
       const res = await fetch("/api/super-admin/rta-inbox/test", { method: "POST" });
       const data = await res.json();
-      if (data.ok) setMsg({ kind: "ok", text: "Connected — the mailbox is reachable and the INBOX is readable. 🎉" });
+      if (data.ok)
+        setMsg({
+          kind: "ok",
+          text:
+            mode === "ses"
+              ? `Connected — the bucket is readable. ${data.waiting ?? 0} email(s) waiting to be imported.`
+              : "Connected — the mailbox is reachable and the INBOX is readable. 🎉",
+        });
       else setMsg({ kind: "err", text: data.error || "Connection failed — check host/port/credentials." });
     } catch (e: any) {
       setMsg({ kind: "err", text: e?.message || "Network error." });
@@ -119,9 +147,9 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
       <div className="flex items-center gap-2">
         <Inbox className="size-5 text-muted-foreground" />
         <div>
-          <h2 className="font-semibold">RTA mailback inbox (IMAP)</h2>
+          <h2 className="font-semibold">RTA mailback inbox</h2>
           <p className="text-xs text-muted-foreground">
-            The single catch-all mailbox every MFD forwards their CAMS/KFintech mailback to. The password is encrypted at rest.
+            Where every MFD&apos;s forwarded CAMS/KFintech mailback email arrives. Choose a mailbox (IMAP) or Amazon SES.
           </p>
         </div>
       </div>
@@ -132,10 +160,63 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
           {status.configured ? "Configured" : "Not configured"}
         </span>
         <span className="px-2 py-1 rounded-full bg-muted">Source: {status.source === "db" ? "Equitywala Admin" : status.source === "env" ? "env var" : "none"}</span>
-        {status.host && <span className="px-2 py-1 rounded-full bg-muted">{status.host}:{status.port}</span>}
+        <span className="px-2 py-1 rounded-full bg-muted">Reading from: {status.mode === "ses" ? "Amazon SES" : "IMAP mailbox"}</span>
+        {status.mode === "ses" && status.sesBucket && (
+          <span className="px-2 py-1 rounded-full bg-muted">s3://{status.sesBucket}/{status.sesPrefix}</span>
+        )}
+        {status.mode !== "ses" && status.host && <span className="px-2 py-1 rounded-full bg-muted">{status.host}:{status.port}</span>}
         <span className="px-2 py-1 rounded-full bg-muted">Addresses: rta-…@{status.domain}</span>
       </div>
 
+      {/* Source */}
+      <div className="space-y-1.5">
+        <label className="text-sm font-medium">Inbound source</label>
+        <div className="inline-flex rounded-lg border bg-secondary/40 p-1 gap-1">
+          {([
+            ["ses", "Amazon SES (recommended)"],
+            ["imap", "IMAP mailbox"],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setMode(k)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium ${mode === k ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mode === "ses" && (
+        <div className="space-y-4 rounded-md border bg-muted/20 p-4">
+          <p className="text-xs text-muted-foreground">
+            Amazon SES saves every email sent to <code className="bg-background px-1 rounded">*@{domain || "crm.equitywala.com"}</code> as a
+            file in an S3 bucket. The worker reads those files, imports them, and deletes each one once handled.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-sm font-medium">S3 bucket name</label>
+              <input value={sesBucket} onChange={(e) => setSesBucket(e.target.value.trim())} placeholder="equitywala-rta-inbound" className={inputCls} autoComplete="off" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">AWS region</label>
+              <input value={sesRegion} onChange={(e) => setSesRegion(e.target.value.trim())} placeholder="ap-south-1" className={inputCls} autoComplete="off" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Folder (object key prefix)</label>
+            <input value={sesPrefix} onChange={(e) => setSesPrefix(e.target.value.trim())} placeholder="rta-inbound/" className={inputCls} autoComplete="off" />
+            <p className="text-[11px] text-muted-foreground">Must match the prefix in the SES receipt rule&apos;s S3 action.</p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            The server reads the bucket with its own AWS role — no keys are entered here. It needs <code>s3:ListBucket</code> on the
+            bucket and <code>s3:GetObject</code> + <code>s3:DeleteObject</code> on the folder.
+          </p>
+        </div>
+      )}
+
+      {mode === "imap" && (<>
       {/* Server */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="space-y-1.5 sm:col-span-2">
@@ -188,6 +269,8 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
         </div>
       </div>
 
+      </>)}
+
       {/* Domain */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium">Forwarding domain</label>
@@ -197,7 +280,8 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
         </p>
       </div>
 
-      {/* Mailbox cleanup */}
+      {/* Mailbox cleanup (IMAP only — SES mail is removed from the bucket as it is handled) */}
+      {mode === "imap" && (
       <div className="space-y-2 border-t pt-4">
         <label className="flex items-start gap-2 text-sm">
           <input
@@ -232,6 +316,7 @@ export function RtaInboxSettingsForm({ initial }: { initial: Status }) {
           </div>
         )}
       </div>
+      )}
 
       {msg && (
         <div className={`flex items-start gap-2 text-sm rounded-md px-3 py-2 ${msg.kind === "ok" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>

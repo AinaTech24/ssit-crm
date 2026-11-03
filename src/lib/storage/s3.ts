@@ -77,6 +77,15 @@ function client(): S3Client {
   });
 }
 
+/** An S3 client for a given region (the Amazon SES inbox bucket may not be the app's). */
+export function s3ClientForRegion(regionOverride?: string): S3Client {
+  const akid = accessKeyId();
+  return new S3Client({
+    region: regionOverride || region(),
+    credentials: akid ? { accessKeyId: akid, secretAccessKey: secretAccessKey()! } : undefined,
+  });
+}
+
 export function bucket(): string {
   return process.env.S3_BUCKET || process.env.AWS_S3_BUCKET || "mfd-platform-docs";
 }

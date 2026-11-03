@@ -13,6 +13,12 @@ import { encrypt, decrypt } from "@/lib/crypto";
 
 /** Shape persisted in platform_settings.value for key='rta_inbox'. Password encrypted. */
 type StoredInboxConfig = {
+  /** Where mail is read from. Absent = "imap" (every config saved before SES existed). */
+  mode?: "imap" | "ses" | null;
+  /** Amazon SES: the S3 bucket SES saves each incoming email into. */
+  sesRegion?: string | null;
+  sesBucket?: string | null;
+  sesPrefix?: string | null;
   host?: string | null;
   port?: number | null;
   secure?: boolean | null;
@@ -27,6 +33,9 @@ type StoredInboxConfig = {
 };
 
 export type ResolvedInboxConfig = {
+  /** "imap" = poll a mailbox; "ses" = read what Amazon SES saved to an S3 bucket. */
+  mode: "imap" | "ses";
+  ses: { region: string; bucket: string; prefix: string };
   host: string | null;
   port: number;
   secure: boolean;
@@ -42,6 +51,9 @@ export type ResolvedInboxConfig = {
 };
 
 const DEFAULT_DOMAIN = "crm.equitywala.com";
+const DEFAULT_SES_REGION = "ap-south-1";
+const DEFAULT_SES_PREFIX = "rta-inbound/";
+const NO_SES = { region: DEFAULT_SES_REGION, bucket: "", prefix: DEFAULT_SES_PREFIX };
 /**
  * A week's grace by default. Long enough to notice a bad import and re-run it
  * from the original mail; short enough that the mailbox doesn't grow unbounded.
@@ -76,7 +88,28 @@ export async function loadRtaInboxConfig(force = false): Promise<ResolvedInboxCo
   if (!force && _cache && Date.now() - _cache.at < TTL_MS) return _cache.cfg;
   const stored = await readStored();
   let cfg: ResolvedInboxConfig;
-  if (stored?.host) {
+  if (stored?.mode === "ses") {
+    const ses = {
+      region: (stored.sesRegion || DEFAULT_SES_REGION).trim(),
+      bucket: (stored.sesBucket || "").trim(),
+      prefix: (stored.sesPrefix ?? DEFAULT_SES_PREFIX).trim(),
+    };
+    cfg = {
+      mode: "ses",
+      ses,
+      host: null,
+      port: 993,
+      secure: true,
+      user: null,
+      pass: null,
+      domain: normDomain(stored.domain),
+      configured: !!(ses.bucket && ses.region),
+      source: "db",
+      // Mail is removed from the bucket as it is handled, so there is no sweep.
+      deleteAfterImport: false,
+      retentionDays: normRetention(stored.retentionDays),
+    };
+  } else if (stored?.host) {
     let pass: string | null = null;
     if (stored.passEnc) {
       try {
@@ -86,6 +119,8 @@ export async function loadRtaInboxConfig(force = false): Promise<ResolvedInboxCo
       }
     }
     cfg = {
+      mode: "imap",
+      ses: NO_SES,
       host: stored.host,
       port: stored.port ?? 993,
       secure: stored.secure ?? true,
@@ -101,6 +136,8 @@ export async function loadRtaInboxConfig(force = false): Promise<ResolvedInboxCo
     const host = process.env.RTA_INBOX_HOST || null;
     const pass = process.env.RTA_INBOX_PASS || null;
     cfg = {
+      mode: "imap",
+      ses: NO_SES,
       host,
       port: process.env.RTA_INBOX_PORT ? Number(process.env.RTA_INBOX_PORT) : 993,
       secure: process.env.RTA_INBOX_SECURE ? process.env.RTA_INBOX_SECURE !== "false" : true,
@@ -136,6 +173,10 @@ export async function isInboxConfigured(): Promise<boolean> {
 /** Upsert the inbox config. A blank password keeps the previously-saved one. */
 export async function saveRtaInboxConfig(
   input: {
+    mode?: "imap" | "ses";
+    sesRegion?: string;
+    sesBucket?: string;
+    sesPrefix?: string;
     host?: string;
     port?: number;
     secure?: boolean;
@@ -153,6 +194,10 @@ export async function saveRtaInboxConfig(
   if (freshPass) passEnc = encrypt(freshPass);
 
   const value: StoredInboxConfig = {
+    mode: input.mode ?? prev?.mode ?? "imap",
+    sesRegion: input.sesRegion?.trim() || prev?.sesRegion || DEFAULT_SES_REGION,
+    sesBucket: input.sesBucket?.trim() ?? prev?.sesBucket ?? null,
+    sesPrefix: input.sesPrefix !== undefined ? input.sesPrefix.trim() : (prev?.sesPrefix ?? DEFAULT_SES_PREFIX),
     host: input.host?.trim() || prev?.host || null,
     port: input.port ?? prev?.port ?? 993,
     secure: input.secure ?? prev?.secure ?? true,
@@ -193,6 +238,10 @@ export async function revealRtaInboxPassword(): Promise<string | null> {
 
 /** Masked status for the admin UI — never returns the password. */
 export async function getRtaInboxStatusForAdmin(): Promise<{
+  mode: "imap" | "ses";
+  sesRegion: string;
+  sesBucket: string;
+  sesPrefix: string;
   configured: boolean;
   source: string;
   host: string | null;
@@ -207,6 +256,10 @@ export async function getRtaInboxStatusForAdmin(): Promise<{
   const stored = await readStored();
   const cfg = await loadRtaInboxConfig(true);
   return {
+    mode: cfg.mode,
+    sesRegion: stored?.sesRegion || DEFAULT_SES_REGION,
+    sesBucket: stored?.sesBucket || "",
+    sesPrefix: stored?.sesPrefix ?? DEFAULT_SES_PREFIX,
     configured: cfg.configured,
     source: cfg.source,
     host: cfg.host,

@@ -123,7 +123,7 @@ function collectSenderCandidates(parsed: any, fromAddr?: string): string[] {
   return [...out];
 }
 
-function collectRecipients(parsed: any, envelope: any): string[] {
+function collectRecipients(parsed: any, envelope: any, includeReceivedFor = false): string[] {
   const out = new Set<string>();
   const add = (v: any) => {
     const a = typeof v === "string" ? v : v?.address;
@@ -142,7 +142,53 @@ function collectRecipients(parsed: any, envelope: any): string[] {
     const matches = String(line?.line ?? "").match(EMAIL_RE);
     if (matches) for (const m of matches) out.add(m.toLowerCase());
   }
+  // Mail saved by Amazon SES carries no envelope and no Delivered-To: the address
+  // it was delivered to is only in the "for <address>" clause of the Received
+  // header SES adds. Opt-in, because on other paths it would just add noise.
+  if (includeReceivedFor) {
+    for (const line of parsed?.headerLines ?? []) {
+      if (String(line?.key ?? "").toLowerCase() !== "received") continue;
+      const m = /\bfor\s+<?([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})>?/i.exec(String(line?.line ?? ""));
+      if (m) out.add(m[1].toLowerCase());
+    }
+  }
   return [...out];
+}
+
+/**
+ * Turn one raw RFC 822 message into what the RTA-mailback ingest needs: sender,
+ * every recipient candidate, forwarder identity, and the decoded attachments.
+ * Shared by the IMAP poller and the Amazon SES (S3) reader so both feed the same
+ * handler with identical shapes.
+ */
+export async function parseInboundSource(
+  source: Buffer,
+  uid: number,
+  opts?: { envelope?: any; includeReceivedFor?: boolean }
+): Promise<InboundRawMessage> {
+  const parsed = await simpleParser(source);
+  const fromAddr = parsed.from?.value?.[0];
+  const attachments: InboundAttachment[] = (parsed.attachments ?? [])
+    .filter((a: any) => a?.filename && Buffer.isBuffer(a.content))
+    .map((a: any) => ({
+      filename: String(a.filename),
+      contentType: String(a.contentType ?? "application/octet-stream"),
+      content: a.content as Buffer,
+      size: (a.content as Buffer).length,
+    }));
+  return {
+    uid,
+    messageId: parsed.messageId ?? undefined,
+    from: fromAddr?.address,
+    fromName: fromAddr?.name,
+    subject: parsed.subject,
+    text: parsed.text,
+    html: typeof parsed.html === "string" ? parsed.html : undefined,
+    date: parsed.date,
+    recipients: collectRecipients(parsed, opts?.envelope, opts?.includeReceivedFor),
+    senderCandidates: collectSenderCandidates(parsed, fromAddr?.address),
+    attachments,
+  };
 }
 
 /**
@@ -182,29 +228,7 @@ export async function processUnseenMailback(
         const msgs: InboundRawMessage[] = [];
         for await (const m of client.fetch(take, { uid: true, source: true, envelope: true }, { uid: true })) {
           if (!m.uid || !m.source) continue;
-          const parsed = await simpleParser(m.source as Buffer);
-          const fromAddr = parsed.from?.value?.[0];
-          const attachments: InboundAttachment[] = (parsed.attachments ?? [])
-            .filter((a: any) => a?.filename && Buffer.isBuffer(a.content))
-            .map((a: any) => ({
-              filename: String(a.filename),
-              contentType: String(a.contentType ?? "application/octet-stream"),
-              content: a.content as Buffer,
-              size: (a.content as Buffer).length,
-            }));
-          msgs.push({
-            uid: m.uid,
-            messageId: parsed.messageId ?? undefined,
-            from: fromAddr?.address,
-            fromName: fromAddr?.name,
-            subject: parsed.subject,
-            text: parsed.text,
-            html: typeof parsed.html === "string" ? parsed.html : undefined,
-            date: parsed.date,
-            recipients: collectRecipients(parsed, m.envelope),
-            senderCandidates: collectSenderCandidates(parsed, fromAddr?.address),
-            attachments,
-          });
+          msgs.push(await parseInboundSource(m.source as Buffer, m.uid, { envelope: m.envelope }));
         }
         for (const msg of msgs) {
           try {

@@ -34,6 +34,17 @@ export async function GET(req: NextRequest) {
 }
 
 const Body = z.object({
+  /** Where mail is read from: a mailbox over IMAP, or Amazon SES (via its S3 bucket). */
+  mode: z.enum(["imap", "ses"]).optional(),
+  sesRegion: z.string().trim().max(40).optional(),
+  sesBucket: z
+    .string()
+    .trim()
+    .max(63)
+    .regex(/^[a-z0-9][a-z0-9.\-]*$/, "Use the exact S3 bucket name (lowercase letters, numbers, dots, hyphens).")
+    .optional()
+    .or(z.literal("")),
+  sesPrefix: z.string().trim().max(200).optional(),
   host: z.string().trim().max(200).optional(),
   port: z.number().int().min(1).max(65535).optional(),
   secure: z.boolean().optional(),

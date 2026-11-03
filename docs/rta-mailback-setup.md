@@ -66,6 +66,19 @@ exists for BOTH addressing options — it's Gmail's, not ours.
 
 ---
 
+## Alternative inbox: Amazon SES (no mailbox, no IMAP)
+
+Instead of a Hostinger mailbox + catch-all, SES can receive the mail directly:
+
+1. **SES (Mumbai, ap-south-1) → Email receiving**: create a rule set, make it *Active*, and add a rule with the recipient `crm.equitywala.com` and the action **Deliver to S3 bucket** (bucket e.g. `equitywala-rta-inbound`, prefix `rta-inbound/`). The bucket needs a policy letting `ses.amazonaws.com` `s3:PutObject` (condition `aws:Referer` = your account id) and a lifecycle rule that expires objects after ~60 days.
+2. **DNS (GoDaddy)**: an **MX** record, name `crm`, priority 10, value `inbound-smtp.ap-south-1.amazonaws.com`. Remove any older MX on that name; keep the A record.
+3. **IAM**: the server's role (or keys) needs `s3:ListBucket` on the bucket and `s3:GetObject` + `s3:DeleteObject` on `rta-inbound/*`.
+4. **SSIT Admin → RTA Mailbox**: choose **Amazon SES**, enter bucket, region and folder, **Save**, **Test connection**.
+
+The worker lists the bucket every ~2 minutes, parses each raw message with the same code path as IMAP (the firm address is read from the `Received … for <address>` header, since SES stores no envelope), runs the same handler, and **deletes the file once it is handled**. A file whose handling throws is retried (up to 5 times per worker run) and otherwise left for the bucket lifecycle rule. Code: `src/lib/rta/ses-inbox.ts`.
+
+---
+
 ## One-time platform setup
 
 ### 1. Mailbox (Hostinger, `crm.ssit.com`)

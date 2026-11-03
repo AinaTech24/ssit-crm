@@ -18,7 +18,8 @@ export default async function PlatformRtaInboxPage() {
         <p className="text-muted-foreground text-sm">
           The single catch-all mailbox that powers direct RTA mailback auto-import. Every MFD auto-forwards their
           daily CAMS / KFintech mailback email to a unique <code className="bg-muted px-1 rounded">rta-&lt;token&gt;@{status.domain}</code>{" "}
-          address; a catch-all delivers them into this one mailbox, which the worker polls and imports.
+          address. Choose where those emails land: <strong>Amazon SES</strong> saves each one to an S3 bucket, or a normal{" "}
+          <strong>IMAP mailbox</strong> with a catch-all. The worker reads them every ~2 minutes and imports them.
         </p>
       </div>
 
