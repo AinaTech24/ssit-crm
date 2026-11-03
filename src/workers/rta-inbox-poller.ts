@@ -51,6 +51,7 @@ import {
 import { loadRtaInboxConfig } from "@/lib/rta/inbox-config";
 import { processSesInbox } from "@/lib/rta/ses-inbox";
 import { captureError } from "@/lib/observability/capture";
+import { createNotification } from "@/lib/notifications/create";
 
 // Background imports have no human uploader. A stable sentinel enables the
 // worker's stalled-job idempotency guard (importAlreadyFinished needs a truthy
@@ -282,6 +283,34 @@ async function ingestAttachment(
   return { status: "queued", importId };
 }
 
+/**
+ * Tell the firm's owners, as an in-app pop-up, that Gmail/Outlook has asked to
+ * confirm the forwarding rule — with the code in the message itself, so they can
+ * type it straight into their mailbox without hunting for it on the settings card.
+ */
+async function notifyOwnersOfConfirmation(tx: any, tenantId: string, code: string | null): Promise<void> {
+  const owners = (
+    await tx.execute(sql`
+      SELECT id FROM users
+       WHERE tenant_id = ${tenantId}::uuid AND status = 'active' AND 'owner' = ANY(roles)
+    `)
+  ).rows as Array<{ id: string }>;
+  for (const o of owners) {
+    await createNotification(tx, {
+      tenantId,
+      userId: o.id,
+      kind: "rta.forwarding_confirm",
+      title: "Confirm your RTA email forwarding",
+      body: code
+        ? `Gmail/Outlook sent a confirmation code: ${code}. Enter it in your mailbox settings to switch forwarding on.`
+        : "Your mailbox sent a forwarding confirmation. Open RTA Mailback in Settings → Integrations to confirm it.",
+      linkUrl: "/dashboard/settings/integrations",
+      severity: "warning",
+      meta: { code },
+    });
+  }
+}
+
 async function handleMessage(msg: InboundRawMessage): Promise<void> {
   // Detected up-front: a Gmail confirmation is the one message whose firm
   // identity lives in the BODY rather than in any header (see below).
@@ -353,7 +382,10 @@ async function handleMessage(msg: InboundRawMessage): Promise<void> {
     // 2. Stamp receipt + capture any forwarding-confirmation code for the UI.
     await withTenant(tenantId, async (tx) => {
       await stampReceived(tx, match.id);
-      if (confirm) await recordForwardingConfirmation(tx, match.id, confirm.code, confirm.url);
+      if (confirm) {
+        await recordForwardingConfirmation(tx, match.id, confirm.code, confirm.url);
+        await notifyOwnersOfConfirmation(tx, tenantId, confirm.code);
+      }
     });
     // A pure Gmail/Outlook verification email carries no importable data.
     if (confirm && msg.attachments.length === 0) {
