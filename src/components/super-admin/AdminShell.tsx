@@ -16,7 +16,7 @@ import {
   BarChart3, Building2, Package, LifeBuoy, Settings, Users as UsersIcon,
   Activity, Image as ImageIcon, Bot, PieChart, ChevronUp, LogOut,
   Loader2, ShieldCheck, RefreshCw, Mail, SlidersHorizontal, ServerCog,
-  LayoutTemplate, Inbox, BookOpen, MailSearch,
+  LayoutTemplate, Inbox, MailOpen, BookOpen, MailSearch,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -33,6 +33,7 @@ const NAV: NavItem[] = [
   { href: "/super-admin/ai", label: "AI & Models", icon: Bot },
   { href: "/super-admin/email", label: "Email", icon: Mail },
   { href: "/super-admin/rta-inbox", label: "RTA Mailbox", icon: Inbox },
+  { href: "/super-admin/inbound-mail", label: "Inbound Mail", icon: MailOpen },
   { href: "/super-admin/module-controls", label: "Module Controls", icon: SlidersHorizontal },
   { href: "/super-admin/aws-monitoring", label: "AWS Monitoring", icon: ServerCog },
   { href: "/super-admin/settings", label: "Platform settings", icon: Settings },
