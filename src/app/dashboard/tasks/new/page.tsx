@@ -244,6 +244,11 @@ export default function NewTaskPage() {
       setErr("Title is required.");
       return;
     }
+    if (isMarketing && !form.assigneeId) {
+      // Left blank the task would land on the requester, not on marketing.
+      setErr("Pick the marketing person this creative is for.");
+      return;
+    }
     if (form.type === "custom" && !form.customType.trim()) {
       setErr("Enter a name for the custom task type.");
       return;
@@ -686,6 +691,8 @@ export default function NewTaskPage() {
               <span className="ml-1 text-[10px] text-muted-foreground font-normal">
                 {canAssignOthers === false
                   ? "· you can only assign tasks to yourself"
+                  : isMarketing
+                    ? "· required — pick the marketing person"
                   : form.department
                     ? "· defaults to you"
                     : "· pick a department to assign someone else"}
@@ -706,7 +713,7 @@ export default function NewTaskPage() {
               }
               value={form.assigneeId || null}
               onChange={(id) => set("assigneeId", id ?? "")}
-              placeholder="Assign to myself"
+              placeholder={isMarketing ? "Select the marketing person" : "Assign to myself"}
             />
           </label>
         </div>
