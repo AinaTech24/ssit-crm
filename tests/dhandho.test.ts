@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { istDate, meetingStart, meetingTime, meetingTimeLabel, reminderDue } from "@/lib/dhandho/schedule";
-import { coerceDate, matchSpeaker, matchSpeakerDetailed, parseSheetRows } from "@/lib/dhandho/sheet";
+import { isMonthKey, istDate, meetingStart, meetingTime, meetingTimeLabel, monthGrid, reminderDue, shiftMonth } from "@/lib/dhandho/schedule";
+import { coerceDate, matchSpeaker, matchSpeakerDetailed, parseSheetRows, sheetDateRange } from "@/lib/dhandho/sheet";
 
 describe("Dhandho schedule", () => {
   it("meets Mon–Fri at 10:00, Saturday at 10:30, never on Sunday", () => {
@@ -117,5 +117,32 @@ describe("Dhandho sheet — the firm's real format", () => {
     expect(matchSpeakerDetailed("Priyanaka", users)).toMatchObject({ user: { id: "p" }, how: "close spelling" });
     expect(matchSpeakerDetailed("Payal", users)).toBeNull(); // ambiguous: never a guess
     expect(matchSpeakerDetailed("Noor", users)).toBeNull();
+  });
+});
+
+describe("Dhandho calendar + override", () => {
+  it("builds a Monday-first grid that covers the month (Nov 2026 starts on a Sunday)", () => {
+    const g = monthGrid("2026-11");
+    expect(g.weeks.every((w) => w.length === 7)).toBe(true);
+    expect(g.from).toBe("2026-10-26"); // Monday before Sunday 1 Nov
+    expect(g.weeks[0][6]).toMatchObject({ date: "2026-11-01", inMonth: true, sunday: true });
+    expect(g.weeks[0][0].inMonth).toBe(false);
+    expect(g.weeks).toHaveLength(6); // 30 Nov is a Monday, so a sixth week is needed
+    expect(g.weeks.at(-1)![0]).toMatchObject({ date: "2026-11-30", inMonth: true });
+    expect(g.to).toBe("2026-12-06");
+    expect(g.to).toBe(g.weeks.at(-1)![6].date);
+  });
+
+  it("steps between months across a year boundary", () => {
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(isMonthKey("2026-11")).toBe(true);
+    expect(isMonthKey("2026-13")).toBe(false);
+    expect(isMonthKey("nov")).toBe(false);
+  });
+
+  it("an upload replaces the span from its first to its last date", () => {
+    expect(sheetDateRange(["2026-11-18", "2026-11-02", "2026-11-30"])).toEqual({ from: "2026-11-02", to: "2026-11-30" });
+    expect(sheetDateRange([])).toBeNull();
   });
 });

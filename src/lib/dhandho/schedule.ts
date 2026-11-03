@@ -74,6 +74,54 @@ export function reminderDue(iso: string, now: Date = new Date()): boolean {
   return !!w && now >= w.from && now <= w.to;
 }
 
+const MONTH_KEY_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** "YYYY-MM" — the month a calendar page is showing. */
+export function isMonthKey(s: string): boolean {
+  return MONTH_KEY_RE.test(s);
+}
+
+/** The month before/after a "YYYY-MM" key (delta can be negative). */
+export function shiftMonth(key: string, delta: number): string {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function addDays(iso: string, n: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+export interface GridDay {
+  date: string;
+  /** False for the greyed leading/trailing days that belong to a neighbouring month. */
+  inMonth: boolean;
+  sunday: boolean;
+}
+
+/**
+ * The weeks to draw for a month, Monday first (like the meetings calendar).
+ * `from`/`to` are the first and last date shown, for the query.
+ */
+export function monthGrid(key: string): { from: string; to: string; weeks: GridDay[][] } {
+  const first = `${key}-01`;
+  const lead = (dayOfWeek(first) + 6) % 7; // Monday = 0
+  const last = addDays(`${shiftMonth(key, 1)}-01`, -1);
+  const total = Math.ceil((lead + Number(last.slice(8, 10))) / 7) * 7;
+  const start = addDays(first, -lead);
+  const weeks: GridDay[][] = [];
+  for (let i = 0; i < total; i += 7) {
+    weeks.push(
+      Array.from({ length: 7 }, (_, j) => {
+        const date = addDays(start, i + j);
+        return { date, inMonth: date.startsWith(key), sunday: dayOfWeek(date) === 0 };
+      })
+    );
+  }
+  return { from: start, to: addDays(start, total - 1), weeks };
+}
+
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 export function dayName(iso: string): string {
   return DAY_NAMES[dayOfWeek(iso)];

@@ -1,56 +1,57 @@
-import { and, asc, desc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { Mic } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { dhandhoSessions } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
-import { DhandhoAdmin, DeleteSessionButton } from "@/components/dhandho/DhandhoAdmin";
-import { dayName, istDate, meetingTimeLabel } from "@/lib/dhandho/schedule";
+import { DhandhoAdmin } from "@/components/dhandho/DhandhoAdmin";
+import { DhandhoCalendar } from "./DhandhoCalendar";
+import { dayName, isMonthKey, istDate, meetingTimeLabel, monthGrid } from "@/lib/dhandho/schedule";
 
 export const dynamic = "force-dynamic";
 
 const fmt = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-const monthOf = (iso: string) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 
-export default async function DhandhoPage() {
+export default async function DhandhoPage({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const session = await requireSession();
   const canManage = can(session.roles, "dhandho.manage", session.permissions);
   const today = istDate();
+  const thisMonth = today.slice(0, 7);
+  const sp = await searchParams;
+  const month = sp.m && isMonthKey(sp.m) ? sp.m : thisMonth;
+  const grid = monthGrid(month);
 
-  const { upcoming, recent } = await withTenant(session.tenantId, async (tx) => ({
-    upcoming: await tx
+  const { sessions, todaysRow } = await withTenant(session.tenantId, async (tx) => ({
+    // The whole visible grid, so the greyed days at the edges are right too.
+    sessions: await tx
       .select()
       .from(dhandhoSessions)
-      .where(and(eq(dhandhoSessions.tenantId, session.tenantId), gte(dhandhoSessions.sessionDate, today)))
-      .orderBy(asc(dhandhoSessions.sessionDate))
-      .limit(120),
-    recent: await tx
-      .select()
-      .from(dhandhoSessions)
-      .where(and(eq(dhandhoSessions.tenantId, session.tenantId), lt(dhandhoSessions.sessionDate, today)))
-      .orderBy(desc(dhandhoSessions.sessionDate))
-      .limit(10),
+      .where(
+        and(
+          eq(dhandhoSessions.tenantId, session.tenantId),
+          gte(dhandhoSessions.sessionDate, grid.from),
+          lte(dhandhoSessions.sessionDate, grid.to)
+        )
+      )
+      .orderBy(asc(dhandhoSessions.sessionDate)),
+    todaysRow:
+      (
+        await tx
+          .select()
+          .from(dhandhoSessions)
+          .where(and(eq(dhandhoSessions.tenantId, session.tenantId), eq(dhandhoSessions.sessionDate, today)))
+          .limit(1)
+      )[0] ?? null,
   }));
 
-  const todaysRow = upcoming.find((s) => s.sessionDate === today) ?? null;
   const todayOff = todaysRow?.offReason ?? null;
   const todays = todayOff ? null : todaysRow;
   const time = meetingTimeLabel(today);
   const iAmSpeaker = !!todays && todays.speakerUserId === session.userId;
 
-  // Group the upcoming days by month.
-  const months: Array<{ label: string; rows: typeof upcoming }> = [];
-  for (const s of upcoming) {
-    const label = monthOf(s.sessionDate);
-    const last = months[months.length - 1];
-    if (last && last.label === label) last.rows.push(s);
-    else months.push({ label, rows: [s] });
-  }
-
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-6xl">
       <div>
         <h1 className="page-title flex items-center gap-2">
           <Mic className="size-6 text-brand-cyan" /> Dhandho
@@ -84,64 +85,14 @@ export default async function DhandhoPage() {
 
       {canManage && <DhandhoAdmin />}
 
-      <div className="space-y-4">
-        <h2 className="section-title">Upcoming speakers</h2>
-        {months.length === 0 ? (
-          <div className="border rounded-lg bg-card p-8 text-center text-sm text-muted-foreground">
-            No speakers scheduled yet.{canManage ? " Upload the month's Excel sheet above." : ""}
-          </div>
-        ) : (
-          months.map((m) => (
-            <div key={m.label} className="border rounded-lg bg-card overflow-hidden">
-              <div className="px-4 py-2 text-xs font-semibold bg-secondary/50">{m.label}</div>
-              <table className="w-full text-sm">
-                <tbody>
-                  {m.rows.map((s) => (
-                    <tr
-                      key={s.id}
-                      className={`border-t ${s.offReason ? "bg-rose-50/60 text-muted-foreground" : s.sessionDate === today ? "bg-primary/5" : ""}`}
-                    >
-                      <td className="px-4 py-2 whitespace-nowrap">{fmt(s.sessionDate)}</td>
-                      <td className="py-2 text-muted-foreground whitespace-nowrap">
-                        {dayName(s.sessionDate)}
-                        {s.offReason ? "" : ` · ${meetingTimeLabel(s.sessionDate)}`}
-                      </td>
-                      {s.offReason ? (
-                        <td className="py-2 font-medium" colSpan={2}>{s.offReason}</td>
-                      ) : (
-                        <>
-                          <td className="py-2 font-medium">{s.speakerName}</td>
-                          <td className="py-2 text-muted-foreground">{s.topic ?? ""}</td>
-                        </>
-                      )}
-                      <td className="py-2 pr-4 text-right">{canManage && <DeleteSessionButton id={s.id} />}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))
-        )}
-      </div>
-
-      {recent.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="section-title">Recent sessions</h2>
-          <div className="border rounded-lg bg-card overflow-hidden">
-            <table className="w-full text-sm">
-              <tbody>
-                {recent.filter((s) => !s.offReason).map((s) => (
-                  <tr key={s.id} className="border-t first:border-t-0">
-                    <td className="px-4 py-2 whitespace-nowrap">{fmt(s.sessionDate)}</td>
-                    <td className="py-2 font-medium">{s.speakerName}</td>
-                    <td className="py-2 pr-4 text-muted-foreground">{s.topic ?? ""}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      <DhandhoCalendar
+        month={month}
+        sessions={sessions}
+        today={today}
+        userId={session.userId}
+        canManage={canManage}
+        thisMonth={thisMonth}
+      />
     </div>
   );
 }

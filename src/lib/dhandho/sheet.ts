@@ -123,6 +123,18 @@ export function parseSheetRows(cells: unknown[][]): { rows: SheetRow[]; problems
   return { rows, problems };
 }
 
+/**
+ * The first and last date a sheet covers. An upload REPLACES the rota across this
+ * whole span: days inside it that the sheet does not list are cleared, so a
+ * corrected sheet fully overrides what was there. Days outside it are untouched —
+ * a sheet for the second half of a month leaves the first half alone.
+ */
+export function sheetDateRange(dates: string[]): { from: string; to: string } | null {
+  if (!dates.length) return null;
+  const sorted = [...dates].sort();
+  return { from: sorted[0], to: sorted[sorted.length - 1] };
+}
+
 /** Read the first sheet of an uploaded .xlsx / .xls / .csv. */
 export function parseSheetFile(buf: Buffer): { rows: SheetRow[]; problems: SheetProblem[] } {
   const wb = XLSX.read(buf, { type: "buffer" });

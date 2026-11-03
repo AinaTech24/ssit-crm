@@ -14,6 +14,8 @@ import { useToast } from "@/components/ui/Toast";
 type ImportResult = {
   saved: number;
   offDays: number;
+  removed?: number;
+  span?: { from: string; to: string } | null;
   matched: Array<{ sheetName: string; userName: string; how: string }>;
   unmatched: string[];
   skipped: Array<{ row: number; reason: string }>;
@@ -117,7 +119,8 @@ export function DhandhoAdmin() {
         <p className="text-[11px] text-muted-foreground">
           Columns: <b>Date</b>, <b>Name</b> (the speaker — a first name such as &quot;Payal&quot; or &quot;Hitesh sir&quot; is fine) and{" "}
           <b>Topic</b>. A row saying <b>Holiday</b> or <b>no 10 AM</b> in the Name column is a day with no session and no
-          reminder. A date that already has a speaker is replaced. Past dates are skipped.
+          reminder. <b>An upload overrides the rota between the first and last date in the sheet</b> — days it lists
+          are replaced and days inside that span it leaves out are cleared. Days outside that span are not touched.
         </p>
       </div>
 
@@ -126,6 +129,12 @@ export function DhandhoAdmin() {
           <div className="font-medium">
             {result.saved} day(s) saved, including {result.offDays} holiday / no-session day(s).
           </div>
+          {result.span && (
+            <div className="text-muted-foreground">
+              Rota replaced from {result.span.from} to {result.span.to}
+              {result.removed ? ` — ${result.removed} day(s) that were not in the sheet were cleared` : ""}.
+            </div>
+          )}
           {result.matched.length > 0 && (
             <div className="text-muted-foreground">
               Speakers matched to CRM users:{" "}
