@@ -177,7 +177,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "content_library.view": { group: "Workflows & Marketing", label: "Content Library — view", hint: "Browse, co-brand, download and send" },
   "content_library.add": { group: "Workflows & Marketing", label: "Content Library — add", hint: "Upload the firm's own creatives" },
   "dhandho.view": { group: "Team & Office", label: "Dhandho — view", hint: "See the speaker calendar and today's speaker" },
-  "dhandho.manage": { group: "Team & Office", label: "Dhandho — add / edit speaker rota", hint: "Upload the monthly speaker sheet, add, change or remove a day" },
+  "dhandho.manage": { group: "Team & Office", label: "Dhandho — add / edit speaker schedule", hint: "Upload the monthly speaker sheet, add, change or remove a day" },
   "content_library.edit": { group: "Workflows & Marketing", label: "Content Library — edit", hint: "Rename, re-categorise or remove the firm's own uploads" },
   "campaign.send": { group: "Workflows & Marketing", label: "Send marketing campaigns" },
   "communication.send": { group: "Workflows & Marketing", label: "Send messages to clients", hint: "One-off WhatsApp / email / SMS" },

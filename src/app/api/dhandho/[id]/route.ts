@@ -1,5 +1,5 @@
 import { handleApiError } from "@/lib/api/error-handler";
-/** DELETE /api/dhandho/[id] — remove one day from the speaker rota. Needs dhandho.manage. */
+/** DELETE /api/dhandho/[id] — remove one day from the speaker schedule. Needs dhandho.manage. */
 
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";

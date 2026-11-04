@@ -13,8 +13,8 @@ const shortDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
 /**
- * The month's speaker rota as a calendar — read-only for everyone; the
- * delete button on a day shows only for whoever manages the rota. Weeks start
+ * The month's speaker schedule as a calendar — read-only for everyone; the
+ * delete button on a day shows only for whoever manages the schedule. Weeks start
  * on Monday, like the meetings calendar. On a phone the grid is replaced by a
  * plain day-by-day list.
  */

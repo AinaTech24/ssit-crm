@@ -124,7 +124,7 @@ export function parseSheetRows(cells: unknown[][]): { rows: SheetRow[]; problems
 }
 
 /**
- * The first and last date a sheet covers. An upload REPLACES the rota across this
+ * The first and last date a sheet covers. An upload REPLACES the schedule across this
  * whole span: days inside it that the sheet does not list are cleared, so a
  * corrected sheet fully overrides what was there. Days outside it are untouched —
  * a sheet for the second half of a month leaves the first half alone.

@@ -19,7 +19,7 @@ const monthShort = (key: string) =>
 export default async function DhandhoPage({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
   const session = await requireSession();
   const canManage = can(session.roles, "dhandho.manage", session.permissions);
-  // Someone who may edit the rota can always see it.
+  // Someone who may edit the schedule can always see it.
   const canView = canManage || can(session.roles, "dhandho.view", session.permissions);
   if (!canView) {
     return (
@@ -65,7 +65,7 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
       )
       .orderBy(asc(dhandhoSessions.sessionDate))
       .limit(1);
-    // Which months have a rota loaded, and how many speaker days each holds.
+    // Which months have a schedule loaded, and how many speaker days each holds.
     const counts = await tx.execute(sql`
       SELECT to_char(session_date, 'YYYY-MM') AS m, COUNT(*) FILTER (WHERE off_reason IS NULL)::int AS n
         FROM dhandho_sessions
@@ -137,7 +137,7 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
         )}
       </div>
 
-      {/* Which month's rota this is */}
+      {/* Which month's schedule this is */}
       <div className="flex items-center gap-2 flex-wrap text-xs">
         <span className="text-muted-foreground">Month:</span>
         {chipKeys.map((k) => (
@@ -151,7 +151,7 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
             {monthShort(k)}
             <span className={k === month ? "opacity-80" : "text-muted-foreground"}>
               {" "}
-              · {loaded.has(k) ? `${loaded.get(k)} speaker days` : "no rota yet"}
+              · {loaded.has(k) ? `${loaded.get(k)} speaker days` : "no schedule yet"}
             </span>
           </Link>
         ))}
@@ -169,7 +169,7 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
       {canManage && (
         <details className="group" open={sessions.every((s) => !s.sessionDate.startsWith(month))}>
           <summary className="cursor-pointer text-sm font-medium text-brand-cyan hover:underline select-none">
-            Manage the speaker rota (upload Excel, add a day)
+            Manage the speaker schedule (upload Excel, add a day)
           </summary>
           <div className="mt-3">
             <DhandhoAdmin />

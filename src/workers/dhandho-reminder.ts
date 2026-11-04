@@ -1,7 +1,7 @@
 /**
  * Dhandho reminder.
  *
- * Every minute, for each active firm: if today has a speaker on the rota and the
+ * Every minute, for each active firm: if today has a speaker on the schedule and the
  * reminder window is open (REMINDER_LEAD_MIN before the start, up to
  * REMINDER_GRACE_MIN after), tell every active member who today's speaker is —
  * an in-app notification (which the bell and the pop-ups show) plus an email —

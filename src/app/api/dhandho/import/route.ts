@@ -3,7 +3,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  * POST /api/dhandho/import  multipart/form-data: file=<xlsx|xls|csv>
  *
  * Loads a month (or half a month) of speakers. Columns: Date | Name | Topic
- * (optional). The upload REPLACES the rota across the span the sheet covers: a
+ * (optional). The upload REPLACES the schedule across the span the sheet covers: a
  * date it lists is overwritten, and a date inside that span that it does not list
  * is cleared. Days outside the span are left alone. Past dates are kept (the
  * calendar shows history); Sundays are reported, never silently dropped. Needs

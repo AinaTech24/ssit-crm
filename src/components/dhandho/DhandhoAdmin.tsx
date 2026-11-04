@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Speaker-rota admin for Dhandho: upload the month's Excel sheet, add or replace
+ * Speaker-schedule admin for Dhandho: upload the month's Excel sheet, add or replace
  * a single day, and remove a day. Shown only to people with dhandho.manage.
  */
 
@@ -53,7 +53,7 @@ export function DhandhoAdmin() {
         return;
       }
       setResult(j);
-      toast.success(`${j.saved} day${j.saved === 1 ? "" : "s"} added to the speaker rota (${j.offDays} holiday/no-session).`, "Rota uploaded");
+      toast.success(`${j.saved} day${j.saved === 1 ? "" : "s"} added to the speaker schedule (${j.offDays} holiday/no-session).`, "Schedule uploaded");
       if (fileRef.current) fileRef.current.value = "";
       router.refresh();
     } finally {
@@ -80,7 +80,7 @@ export function DhandhoAdmin() {
         setErr(j.error ?? `Save failed (${res.status})`);
         return;
       }
-      toast.success("Speaker saved for that day.", "Rota updated");
+      toast.success("Speaker saved for that day.", "Schedule updated");
       setDate("");
       setSpeakerId(null);
       setSpeakerName("");
@@ -94,7 +94,7 @@ export function DhandhoAdmin() {
   return (
     <div className="border rounded-lg bg-card p-5 space-y-5">
       <div>
-        <h2 className="font-semibold text-sm">Manage the speaker rota</h2>
+        <h2 className="font-semibold text-sm">Manage the speaker schedule</h2>
         <p className="text-xs text-muted-foreground mt-1">
           Upload the month&apos;s sheet once. On each day, 30 minutes before the session, everyone is told who is speaking
           and the speaker gets a reminder of their own — as a pop-up and by email.
@@ -119,7 +119,7 @@ export function DhandhoAdmin() {
         <p className="text-[11px] text-muted-foreground">
           Columns: <b>Date</b>, <b>Name</b> (the speaker — a first name such as &quot;Payal&quot; or &quot;Hitesh sir&quot; is fine) and{" "}
           <b>Topic</b>. A row saying <b>Holiday</b> or <b>no 10 AM</b> in the Name column is a day with no session and no
-          reminder. <b>An upload overrides the rota between the first and last date in the sheet</b> — days it lists
+          reminder. <b>An upload overrides the schedule between the first and last date in the sheet</b> — days it lists
           are replaced and days inside that span it leaves out are cleared. Days outside that span are not touched.
         </p>
       </div>
@@ -131,7 +131,7 @@ export function DhandhoAdmin() {
           </div>
           {result.span && (
             <div className="text-muted-foreground">
-              Rota replaced from {result.span.from} to {result.span.to}
+              Schedule replaced from {result.span.from} to {result.span.to}
               {result.removed ? ` — ${result.removed} day(s) that were not in the sheet were cleared` : ""}.
             </div>
           )}
