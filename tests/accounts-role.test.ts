@@ -31,3 +31,18 @@ describe("Accounts role", () => {
     expect(roleDefaultNavKeys(["accounts", "rm"])).toBeNull();
   });
 });
+
+describe("assigning tasks to other people", () => {
+  it("every staff role that can create a task may assign it to someone else", async () => {
+    const { ASSIGNABLE_ROLES, can } = await import("@/lib/auth/rbac");
+    const missing = ASSIGNABLE_ROLES.filter(
+      (r) => (can([r], "task.edit.assigned") || can([r], "task.edit.all")) && !can([r], "task.assign.others")
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("Accounts can assign tasks to others", async () => {
+    const { can } = await import("@/lib/auth/rbac");
+    expect(can(["accounts"], "task.assign.others")).toBe(true);
+  });
+});

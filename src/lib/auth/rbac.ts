@@ -347,7 +347,7 @@ const MATRIX: Record<Capability, Role[]> = {
   // without touching what else they can do.
   "task.assign.others": [
     "back_office", "ops", "marketing", "branch_head", "rm", "sub_broker",
-    "assistant", "gifting_hr", "compliance", "ra_sales", "ria", "insurance", "ra_research",
+    "assistant", "gifting_hr", "compliance", "ra_sales", "ria", "insurance", "ra_research", "accounts",
   ],
 
   // Documents

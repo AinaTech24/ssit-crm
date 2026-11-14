@@ -700,16 +700,13 @@ export default function NewTaskPage() {
                     ? "· required — pick the marketing person"
                   : form.department
                     ? "· defaults to you"
-                    : "· pick a department to assign someone else"}
+                    : "· defaults to you — pick anyone, or choose a department to narrow the list"}
               </span>
             </div>
-            {/* Follows the Department chosen above: pick one and only that
-                department's people are offered. With no department chosen the
-                only option is yourself — offering a roster there would answer
-                a question the Department field hasn't been asked yet. */}
+            {/* Anyone in the firm can be picked. A Department chosen above narrows the
+                list to that department's people, but is not required first. */}
             <RmSelector
               department={form.department || null}
-              requireDepartment
               selfOnly={canAssignOthers === false}
               emptyHint={
                 canAssignOthers === false
