@@ -1,0 +1,99 @@
+/**
+ * Social Media Tracker — one row per piece of content the marketing team posts,
+ * with how it performed.
+ *
+ * The lists below are what the form offers and what the API accepts. They are
+ * stored as plain text, so adding an option here needs no migration.
+ */
+
+import { z } from "zod";
+import { isIsoDate } from "@/lib/dhandho/schedule";
+
+export const POST_TYPES = [
+  { key: "post", label: "Post" },
+  { key: "reel", label: "Reel" },
+  { key: "video", label: "Video" },
+  { key: "carousel", label: "Carousel" },
+  { key: "story", label: "Story" },
+  { key: "invite_image", label: "Invite image" },
+  { key: "one_pager", label: "One pager" },
+  { key: "newsletter", label: "Newsletter" },
+  { key: "other", label: "Other" },
+] as const;
+
+export const PLATFORMS = [
+  { key: "instagram", label: "Instagram" },
+  { key: "facebook", label: "Facebook" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "youtube", label: "YouTube" },
+  { key: "x", label: "X (Twitter)" },
+  { key: "whatsapp", label: "WhatsApp" },
+  { key: "other", label: "Other" },
+] as const;
+
+export const POST_STATUSES = [
+  { key: "planned", label: "Planned" },
+  { key: "scheduled", label: "Scheduled" },
+  { key: "posted", label: "Posted" },
+  { key: "cancelled", label: "Cancelled" },
+] as const;
+
+const keys = <T extends ReadonlyArray<{ key: string }>>(xs: T) => xs.map((x) => x.key) as [T[number]["key"], ...T[number]["key"][]];
+
+const labelOf = (xs: ReadonlyArray<{ key: string; label: string }>, key: string | null | undefined) =>
+  xs.find((x) => x.key === key)?.label ?? (key ? key.replace(/_/g, " ") : "");
+
+export const typeLabel = (k: string | null | undefined) => labelOf(POST_TYPES, k);
+export const platformLabel = (k: string | null | undefined) => labelOf(PLATFORMS, k);
+export const statusLabel = (k: string | null | undefined) => labelOf(POST_STATUSES, k);
+
+/** A count: a whole number, never negative, with a sane ceiling. Empty means 0. */
+const count = z.coerce.number().int().min(0).max(2_000_000_000).default(0);
+
+/** The fields of one entry, as the form and the API exchange them. */
+export const PostFields = z.object({
+  postDate: z.string().refine(isIsoDate, "Use a valid date"),
+  contentTitle: z.string().trim().min(1, "Enter the content title").max(300),
+  contentType: z.enum(keys(POST_TYPES)),
+  platform: z.enum(keys(PLATFORMS)),
+  status: z.enum(keys(POST_STATUSES)),
+  /** A web link, or empty. Only http(s) is accepted so it is safe to render as a link. */
+  postLink: z
+    .string()
+    .trim()
+    .max(1000)
+    .refine((v) => v === "" || /^https?:\/\/\S+$/i.test(v), "The post link must start with http:// or https://")
+    .optional()
+    .transform((v) => (v ? v : null)),
+  views: count,
+  reach: count,
+  likes: count,
+  /** Net new followers the post brought. A drop is allowed (negative). */
+  followersIncrease: z.coerce.number().int().min(-2_000_000_000).max(2_000_000_000).default(0),
+  leads: count,
+});
+
+export type PostInput = z.infer<typeof PostFields>;
+
+/** The numbers a row carries, for totals. */
+export interface Metrics {
+  views: number;
+  reach: number;
+  likes: number;
+  followersIncrease: number;
+  leads: number;
+}
+
+export function totalsOf(rows: Metrics[]): Metrics & { posts: number } {
+  return rows.reduce<Metrics & { posts: number }>(
+    (t, r) => ({
+      posts: t.posts + 1,
+      views: t.views + (r.views || 0),
+      reach: t.reach + (r.reach || 0),
+      likes: t.likes + (r.likes || 0),
+      followersIncrease: t.followersIncrease + (r.followersIncrease || 0),
+      leads: t.leads + (r.leads || 0),
+    }),
+    { posts: 0, views: 0, reach: 0, likes: 0, followersIncrease: 0, leads: 0 }
+  );
+}

@@ -231,6 +231,7 @@ const NAV: NavSection[] = [
       { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate, module: "broadcasts" },
       { href: "/dashboard/campaigns", label: "Marketing Campaigns", icon: Megaphone, module: "marketing_campaigns", roles: ["owner", "marketing"] },
       { href: "/dashboard/ssit-library", label: "Equitywala Content Library", icon: Library, roles: ["owner", "marketing", "rm", "branch_head", "back_office", "ops"] },
+      { href: "/dashboard/social-media-tracker", label: "Social Media Tracker", icon: Share2, roles: ["owner", "marketing"] },
       { href: "/dashboard/communications", label: "Communications", icon: MessageSquare, module: "broadcasts" },
     ],
   },

@@ -46,6 +46,7 @@ export * from "./review_meetings";
 export * from "./review_meeting_attachments";
 export * from "./service_request_attachments";
 export * from "./dhandho";
+export * from "./social_media_posts";
 export * from "./leave";
 export * from "./leave_settings";
 export * from "./attendance";

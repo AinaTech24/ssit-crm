@@ -181,6 +181,8 @@ export type Capability =
   | "content_library.add"
   | "content_library.edit"
   | "dhandho.view"
+  | "social_tracker.view"
+  | "social_tracker.manage"
   | "dhandho.manage"
   | "induction.view"
   | "induction.manage"
@@ -435,6 +437,10 @@ const MATRIX: Record<Capability, Role[]> = {
   // schedule is the owner / admin only (an empty list = owner-only). Both are separate
   // capabilities so the owner can hand "add / edit" to one person, or take "view"
   // away from one, on the employee record (Customize access permissions).
+  // Social Media Tracker: the marketing team logs what they post and how it did.
+  // Owner always has both; the owner can hand them to anyone else per person.
+  "social_tracker.view": ["marketing"],
+  "social_tracker.manage": ["marketing"],
   "dhandho.view": [
     "rm", "branch_head", "back_office", "ops", "marketing", "compliance", "assistant", "gifting_hr",
     "accounts", "sub_broker", "ra_research", "ra_sales", "ria", "insurance",

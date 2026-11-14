@@ -275,7 +275,7 @@ export default async function DashboardPage({
     } else if (can(roles, "dashboard.view.compliance", perms)) {
       dash = await ComplianceCockpit({ session, period, customStart: pstart });
     } else if (can(roles, "dashboard.view.marketing", perms)) {
-      dash = await MarketingDashboard({ session, period, customStart: pstart });
+      dash = await MarketingDashboard({ session, period, customStart: pstart, tab: sp.tab });
     } else if (can(roles, "dashboard.view.ops", perms)) {
       dash = await BackOfficeDashboard({ session });
     } else if (can(roles, "dashboard.view.ria", perms)) {

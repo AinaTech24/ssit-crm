@@ -97,6 +97,7 @@ export const NAV_ACCESS_GROUPS: NavAccessGroup[] = [
       { key: "/dashboard/templates", label: "Templates", module: "broadcasts" },
       { key: "/dashboard/campaigns", label: "Marketing Campaigns", module: "marketing_campaigns" },
       { key: "/dashboard/ssit-library", label: "Equitywala Content Library" },
+      { key: "/dashboard/social-media-tracker", label: "Social Media Tracker" },
       { key: "/dashboard/communications", label: "Communications", module: "broadcasts" },
     ],
   },
@@ -164,6 +165,7 @@ export const ROLE_DEFAULT_NAV: Record<string, string[]> = {
   marketing: [
     "/dashboard/tasks",
     "/dashboard/activity-tracker",
+    "/dashboard/social-media-tracker",
     "/dashboard/attendance",
     "/dashboard/dhandho",
     "/dashboard/leave-applications",

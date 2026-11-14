@@ -8,6 +8,7 @@ import { PeriodSelector } from "./PeriodSelector";
 import { DashboardEmptyState } from "./DashboardEmptyState";
 import { CampaignRoiChart } from "./CampaignRoiChart";
 import { MarketingInsightsSection } from "./MarketingInsightsSection";
+import { MarketingSocialSection } from "./MarketingSocialSection";
 
 /**
  * Marketing dashboard — content + campaign focused.
@@ -20,11 +21,24 @@ export async function MarketingDashboard({
   session,
   period,
   customStart,
+  tab,
 }: {
   session: SessionUser;
   period?: Period;
   customStart?: string;
+  /** "social" shows the Social Media tab; anything else is the Overview. */
+  tab?: string;
 }) {
+  const social = tab === "social";
+  // The tab links keep the chosen period so switching tabs does not reset it.
+  const tabHref = (t: "overview" | "social") => {
+    const q = new URLSearchParams();
+    if (period && period !== "mtd") q.set("period", period);
+    if (customStart) q.set("pstart", customStart);
+    if (t === "social") q.set("tab", "social");
+    const qs = q.toString();
+    return `/dashboard${qs ? `?${qs}` : ""}`;
+  };
   const range = resolvePeriodRange(period ?? "mtd", new Date(), { customStart });
   const fromISO = range.fromISO;
   const toISO = range.toISO;
@@ -80,6 +94,33 @@ export async function MarketingDashboard({
         <PeriodSelector current={period ?? "mtd"} variant="light" />
       </div>
 
+      <div className="flex gap-1 border-b">
+        {(
+          [
+            ["overview", "Overview"],
+            ["social", "Social media"],
+          ] as const
+        ).map(([key, label]) => {
+          const active = (key === "social") === social;
+          return (
+            <Link
+              key={key}
+              href={tabHref(key)}
+              className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 ${
+                active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </Link>
+          );
+        })}
+      </div>
+
+      {social ? (
+        <MarketingSocialSection session={session} fromISO={fromISO} toISO={toISO} />
+      ) : (
+      <>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Kpi label="Campaigns" value={String(data.campaignsMtd)} />
         <Kpi label="Active right now" value={String(data.activeCampaigns)} />
@@ -127,6 +168,8 @@ export async function MarketingDashboard({
 
       {/* ---------- Marketing Insights — service & consent additions ---------- */}
       <MarketingInsightsSection session={session} />
+      </>
+      )}
     </div>
   );
 }
