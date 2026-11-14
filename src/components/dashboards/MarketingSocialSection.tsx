@@ -5,19 +5,40 @@ import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { DashboardEmptyState } from "./DashboardEmptyState";
-import { platformLabel, typeLabel } from "@/lib/social/tracker";
+import { platformLabel, statusLabel, typeLabel } from "@/lib/social/tracker";
 
 type PlatformRow = { platform: string; posts: number; views: number; reach: number; likes: number; followers: number; leads: number };
-type TopRow = { id: string; post_date: string; content_title: string; platform: string; content_type: string; post_link: string | null; views: number; leads: number };
+type EntryRow = {
+  id: string;
+  post_date: string;
+  content_title: string;
+  content_type: string;
+  platform: string;
+  status: string;
+  post_link: string | null;
+  views: number;
+  reach: number;
+  likes: number;
+  followers_increase: number;
+  leads: number;
+};
+
+const STATUS_TONE: Record<string, string> = {
+  posted: "bg-emerald-50 text-emerald-700",
+  scheduled: "bg-sky-50 text-sky-700",
+  planned: "bg-slate-100 text-slate-700",
+  cancelled: "bg-rose-50 text-rose-700",
+};
 
 const num = (n: number) => Number(n || 0).toLocaleString("en-IN");
 const fmtDate = (iso: string) =>
-  new Date(`${String(iso).slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
+  new Date(`${String(iso).slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /**
  * The "Social media" tab of the Marketing dashboard: the Social Media Tracker's
- * numbers for the selected period — totals, a per-platform breakdown and the
- * best-performing posts — with a way into the full tracker.
+ * numbers for the selected period — totals, a per-platform breakdown and every
+ * entry with all of its columns (date, title, type, platform, status, link, views,
+ * reach, likes, followers increase, leads) — with a way into the full tracker.
  */
 export async function MarketingSocialSection({
   session,
@@ -33,10 +54,12 @@ export async function MarketingSocialSection({
   const data = await withTenant(
     session.tenantId,
     async (tx) => {
-      const range = sql`post_date >= (${fromISO}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date
+      const inPeriod = sql`post_date >= (${fromISO}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date
                     AND post_date <= (${toISO}::timestamptz AT TIME ZONE 'Asia/Kolkata')::date
-                    AND status <> 'cancelled'
                     AND tenant_id = ${session.tenantId}::uuid`;
+      // Totals and the platform table leave out cancelled posts (they performed nothing);
+      // the entries table below lists everything so nothing logged is hidden.
+      const range = sql`${inPeriod} AND status <> 'cancelled'`;
       const byPlatform = await tx.execute(sql`
         SELECT platform,
                COUNT(*)::int AS posts,
@@ -50,14 +73,15 @@ export async function MarketingSocialSection({
          GROUP BY platform
          ORDER BY SUM(views) DESC, COUNT(*) DESC
       `);
-      const top = await tx.execute(sql`
-        SELECT id, post_date, content_title, platform, content_type, post_link, views, leads
+      const entries = await tx.execute(sql`
+        SELECT id, post_date, content_title, content_type, platform, status, post_link,
+               views, reach, likes, followers_increase, leads
           FROM social_media_posts
-         WHERE ${range}
-         ORDER BY views DESC, post_date DESC
-         LIMIT 5
+         WHERE ${inPeriod}
+         ORDER BY post_date DESC, created_at DESC
+         LIMIT 200
       `);
-      return { byPlatform: byPlatform.rows as unknown as PlatformRow[], top: top.rows as unknown as TopRow[] };
+      return { byPlatform: byPlatform.rows as unknown as PlatformRow[], entries: entries.rows as unknown as EntryRow[] };
     },
     { userId: session.userId, branchId: session.branchId, roles: session.roles }
   );
@@ -149,32 +173,68 @@ export async function MarketingSocialSection({
         )}
       </div>
 
-      {data.top.length > 0 && (
-        <div className="card-surface glass-card p-5">
-          <h2 className="font-semibold text-sm tracking-tight text-foreground/90 mb-3">Top posts by views</h2>
-          <ul className="divide-y">
-            {data.top.map((p) => (
-              <li key={p.id} className="py-2 flex items-center justify-between gap-3 text-sm">
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{p.content_title}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {fmtDate(p.post_date)} · {platformLabel(p.platform)} · {typeLabel(p.content_type)}
-                  </div>
-                </div>
-                <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground tabular-nums">
-                  <span>{num(p.views)} views</span>
-                  <span>{num(p.leads)} leads</span>
-                  {p.post_link && (
-                    <a href={p.post_link} target="_blank" rel="noopener noreferrer" className="text-brand-cyan-deep hover:underline inline-flex items-center gap-1">
-                      Open <ExternalLink className="size-3" />
-                    </a>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+      <div className="card-surface glass-card p-5">
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <h2 className="font-semibold text-sm tracking-tight text-foreground/90">All entries in this period</h2>
+          <Link href="/dashboard/social-media-tracker" className="text-xs text-brand-cyan-deep hover:underline font-semibold">
+            {canManage ? "Add or edit in the tracker →" : "Open tracker →"}
+          </Link>
         </div>
-      )}
+        {data.entries.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">No entries in this period.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[980px]">
+              <thead className="text-xs text-muted-foreground border-b">
+                <tr>
+                  <th className="text-left py-2 font-medium">Date</th>
+                  <th className="text-left py-2 font-medium">Content title</th>
+                  <th className="text-left py-2 font-medium">Type</th>
+                  <th className="text-left py-2 font-medium">Platform</th>
+                  <th className="text-left py-2 font-medium">Status</th>
+                  <th className="text-left py-2 font-medium">Post link</th>
+                  <th className="text-right py-2 font-medium">Views</th>
+                  <th className="text-right py-2 font-medium">Reach</th>
+                  <th className="text-right py-2 font-medium">Likes</th>
+                  <th className="text-right py-2 font-medium">Followers increase</th>
+                  <th className="text-right py-2 font-medium">Leads</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.entries.map((p) => (
+                  <tr key={p.id} className="border-b last:border-0 align-top">
+                    <td className="py-2 whitespace-nowrap text-muted-foreground">{fmtDate(p.post_date)}</td>
+                    <td className="py-2 max-w-[18rem] font-medium break-words">{p.content_title}</td>
+                    <td className="py-2 whitespace-nowrap">{typeLabel(p.content_type)}</td>
+                    <td className="py-2 whitespace-nowrap">{platformLabel(p.platform)}</td>
+                    <td className="py-2 whitespace-nowrap">
+                      <span className={`px-2 py-0.5 rounded-full text-xs ${STATUS_TONE[p.status] ?? "bg-secondary"}`}>
+                        {statusLabel(p.status)}
+                      </span>
+                    </td>
+                    <td className="py-2 whitespace-nowrap">
+                      {p.post_link ? (
+                        <a href={p.post_link} target="_blank" rel="noopener noreferrer" className="text-brand-cyan-deep hover:underline inline-flex items-center gap-1">
+                          Open <ExternalLink className="size-3" />
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{num(p.views)}</td>
+                    <td className="py-2 text-right tabular-nums">{num(p.reach)}</td>
+                    <td className="py-2 text-right tabular-nums">{num(p.likes)}</td>
+                    <td className="py-2 text-right tabular-nums">
+                      {p.followers_increase > 0 ? `+${num(p.followers_increase)}` : num(p.followers_increase)}
+                    </td>
+                    <td className="py-2 text-right tabular-nums">{num(p.leads)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
