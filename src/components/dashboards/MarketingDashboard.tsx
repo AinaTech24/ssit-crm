@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { Megaphone, Send } from "lucide-react";
 import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
+import { can } from "@/lib/auth/rbac";
 import { resolvePeriodRange, type Period } from "@/lib/dashboard/period";
 import { PeriodSelector } from "./PeriodSelector";
 import { DashboardEmptyState } from "./DashboardEmptyState";
@@ -161,7 +162,13 @@ export async function MarketingDashboard({
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Action href="/dashboard/campaigns/new" label="Create broadcast" />
-          <Action href="/dashboard/templates/new" label="Create template" />
+          {/* Authoring a template is firm-admin only (template.create), so marketing is
+              offered the template list instead of a page that would refuse them. */}
+          {can(session.roles, "template.create", session.permissions) ? (
+            <Action href="/dashboard/templates/new" label="Create template" />
+          ) : (
+            <Action href="/dashboard/templates" label="View templates" />
+          )}
           <Action href="/dashboard/ssit-library" label="Browse content library" />
         </div>
       </div>
