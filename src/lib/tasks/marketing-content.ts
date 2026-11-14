@@ -67,6 +67,22 @@ export function resolveMarketingEvent(
   return hit ? { eventKey: hit.key, eventLabel: hit.label } : null;
 }
 
+/**
+ * Who signs off a marketing creative: the person who ASSIGNED the task (an RM asking
+ * marketing for a post approves the post), unless a named approver was chosen. When
+ * nobody else assigned it (the marketing person raised it for themselves) there is
+ * no assigner to ask, so the caller falls back to the firm's content approver.
+ */
+export function marketingApproverFor(o: {
+  explicitId?: string | null;
+  createdById?: string | null;
+  assigneeId?: string | null;
+}): string | null {
+  if (o.explicitId) return o.explicitId;
+  if (o.createdById && o.createdById !== o.assigneeId) return o.createdById;
+  return null;
+}
+
 /** Marketing creatives (videos, reels) are far bigger than ordinary task documents. */
 export const MAX_TASK_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 export const MAX_MARKETING_ATTACHMENT_BYTES = 100 * 1024 * 1024;

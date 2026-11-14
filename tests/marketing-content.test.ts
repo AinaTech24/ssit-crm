@@ -6,6 +6,7 @@ import {
   MAX_MARKETING_ATTACHMENT_BYTES,
   MAX_TASK_ATTACHMENT_BYTES,
   contentKindLabel,
+  marketingApproverFor,
   resolveMarketingEvent,
 } from "@/lib/tasks/marketing-content";
 
@@ -64,5 +65,18 @@ describe("attachment ceilings", () => {
   it("lets marketing creatives be larger than ordinary task documents", () => {
     expect(MAX_TASK_ATTACHMENT_BYTES).toBe(25 * 1024 * 1024);
     expect(MAX_MARKETING_ATTACHMENT_BYTES).toBeGreaterThan(MAX_TASK_ATTACHMENT_BYTES);
+  });
+});
+
+describe("who approves a marketing creative", () => {
+  it("the person who assigned it, not the marketing person", () => {
+    expect(marketingApproverFor({ createdById: "palak", assigneeId: "marketing-person" })).toBe("palak");
+  });
+  it("a named approver wins over the assigner", () => {
+    expect(marketingApproverFor({ explicitId: "boss", createdById: "palak", assigneeId: "m" })).toBe("boss");
+  });
+  it("nobody to ask when the marketing person raised it for themselves — caller falls back", () => {
+    expect(marketingApproverFor({ createdById: "m", assigneeId: "m" })).toBeNull();
+    expect(marketingApproverFor({ createdById: null, assigneeId: "m" })).toBeNull();
   });
 });

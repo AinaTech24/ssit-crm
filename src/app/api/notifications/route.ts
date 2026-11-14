@@ -4,14 +4,15 @@ import { handleApiError } from "@/lib/api/error-handler";
  * POST  /api/notifications/mark-read       — mark some/all as read
  *
  * Notifications are user-scoped (not just tenant-scoped). RLS allows
- * users to read only their own rows.
+ * users to read only their own rows. The live birthday reminder follows the
+ * caller's data wall (branch-wise).
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { can } from "@/lib/auth/rbac";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { notifications } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +22,6 @@ export async function GET(req: NextRequest) {
     const session = await requireSession();
     const url = new URL(req.url);
     const unreadOnly = url.searchParams.get("unreadOnly") === "1";
-
-    // Owners/branch-heads/compliance see firm-wide birthdays; everyone else
-    // sees only their own book (rm_id = them).
-    const firmWide = can(session.roles, "dashboard.view.owner", (session as any).permissions);
 
     const rows = await withTenant(session.tenantId, async (tx) => {
       // archivedAt filter matters: the unreadCount query below already excludes
@@ -48,13 +45,20 @@ export async function GET(req: NextRequest) {
       `);
       // Today's birthdays — a live reminder, computed each load (no rows
       // written). Scoped to the caller's book unless they're firm-wide.
+      // The same wall as the client list: the admin and back office see the firm,
+      // a branch head sees their own branch, everyone else their own book — so a
+      // Baroda user is never told about another branch's clients.
+      const wall = await dataScopeSqlFor(tx, session, {
+        branch: "investors.branch_id",
+        owner: ["investors.rm_id", "investors.service_rm_id"],
+      });
       const bday = await tx.execute(sql`
         SELECT name FROM investors
         WHERE status = 'active'
           AND deleted_at IS NULL
           AND dob IS NOT NULL
           AND to_char(dob, 'MM-DD') = to_char(current_date, 'MM-DD')
-          ${firmWide ? sql`` : sql` AND rm_id = ${session.userId}`}
+          AND ${wall}
         ORDER BY name
         LIMIT 25
       `);

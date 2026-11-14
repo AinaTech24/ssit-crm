@@ -17,6 +17,7 @@
  */
 
 import crypto from "node:crypto";
+import { unitOfRecord, usersWithRolesInUnit } from "@/lib/notifications/branch-recipients";
 import { sql, eq, and } from "drizzle-orm";
 import { getModule } from "./modules";
 import type { Action } from "./types";
@@ -891,16 +892,11 @@ async function runCreateNotification(config: Record<string, unknown>, ctx: Actio
   }
 
   // roles audience — accepted by the config shape but never honoured before.
+  // Branch-wise: only the record's branch (plus the admin and back office).
   const roles = (aud.roles ?? []).filter(Boolean).map(String);
   if (roles.length) {
-    const roleRows = await ctx.tx.execute(sql`
-      SELECT id FROM users
-       WHERE tenant_id = ${ctx.tenantId}::uuid
-         AND deleted_at IS NULL
-         AND status = 'active'
-         AND roles && ARRAY[${sql.join(roles.map((r) => sql`${r}`), sql`, `)}]::text[]
-    `);
-    for (const row of roleRows.rows as Array<{ id: string }>) ids.add(String(row.id));
+    const unit = await unitOfRecord(ctx.tx, ctx.tenantId, ctx.record as Record<string, any>);
+    for (const id of await usersWithRolesInUnit(ctx.tx, ctx.tenantId, roles, unit)) ids.add(id);
   }
 
   // An alert nobody receives is a silent failure — the commonest cause is

@@ -21,6 +21,7 @@ import { v4 as uuid } from "uuid";
 import { sql } from "drizzle-orm";
 import { notifications } from "@/db/schema";
 import { resolveExpression } from "../context";
+import { unitOfRecord, unitOfSubject, usersWithRolesInUnit } from "@/lib/notifications/branch-recipients";
 import type { ActionHandler } from "./index";
 
 export const createNotificationHandler: ActionHandler<any> = {
@@ -107,16 +108,15 @@ export async function resolveRecipients(
     if (looksLikeUuid(rmId)) ids.add(rmId);
   }
 
-  // Role-based
+  // Role-based — branch-wise: a Baroda client's alert reaches Baroda's RMs and
+  // branch head, not every branch's. The admin and back office stay firm-wide, and
+  // an event with no branch (a market move) keeps the whole role.
   const roles = audience.roles ?? [];
   if (roles.length) {
-    const rows = await tx.execute(sql`
-      SELECT id FROM users
-      WHERE tenant_id = ${ctx.tenantId}
-        AND status = 'active'
-        AND roles && ${sql.raw(`ARRAY[${roles.map((r) => `'${escapeSql(r)}'`).join(",")}]::text[]`)}
-    `);
-    for (const r of rows.rows as any[]) ids.add(String(r.id));
+    const unit =
+      (await unitOfRecord(tx, ctx.tenantId, ctx.subject)) ??
+      (await unitOfSubject(tx, ctx.tenantId, ctx.subjectType, ctx.subjectId));
+    for (const id of await usersWithRolesInUnit(tx, ctx.tenantId, roles, unit)) ids.add(id);
   }
 
   return Array.from(ids);
@@ -126,6 +126,3 @@ function looksLikeUuid(s: any): boolean {
   return typeof s === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
-function escapeSql(s: string): string {
-  return s.replace(/'/g, "''");
-}

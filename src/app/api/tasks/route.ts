@@ -1,5 +1,5 @@
 import { handleApiError } from "@/lib/api/error-handler";
-import { CONTENT_KIND_KEYS } from "@/lib/tasks/marketing-content";
+import { CONTENT_KIND_KEYS, marketingApproverFor } from "@/lib/tasks/marketing-content";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
@@ -242,18 +242,24 @@ export async function POST(req: NextRequest) {
         .limit(1);
       if (!u) throw Object.assign(new Error("assignee not found in this firm"), { status: 400 });
 
-      // Marketing-content requests go through sign-off by a named approver.
+      // Marketing-content requests go through sign-off. The person who assigned
+      // the task approves it (an RM who asked for a post signs the post off) unless a
+      // named approver was chosen; only when nobody else assigned it does it fall
+      // back to the firm's content approver.
       let contentApproverId: string | null = null;
       if (body.contentKind) {
+        let explicitId: string | null = null;
         if (body.approverId) {
           const [a] = await tx
             .select({ id: users.id })
             .from(users)
             .where(and(eq(users.id, body.approverId), eq(users.tenantId, session.tenantId)))
             .limit(1);
-          contentApproverId = a?.id ?? null;
-        } else {
-          // The firm's content approver: Bhargavi Patnaik.
+          explicitId = a?.id ?? null;
+        }
+        contentApproverId = marketingApproverFor({ explicitId, createdById: session.userId, assigneeId });
+        if (!contentApproverId) {
+          // The marketing person raised it for themselves — the firm's content approver.
           const r = await tx.execute(sql`
             SELECT id FROM users
              WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'

@@ -1,4 +1,5 @@
 import { handleApiError } from "@/lib/api/error-handler";
+import { usersWithRolesInUnit } from "@/lib/notifications/branch-recipients";
 /**
  * Leave applications — collection.
  *
@@ -121,13 +122,17 @@ export async function POST(req: NextRequest) {
       } as any);
 
       // Notify approvers: the reporting manager (if set) + owners/branch-heads.
-      const approvers = await tx.execute(sql`
-        SELECT id FROM users
-        WHERE tenant_id = ${session.tenantId}::uuid
-          AND (id = ${(emp as any).reportingManagerId ?? null} OR roles && ARRAY['owner','branch_head']::text[])
-          AND id <> ${employeeUserId}
-      `);
-      for (const a of approvers.rows as Array<{ id: string }>) {
+      // Branch-wise: the employee's own branch head(s), their reporting manager and
+      // the firm admin — not the branch heads of every other branch.
+      const approverIds = new Set(
+        await usersWithRolesInUnit(tx, session.tenantId, ["owner", "branch_head"], {
+          branchId: emp.branchId ?? null,
+          deskId: emp.deskId ?? null,
+        })
+      );
+      if (emp.reportingManagerId) approverIds.add(emp.reportingManagerId);
+      approverIds.delete(employeeUserId);
+      for (const a of [...approverIds].map((id) => ({ id }))) {
         await tx.insert(notifications).values({
           id: uuid(),
           tenantId: session.tenantId,

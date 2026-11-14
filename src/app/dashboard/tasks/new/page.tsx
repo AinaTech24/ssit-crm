@@ -526,7 +526,7 @@ export default function NewTaskPage() {
         </div>
         {form.contentKind ? (
           <p className="text-[11px] text-muted-foreground">
-            Assign it to the marketing person. They upload the creative and submit it; it then waits for approval from Bhargavi Patnaik, and the marketing person is told once it is approved.
+            Assign it to the marketing person. They upload the creative and submit it; it then comes back to you for approval (you assigned it), and the marketing person is told once you approve it.
           </p>
         ) : null}
       </div>

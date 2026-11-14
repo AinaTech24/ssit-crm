@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { unitOfUser, usersWithRolesInUnit } from "@/lib/notifications/branch-recipients";
 import { withSystem } from "@/db/client";
 import { createNotification } from "@/lib/notifications/create";
 
@@ -67,10 +68,8 @@ export async function checkBlueprintSLADelays(): Promise<{
         // Untouched leads past their first-response SLA are the highest-risk —
         // escalate to the firm's managers so it's not just on the owner.
         if (untouched) {
-          const mgrs = await tx.execute(
-            sql`SELECT id FROM users WHERE tenant_id = ${r.tenant_id}::uuid AND roles && ARRAY['owner','branch_head']::text[]`
-          );
-          for (const m of mgrs.rows as any[]) recipients.add(m.id as string);
+          const unit = await unitOfUser(tx, r.tenant_id, lead?.owner_id);
+          for (const id of await usersWithRolesInUnit(tx, r.tenant_id, ["owner", "branch_head"], unit)) recipients.add(id);
         }
         const name = lead?.name ?? "lead";
         const title = untouched

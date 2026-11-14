@@ -1,4 +1,5 @@
 import { handleApiError } from "@/lib/api/error-handler";
+import { marketingApproverFor } from "@/lib/tasks/marketing-content";
 /**
  * Single-task endpoints.
  *
@@ -196,14 +197,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // The approver is the task's creator or any view-all user (owner). We
       // queue exactly one approval notification and let the generic status
       // notification below stand down (`approvalHandled`).
-      // A task with a NAMED approver (marketing content → Bhargavi) is signed off
-      // by that person (or an owner), not by whoever happened to create it.
+      // A task with a NAMED approver (marketing content → whoever assigned it) is
+      // signed off by that person (or an owner), not by the marketing person.
       let namedApproverId = ((before.meta as Record<string, unknown> | null)?.approverId as string | undefined) ?? null;
       const isMarketing = before.department === "marketing";
       const metaPatch: Record<string, unknown> = {};
       // The marketing role holds task.edit.all, so "edit all" must NOT make a
       // marketing person the approver of marketing content — least of all their
-      // own. Sign-off on a marketing task is the named approver's (Bhargavi) or
+      // own. Sign-off on a marketing task is the named approver's (the assigner) or
       // an admin who is neither the assignee nor in the marketing role.
       const isMarketingUser = (session.roles as string[]).includes("marketing");
       const adminMayApprove = canEditAll && !(isMarketing && (before.assigneeId === session.userId || isMarketingUser));
@@ -228,16 +229,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         delete patch.completedAt;
         patch.approvalStatus = "pending";
         patch.submittedAt = new Date();
-        // Marketing content always goes to the content approver (Bhargavi Patnaik),
-        // even when the task was created as an ordinary task.
+        // A marketing task with no named approver goes to the person who ASSIGNED it
+        // (even when it was created as an ordinary task). Only when nobody else
+        // assigned it does it fall back to the firm's content approver.
         if (isMarketing && !namedApproverId) {
-          const r = await tx.execute(sql`
-            SELECT id FROM users
-             WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
-               AND name ILIKE '%bhargavi%' AND name ILIKE '%patnaik%'
-             ORDER BY created_at ASC LIMIT 1
-          `);
-          const found = ((r.rows[0] as { id?: string } | undefined)?.id) ?? null;
+          let found: string | null = marketingApproverFor({
+            createdById: before.createdById,
+            assigneeId: before.assigneeId,
+          });
+          if (!found) {
+            const r = await tx.execute(sql`
+              SELECT id FROM users
+               WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
+                 AND name ILIKE '%bhargavi%' AND name ILIKE '%patnaik%'
+               ORDER BY created_at ASC LIMIT 1
+            `);
+            found = ((r.rows[0] as { id?: string } | undefined)?.id) ?? null;
+          }
           if (found) {
             namedApproverId = found;
             metaPatch.approverId = found;
