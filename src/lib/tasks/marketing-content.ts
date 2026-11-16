@@ -68,19 +68,28 @@ export function resolveMarketingEvent(
 }
 
 /**
- * Who signs off a marketing creative: the person who ASSIGNED the task (an RM asking
- * marketing for a post approves the post), unless a named approver was chosen. When
- * nobody else assigned it (the marketing person raised it for themselves) there is
- * no assigner to ask, so the caller falls back to the firm's content approver.
+ * Who signs off a marketing task: the person who ASSIGNED it (an RM asking marketing
+ * for a post approves the post; a marketing person who raised a task for themselves
+ * approves it themselves), unless a named approver was chosen. Null only for a task
+ * with no creator (made by an automation), where the caller falls back to the
+ * firm's content approver.
  */
-export function marketingApproverFor(o: {
-  explicitId?: string | null;
-  createdById?: string | null;
-  assigneeId?: string | null;
-}): string | null {
-  if (o.explicitId) return o.explicitId;
-  if (o.createdById && o.createdById !== o.assigneeId) return o.createdById;
-  return null;
+export function marketingApproverFor(o: { explicitId?: string | null; createdById?: string | null }): string | null {
+  return o.explicitId || o.createdById || null;
+}
+
+/**
+ * Is this task being handed to someone in the marketing team by someone else? Then
+ * it follows the marketing flow whoever assigns it and whatever it is: the marketing
+ * person submits their work, the PERSON WHO ASSIGNED IT approves, and it then shows
+ * as Approved. Assigning to yourself is not a hand-off.
+ */
+export function assignedToMarketing(
+  assigneeRoles: string[] | null | undefined,
+  assigneeId: string,
+  createdById: string
+): boolean {
+  return (assigneeRoles ?? []).includes("marketing") && assigneeId !== createdById;
 }
 
 /** Marketing creatives (videos, reels) are far bigger than ordinary task documents. */

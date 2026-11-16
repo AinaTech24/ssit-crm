@@ -14,6 +14,7 @@ import { TaskComments } from "./TaskComments";
 import { TaskTimePanel } from "./TaskTimePanel";
 import { TaskAttachments } from "./TaskAttachments";
 import { contentKindLabel } from "@/lib/tasks/marketing-content";
+import { displayStatus, isApprovedAwaitingPost } from "@/lib/tasks/display-status";
 import { TaskWatchersDeps } from "./TaskWatchersDeps";
 
 interface TaskDetailDrawerProps {
@@ -72,10 +73,11 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
   // Marketing content is signed off by the named approver only; the marketing
   // person who made it never sees Approve / Reject (the marketing role holds
   // "manage all", so that flag must not grant it here).
+  // On a marketing task the person who ASSIGNED it approves — including a marketing
+  // person who assigned it to themselves.
+  const isCreator = task.createdById === currentUserId;
   const isApprover = task.department === "marketing"
-    ? taskMeta.approverId
-      ? taskMeta.approverId === currentUserId
-      : task.createdById === currentUserId && task.assigneeId !== currentUserId
+    ? taskMeta.approverId === currentUserId || isCreator
     : taskMeta.approverId
       ? taskMeta.approverId === currentUserId || !!canManageAll
       : task.createdById === currentUserId || !!canManageAll;
@@ -473,11 +475,17 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
             <div>
               <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Status</label>
               <SelectField
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
+                value={displayStatus({ status, approvalStatus })}
+                onChange={(e) => {
+                  // "Approved" is shown, not chosen: it follows the assigner's approval.
+                  if (e.target.value !== "approved") setStatus(e.target.value as any);
+                }}
                 size="sm"
                 className="w-full"
               >
+                {isApprovedAwaitingPost({ status, approvalStatus }) && (
+                  <option value="approved" disabled>Approved</option>
+                )}
                 <option value="open">Open</option>
                 <option value="in_progress">In Progress</option>
                 <option value="blocked">Blocked</option>
@@ -647,7 +655,9 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
                   <div className="text-[11px] text-slate-500">Needs an approver's sign-off before it can be completed.</div>
                 )}
 
-                {approvalStatus === "pending" && isApprover ? (
+                {/* A self-approver (the assignee is also who assigned it) has no one to send it
+                    to, so Approve is offered straight away instead of Send for approval. */}
+                {(approvalStatus === "pending" || (isAssignee && approvalStatus !== "approved")) && isApprover ? (
                   rejectOpen ? (
                     <div className="space-y-1.5">
                       <textarea

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { isApprovedAwaitingPost } from "@/lib/tasks/display-status";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatRelative } from "@/lib/utils";
 import { RowActions } from "@/components/common/RowActions";
@@ -523,12 +524,18 @@ export function TaskList({ initialRows, currentUserId, canManageAll = false, ini
                       {t.priority}
                     </span>
                   )}
-                  {(t.status === "in_progress" || t.status === "blocked") && (
-                    <span className={`text-[10px] font-medium rounded px-1.5 py-0.5 border ${
-                      t.status === "blocked" ? "text-rose-700 bg-rose-50 border-rose-200" : "text-violet-700 bg-violet-50 border-violet-200"
-                    }`}>
-                      {t.status === "blocked" ? "Blocked" : "In progress"}
+                  {isApprovedAwaitingPost(t) ? (
+                    <span className="text-[10px] font-medium rounded px-1.5 py-0.5 border text-emerald-700 bg-emerald-50 border-emerald-200">
+                      Approved
                     </span>
+                  ) : (
+                    (t.status === "in_progress" || t.status === "blocked") && (
+                      <span className={`text-[10px] font-medium rounded px-1.5 py-0.5 border ${
+                        t.status === "blocked" ? "text-rose-700 bg-rose-50 border-rose-200" : "text-violet-700 bg-violet-50 border-violet-200"
+                      }`}>
+                        {t.status === "blocked" ? "Blocked" : "In progress"}
+                      </span>
+                    )
                   )}
                 </div>
 

@@ -208,10 +208,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       // an admin who is neither the assignee nor in the marketing role.
       const isMarketingUser = (session.roles as string[]).includes("marketing");
       const adminMayApprove = canEditAll && !(isMarketing && (before.assigneeId === session.userId || isMarketingUser));
+      // On a marketing task the person who ASSIGNED it approves it, even when that is
+      // the marketing person themselves (they assigned it to themselves).
+      const isCreator = before.createdById === session.userId;
       const isApprover = isMarketing
         ? namedApproverId
-          ? namedApproverId === session.userId || adminMayApprove
-          : adminMayApprove || (before.createdById === session.userId && before.assigneeId !== session.userId)
+          ? namedApproverId === session.userId || isCreator || adminMayApprove
+          : isCreator || adminMayApprove
         : namedApproverId
           ? canEditAll || namedApproverId === session.userId
           : canEditAll || before.createdById === session.userId;
@@ -230,13 +233,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         patch.approvalStatus = "pending";
         patch.submittedAt = new Date();
         // A marketing task with no named approver goes to the person who ASSIGNED it
-        // (even when it was created as an ordinary task). Only when nobody else
-        // assigned it does it fall back to the firm's content approver.
+        // (even when it was created as an ordinary task). Only a task with no creator
+        // (made by an automation) falls back to the firm's content approver.
         if (isMarketing && !namedApproverId) {
-          let found: string | null = marketingApproverFor({
-            createdById: before.createdById,
-            assigneeId: before.assigneeId,
-          });
+          let found: string | null = marketingApproverFor({ createdById: before.createdById });
           if (!found) {
             const r = await tx.execute(sql`
               SELECT id FROM users

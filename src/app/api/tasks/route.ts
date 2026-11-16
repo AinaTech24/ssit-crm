@@ -1,5 +1,5 @@
 import { handleApiError } from "@/lib/api/error-handler";
-import { CONTENT_KIND_KEYS, marketingApproverFor } from "@/lib/tasks/marketing-content";
+import { CONTENT_KIND_KEYS, assignedToMarketing, marketingApproverFor } from "@/lib/tasks/marketing-content";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { and, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
@@ -236,18 +236,21 @@ export async function POST(req: NextRequest) {
     await withTenant(session.tenantId, async (tx) => {
       // Assignee must be a user in THIS tenant (the FK allows any tenant's user).
       const [u] = await tx
-        .select({ id: users.id })
+        .select({ id: users.id, roles: users.roles })
         .from(users)
         .where(and(eq(users.id, assigneeId), eq(users.tenantId, session.tenantId)))
         .limit(1);
       if (!u) throw Object.assign(new Error("assignee not found in this firm"), { status: 400 });
+      // Anything handed to a marketing person by someone else follows the marketing
+      // flow: they submit, the person who assigned it approves.
+      const toMarketing = assignedToMarketing(u.roles, assigneeId, session.userId);
 
       // Marketing-content requests go through sign-off. The person who assigned
       // the task approves it (an RM who asked for a post signs the post off) unless a
       // named approver was chosen; only when nobody else assigned it does it fall
       // back to the firm's content approver.
       let contentApproverId: string | null = null;
-      if (body.contentKind) {
+      if (body.contentKind || toMarketing) {
         let explicitId: string | null = null;
         if (body.approverId) {
           const [a] = await tx
@@ -257,17 +260,8 @@ export async function POST(req: NextRequest) {
             .limit(1);
           explicitId = a?.id ?? null;
         }
-        contentApproverId = marketingApproverFor({ explicitId, createdById: session.userId, assigneeId });
-        if (!contentApproverId) {
-          // The marketing person raised it for themselves — the firm's content approver.
-          const r = await tx.execute(sql`
-            SELECT id FROM users
-             WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
-               AND name ILIKE '%bhargavi%' AND name ILIKE '%patnaik%'
-             ORDER BY created_at ASC LIMIT 1
-          `);
-          contentApproverId = ((r.rows[0] as { id?: string } | undefined)?.id) ?? null;
-        }
+        // The assigner approves — even a marketing person who assigned it to themselves.
+        contentApproverId = marketingApproverFor({ explicitId, createdById: session.userId });
       }
 
       // Internal SLA target derived from priority (overridable later in the editor).
@@ -283,7 +277,7 @@ export async function POST(req: NextRequest) {
         relatedLeadId: body.relatedLeadId ?? null,
         relatedServiceRequestId: body.relatedServiceRequestId ?? null,
         relatedMeetingId: body.relatedMeetingId ?? null,
-        department: body.department ?? (body.contentKind ? "marketing" : null),
+        department: body.department ?? (body.contentKind || toMarketing ? "marketing" : null),
         type: body.contentKind ? "marketing_content" : body.activityKind ? "other_activity" : body.type,
         title: body.title,
         description: body.description,
@@ -298,7 +292,7 @@ export async function POST(req: NextRequest) {
         recurrenceUntil: body.recurrenceUntil ?? null,
         // Chain root = this task itself when recurring.
         recurrenceParentId: body.recurrence ? id : null,
-        requiresApproval: body.requiresApproval ?? !!body.contentKind,
+        requiresApproval: body.requiresApproval ?? (!!body.contentKind || toMarketing),
         remindAt: body.remindAt ? new Date(body.remindAt) : null,
         estimateMinutes: body.estimateMinutes ?? null,
         ...(body.tags?.length ? { tags: body.tags } : {}),
@@ -314,6 +308,8 @@ export async function POST(req: NextRequest) {
             if (body.eventKey) m.eventKey = body.eventKey;
             if (body.eventLabel) m.eventLabel = body.eventLabel;
             if (contentApproverId) m.approverId = contentApproverId;
+          } else if (toMarketing && contentApproverId) {
+            m.approverId = contentApproverId; // the person who assigned it signs it off
           }
           return Object.keys(m).length ? m : undefined;
         })(),

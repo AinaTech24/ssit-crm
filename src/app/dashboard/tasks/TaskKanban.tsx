@@ -8,6 +8,7 @@
  */
 
 import { useState } from "react";
+import { isApprovedAwaitingPost } from "@/lib/tasks/display-status";
 import { useRouter } from "next/navigation";
 import { Loader2, GripVertical, CalendarClock, User, ListChecks, Plus, X } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
@@ -165,6 +166,9 @@ export function TaskKanban({ initialRows, currentUserId, canManageAll = false }:
                           <div className="text-sm font-medium leading-snug line-clamp-2">{t.title}</div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             <span className={`chip text-[10px] capitalize ${PRIORITY_TONE[t.priority] ?? ""}`}>{t.priority}</span>
+                            {isApprovedAwaitingPost(t) && (
+                              <span className="chip text-[10px] bg-emerald-100 text-emerald-700">Approved</span>
+                            )}
                             {checklist.length > 0 && (
                               <span
                                 className={`chip text-[10px] inline-flex items-center gap-1 ${
