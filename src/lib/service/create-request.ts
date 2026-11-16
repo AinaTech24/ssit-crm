@@ -111,6 +111,7 @@ export async function createServiceRequest(
     type: args.type,
     slaResolutionAt,
     investorId: args.investorId ?? null,
+    actorUserId: args.actorUserId ?? null,
   });
 
   if (args.investorId) {

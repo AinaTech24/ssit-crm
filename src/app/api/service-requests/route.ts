@@ -198,6 +198,7 @@ export async function POST(req: NextRequest) {
         type: body.type,
         slaResolutionAt,
         investorId: body.investorId ?? null,
+        actorUserId: session.userId,
       });
     });
 
