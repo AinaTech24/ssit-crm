@@ -17,7 +17,6 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { serviceRequests, eventsOutbox } from "@/db/schema";
-import { acknowledgeServiceRequest } from "@/lib/service/acknowledge";
 
 export const dynamic = "force-dynamic";
 
@@ -190,15 +189,8 @@ export async function POST(req: NextRequest) {
         meta: { userId: session.userId } as any,
       } as any);
 
-      // Instant client acknowledgement with a promised resolution ETA.
-      await acknowledgeServiceRequest(tx, {
-        tenantId: session.tenantId,
-        srId: id,
-        ticketNo,
-        type: body.type,
-        slaResolutionAt,
-        investorId: body.investorId ?? null,
-      });
+      // Deliberately NO message to the client when staff log a request — the firm
+      // decides if and when to contact them.
     });
 
     return NextResponse.json({ id }, { status: 201 });
