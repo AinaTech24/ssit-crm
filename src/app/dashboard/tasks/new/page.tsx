@@ -98,6 +98,13 @@ export default function NewTaskPage() {
     if (hit) setActivityKind(hit.key);
   }, []);
   const activity = ACTIVITY_KINDS.find((a) => a.key === activityKind) ?? null;
+  // "Other" — the person types what the activity is; that text becomes its title.
+  const [otherActivityName, setOtherActivityName] = useState("");
+  // Can the form be submitted? In activity mode the title comes from the service
+  // picked (and, for "Other", the typed name) — NOT from the title input, which
+  // does not exist there. The Create button used to check form.title and so stayed
+  // disabled forever on this page.
+  const activityTitle = activity ? (activity.key === "other" ? otherActivityName.trim() : activity.label) : "";
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -128,6 +135,7 @@ export default function NewTaskPage() {
   });
   // A marketing creative (post, reel, video…) — no client/lead behind it.
   const isMarketing = !activityMode && !!form.contentKind;
+  const canCreate = activityMode ? !!activityTitle : !!form.title.trim();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState("");
@@ -244,6 +252,10 @@ export default function NewTaskPage() {
       setErr("Select a service.");
       return;
     }
+    if (activityMode && activity?.key === "other" && !otherActivityName.trim()) {
+      setErr("Type what this activity is.");
+      return;
+    }
     if (!activityMode && !form.title.trim()) {
       setErr("Title is required.");
       return;
@@ -262,7 +274,7 @@ export default function NewTaskPage() {
     try {
       // Other-activity titles carry their kind ("Bank work: …") — that is how
       // the Other activity list tells them apart.
-      const title = activity ? activity.label : form.title.trim();
+      const title = activity ? activityTitle : form.title.trim();
       const ev = isMarketing ? resolveMarketingEvent(form.eventKey, form.eventLabel) : null;
       const payload: any = {
         title,
@@ -420,6 +432,21 @@ export default function NewTaskPage() {
             />
           )}
         </label>
+        {activityMode && activityKind === "other" && (
+          <label className="block">
+            <div className="text-xs font-medium mb-1">
+              What is this activity? <span className="text-rose-600">*</span>
+            </div>
+            <input
+              value={otherActivityName}
+              onChange={(e) => setOtherActivityName(e.target.value)}
+              maxLength={200}
+              placeholder="Type the activity, e.g. Visit to the RTA office"
+              className="input-base"
+              autoFocus
+            />
+          </label>
+        )}
         <label className="block">
           <div className="text-xs font-medium mb-1">Description</div>
           <textarea
@@ -908,7 +935,7 @@ export default function NewTaskPage() {
           <button
             type="button"
             onClick={save}
-            disabled={busy || !form.title}
+            disabled={busy || !canCreate}
             className="btn-primary"
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
