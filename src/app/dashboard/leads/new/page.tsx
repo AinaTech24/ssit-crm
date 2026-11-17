@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, UserPlus, Loader2, AlertTriangle, ExternalLink, Camera, Trash2 } from "lucide-react";
+import { ChevronLeft, UserPlus, Loader2, AlertTriangle, ExternalLink, Camera, Trash2, Upload, FileText, X } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 import { Avatar } from "@/components/ui/Avatar";
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
@@ -50,8 +51,18 @@ const AUM_BANDS: [string, string][] = [
   ["hni_2cr_plus", "HNI · ₹2 Cr+"],
 ];
 
+/** Largest document accepted per file (the upload route's own limit is higher). */
+const MAX_DOC_BYTES = 15 * 1024 * 1024;
+
 export default function NewLeadPage() {
   const router = useRouter();
+  const toast = useToast();
+  // Documents picked before the lead exists: held here and filed against the lead
+  // the moment it has been created.
+  const [files, setFiles] = useState<File[]>([]);
+  const [canDocs, setCanDocs] = useState(false);
+  const [dropActive, setDropActive] = useState(false);
+  const docInput = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: "",
     avatarUrl: "",
@@ -112,6 +123,7 @@ export default function NewLeadPage() {
         const meId = j?.user?.id;
         if (alive && meId) setForm((f) => (f.ownerId ? f : { ...f, ownerId: meId }));
         if (alive) setRaSales(Array.isArray(j?.user?.roles) && j.user.roles.includes("ra_sales"));
+        if (alive) setCanDocs(Array.isArray(j?.capabilities) && j.capabilities.includes("document.upload"));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -240,6 +252,56 @@ export default function NewLeadPage() {
     };
   }, [form.phone, form.email]);
 
+  function addFiles(list: FileList | File[] | null) {
+    if (!list) return;
+    const next: File[] = [];
+    for (const f of Array.from(list)) {
+      if (f.size > MAX_DOC_BYTES) {
+        setErr(`${f.name} is over 15 MB.`);
+        continue;
+      }
+      next.push(f);
+    }
+    if (next.length) setFiles((cur) => [...cur, ...next].slice(0, 20));
+  }
+
+  /** File every picked document against the new lead (or, when the lead was turned
+   *  into a client on the spot, against that client). Returns the names that failed. */
+  async function uploadLeadFiles(leadId: string, investorId?: string): Promise<string[]> {
+    const failed: string[] = [];
+    for (const file of files) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("kind", "kyc");
+        fd.append("docType", "kyc");
+        if (form.name) fd.append("clientName", form.name);
+        const up = await fetch("/api/compliance/upload", { method: "POST", body: fd })
+          .then((r) => r.json())
+          .catch(() => ({}));
+        if (!up?.key) {
+          failed.push(file.name);
+          continue;
+        }
+        const reg = await fetch(investorId ? `/api/investors/${investorId}/documents` : `/api/leads/${leadId}/documents`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: file.name,
+            storageKey: up.key,
+            mimeType: up.contentType ?? (file.type || "application/octet-stream"),
+            sizeBytes: up.sizeBytes ?? file.size,
+            ...(investorId ? { category: "kyd" } : {}),
+          }),
+        });
+        if (!reg.ok) failed.push(file.name);
+      } catch {
+        failed.push(file.name);
+      }
+    }
+    return failed;
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -294,8 +356,18 @@ export default function NewLeadPage() {
         setErr(j.error ?? "Create failed");
         return;
       }
+      // Documents picked on this form go onto the lead now that it exists.
+      let failed: string[] = [];
+      if (files.length) failed = await uploadLeadFiles(j.id, j.converted ? j.investorId : undefined);
+      if (failed.length) {
+        toast.error(
+          `The lead was created, but ${failed.length} document${failed.length === 1 ? "" : "s"} could not be saved (${failed.join(", ")}). Add them from the lead's page.`,
+          "Some documents were not saved"
+        );
+      }
       // A subscribed lead is converted on the server; take them to the client.
       if (j.converted && j.investorId) router.push(`/dashboard/investors/${j.investorId}`);
+      else if (failed.length && j.id) router.push(`/dashboard/leads/${j.id}`);
       else router.push("/dashboard/leads");
     } finally {
       setBusy(false);
@@ -644,6 +716,68 @@ export default function NewLeadPage() {
           </p>
         </div>
 
+        {/* Documents - optional, picked now and filed against the lead as soon as it
+            is created; they move to the client when the lead is converted. */}
+        {canDocs && (
+          <div className="sm:col-span-2">
+            <div className="text-xs font-medium mb-1">
+              Documents
+              <span className="ml-1 text-[10px] text-muted-foreground font-normal">· optional, e.g. PAN, Aadhaar, cheque</span>
+            </div>
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDropActive(true);
+              }}
+              onDragLeave={() => setDropActive(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDropActive(false);
+                addFiles(e.dataTransfer.files);
+              }}
+              onClick={() => docInput.current?.click()}
+              className={`cursor-pointer rounded-lg border-2 border-dashed px-4 py-4 text-center text-xs transition-colors ${
+                dropActive ? "border-primary bg-primary/5" : "border-border text-muted-foreground hover:bg-secondary/40"
+              }`}
+            >
+              <Upload className="size-5 mx-auto mb-1 text-muted-foreground" />
+              <div className="font-medium text-foreground">Drag &amp; drop documents here</div>
+              <div>or click to browse · PDF, JPG, PNG, DOC, XLS · up to 15 MB each</div>
+            </div>
+            <input
+              ref={docInput}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            {files.length > 0 && (
+              <ul className="mt-2 divide-y divide-border rounded-lg border border-border overflow-hidden">
+                {files.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center gap-2 px-3 py-2 text-sm">
+                    <FileText className="size-4 text-muted-foreground shrink-0" />
+                    <span className="truncate flex-1">{f.name}</span>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {f.size >= 1024 * 1024 ? `${(f.size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFiles((cur) => cur.filter((_, n) => n !== i))}
+                      className="p-1 text-muted-foreground hover:text-rose-600"
+                      aria-label={`Remove ${f.name}`}
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
         {/* Everything below is optional detail — hidden until asked for, so a
             lead can be captured mid-phone-call in four fields. */}
         <div className="sm:col-span-2">
@@ -761,7 +895,7 @@ export default function NewLeadPage() {
             className="btn-primary"
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-            {busy ? "Creating…" : "Create lead"}
+            {busy ? (files.length ? "Creating & uploading…" : "Creating…") : "Create lead"}
           </button>
         </div>
       </form>
