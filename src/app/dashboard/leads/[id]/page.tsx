@@ -17,6 +17,8 @@ import { withTenant } from "@/db/client";
 import { users, tasks, communications, riskProfileResponses, proposals, reviewMeetings } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { canEditAllLeads, loadViewableLead } from "@/lib/leads/access";
+import { can } from "@/lib/auth/rbac";
+import { LeadDocumentsSection } from "@/components/leads/LeadDocumentsSection";
 import { formatDate, formatRelative } from "@/lib/utils";
 import { LeadActions } from "@/components/leads/LeadActions";
 import { EmailRelatedList } from "@/components/comms/EmailRelatedList";
@@ -56,6 +58,7 @@ const LEAD_DETAIL_SECTIONS: RelatedListDef[] = [
   { key: "onboarding", label: "Onboarding actions (risk profile / docs / approval)" },
   { key: "converted_banner", label: "Converted-to-client banner" },
   { key: "edit_panel", label: "Editable details" },
+  { key: "documents", label: "Documents & attachments" },
   { key: "emails", label: "Emails" },
   { key: "whatsapp", label: "WhatsApp" },
   { key: "meetings", label: "Meetings" },
@@ -65,7 +68,7 @@ const LEAD_DETAIL_SECTIONS: RelatedListDef[] = [
 /** Tab groups for the lead-detail page — the header stays pinned above. */
 const LEAD_DETAIL_TABS = [
   { key: "overview", label: "Overview", sections: ["signals", "blueprint", "onboarding", "converted_banner"] },
-  { key: "details", label: "Details", sections: ["edit_panel"] },
+  { key: "details", label: "Details", sections: ["edit_panel", "documents"] },
   { key: "activity", label: "Activity", sections: ["whatsapp", "emails", "meetings", "activity"] },
 ];
 
@@ -389,6 +392,23 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           canAssign={canEditAllLeads(session)}
         />
       </RelatedListSection>
+
+      {/* Documents - the same drop-and-list panel a client has. They move to the
+          client when the lead is converted. Hidden for roles without document access. */}
+      {can(session.roles, "document.view", session.permissions) && (
+        <RelatedListSection moduleKey="leads-detail" sectionKey="documents">
+          <LeadDocumentsSection
+            leadId={l.id}
+            leadName={l.name}
+            converted={!!(l as any).convertedInvestorId}
+            canUpload={
+              can(session.roles, "document.upload", session.permissions) &&
+              (can(session.roles, "lead.edit.all", session.permissions) ||
+                can(session.roles, "lead.edit.assigned", session.permissions))
+            }
+          />
+        </RelatedListSection>
+      )}
 
       {/* MFD-defined custom fields (renders only if the firm has defined any). */}
       <CustomFieldsCard entity="lead" recordId={l.id} initialValues={(l as any).customFields ?? null} />
