@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can } from "@/lib/auth/rbac";
-import { MAX_ENTRIES_PER_SAVE, PostFields, dayRuleError, duplicatePlatformError, parseBatch, sameEntryError, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
+import { MAX_ENTRIES_PER_SAVE, PostFields, dayRuleError, entryKey, groupEntries, duplicatePlatformError, parseBatch, sameEntryError, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
 
 const good = {
   postDate: "2026-11-10",
@@ -135,5 +135,37 @@ describe("one entry per day", () => {
   it("a platform may not repeat inside an entry", () => {
     expect(duplicatePlatformError([{ platform: "instagram" }, { platform: "facebook" }])).toBeNull();
     expect(duplicatePlatformError([{ platform: "instagram" }, { platform: "instagram" }])).toMatch(/Instagram/);
+  });
+});
+
+describe("grouping rows into entries", () => {
+  const r = (id: string, date: string, title: string, platform: string, type = "reel") => ({
+    id,
+    postDate: date,
+    contentTitle: title,
+    contentType: type,
+    platform,
+  });
+
+  it("shows one entry per day with every platform it went out on", () => {
+    const g = groupEntries([
+      r("1", "2026-11-18", "Demo Task", "youtube"),
+      r("2", "2026-11-18", "Demo Task", "linkedin"),
+      r("3", "2026-11-17", "Large cap", "instagram"),
+    ]);
+    expect(g).toHaveLength(2);
+    expect(g[0].lines.map((l) => l.platform)).toEqual(["youtube", "linkedin"]);
+    expect(g[1].lines).toHaveLength(1);
+  });
+
+  it("keeps the order of the first row of each entry", () => {
+    const g = groupEntries([r("1", "2026-11-18", "A", "x"), r("2", "2026-11-17", "B", "x"), r("3", "2026-11-18", "A", "youtube")]);
+    expect(g.map((e) => e.contentTitle)).toEqual(["A", "B"]);
+    expect(g[0].lines.map((l) => l.id)).toEqual(["1", "3"]);
+  });
+
+  it("treats the title without regard to case or stray spaces, and a different type as another entry", () => {
+    expect(entryKey(r("1", "2026-11-18", " Demo Task ", "x"))).toBe(entryKey(r("2", "2026-11-18", "demo task", "y")));
+    expect(entryKey(r("1", "2026-11-18", "Demo", "x"))).not.toBe(entryKey(r("2", "2026-11-18", "Demo", "x", "post")));
   });
 });

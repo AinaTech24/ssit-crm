@@ -1,15 +1,13 @@
 "use client";
 
 /**
- * The Social Media Tracker table plus its entry sheet and entry card.
+ * The Social Media Tracker: the entry list, the entry sheet and the entry card.
  *
- * Everyone who can open the tracker sees the table and can click a line to open it
- * as a card; only people with social_tracker.manage get Add / Edit / Delete.
- *
- * An ENTRY is one day's content. Its date, title and type are entered once at the
- * top; below it is one line per platform it went out on (Instagram, Facebook,
- * LinkedIn...) with that platform's status, post link and numbers, sliding sideways.
- * "Add platform" adds another line. A day holds only one entry.
+ * An ENTRY is one day's content. Its date, title and type are entered once; under it
+ * sits one line per platform it went out on (status, post link, numbers). The list
+ * shows each entry once with all of its platforms, clicking it opens a card with
+ * everything about it, and Edit opens the sheet. Everyone who can open the tracker
+ * can read; only people with social_tracker.manage get Add / Edit / Delete.
  */
 
 import { useState } from "react";
@@ -22,9 +20,13 @@ import {
   PLATFORMS,
   POST_STATUSES,
   POST_TYPES,
+  entryKey,
+  groupEntries,
   platformLabel,
   statusLabel,
+  totalsOf,
   typeLabel,
+  type EntryGroup,
 } from "@/lib/social/tracker";
 
 export type TrackerRow = {
@@ -91,6 +93,7 @@ const nextPlatform = (used: string[]) => PLATFORMS.find((p) => !used.includes(p.
 const fmtDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 const num = (n: number) => n.toLocaleString("en-IN");
+const signed = (n: number) => (n > 0 ? `+${num(n)}` : num(n));
 
 const STATUS_TONE: Record<string, string> = {
   posted: "bg-emerald-50 text-emerald-700",
@@ -124,43 +127,74 @@ const toEntries = (head: Head, lines: Line[]) =>
     leads: l.leads === "" ? 0 : Number(l.leads),
   }));
 
+const StatusChip = ({ status }: { status: string }) => (
+  <span className={`px-2 py-0.5 rounded-full text-xs ${STATUS_TONE[status] ?? "bg-secondary"}`}>{statusLabel(status)}</span>
+);
+
 export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; canManage: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  // null = sheet closed; "new" = adding an entry; "edit" = changing a day's entry.
+  // null = sheet closed; "new" = adding an entry; "edit" = changing an entry.
   const [mode, setMode] = useState<"new" | "edit" | null>(null);
   const [head, setHead] = useState<Head>(blankHead());
   const [lines, setLines] = useState<Line[]>([blankLine("instagram")]);
   const [originalDate, setOriginalDate] = useState<string | null>(null);
-  const [viewing, setViewing] = useState<TrackerRow | null>(null);
+  // The card that is open (an entry key), and the entry's FULL set of platforms -
+  // the list can be filtered to one platform, the card never is.
+  const [viewKey, setViewKey] = useState<string | null>(null);
+  const [full, setFull] = useState<{ key: string; rows: TrackerRow[] } | null>(null);
+  // Where Cancel / Save of an edit lands: back on the entry's card.
+  const [returnKey, setReturnKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const entries = groupEntries(rows);
 
   const setH = <K extends keyof Head>(k: K, v: Head[K]) => setHead((h) => ({ ...h, [k]: v }));
   const setL = <K extends keyof Line>(i: number, k: K, v: Line[K]) =>
     setLines((ls) => ls.map((l, n) => (n === i ? { ...l, [k]: v } : l)));
 
+  /** Every platform line saved for a day, newest data from the server. */
+  async function loadDay(date: string): Promise<TrackerRow[] | null> {
+    try {
+      const res = await fetch(`/api/social-posts/day?date=${encodeURIComponent(date)}`, { cache: "no-store" });
+      const j = await res.json().catch(() => ({}));
+      return res.ok && Array.isArray(j.rows) ? (j.rows as TrackerRow[]) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Open an entry's card, with all of its platforms. */
+  async function openCard(key: string, date: string) {
+    setViewKey(key);
+    const all = await loadDay(date);
+    if (all) setFull({ key, rows: all.filter((r) => entryKey(r) === key) });
+  }
+
   function openNew() {
     setHead(blankHead());
     setLines([blankLine("instagram")]);
     setOriginalDate(null);
+    setReturnKey(null);
     setErr(null);
     setMode("new");
   }
 
-  /** Open a day's whole entry (every platform line), whichever line was clicked. */
-  async function openEdit(r: TrackerRow) {
-    setViewing(null);
+  /** Open an entry in the sheet, with every platform line it has. */
+  async function openEdit(g: { key: string; postDate: string; lines: TrackerRow[] }) {
+    setViewKey(null);
     setErr(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/social-posts/day?date=${encodeURIComponent(r.postDate)}`, { cache: "no-store" });
-      const j = await res.json().catch(() => ({}));
-      const dayRows: TrackerRow[] = res.ok && Array.isArray(j.rows) && j.rows.length ? j.rows : [r];
-      const first = dayRows[0];
+      const all = (await loadDay(g.postDate)) ?? g.lines;
+      const mine = all.filter((r) => entryKey(r) === g.key);
+      const use = mine.length ? mine : g.lines;
+      const first = use[0];
       setHead({ postDate: first.postDate, contentTitle: first.contentTitle, contentType: first.contentType });
-      setLines(dayRows.map(lineFromRow));
+      setLines(use.map(lineFromRow));
       setOriginalDate(first.postDate);
+      setReturnKey(g.key);
       setMode("edit");
     } finally {
       setBusy(false);
@@ -175,11 +209,14 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   }
   const removeLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, n) => n !== i) : ls));
 
-  // A day already shown in the table (the table can be filtered, so the server has
-  // the final say) - warn before the person has typed everything for nothing.
+  // A day already shown in the list (the list can be filtered, so the server has the
+  // final say) - warn before the person has typed everything for nothing.
   const dayRows = mode === "new" ? rows.filter((r) => r.postDate === head.postDate) : [];
   const dayTaken = dayRows[0];
-  const dayConflict = !!dayTaken && !!head.contentTitle.trim() && !(sameText(dayTaken.contentTitle, head.contentTitle) && dayTaken.contentType === head.contentType);
+  const dayConflict =
+    !!dayTaken &&
+    !!head.contentTitle.trim() &&
+    !(sameText(dayTaken.contentTitle, head.contentTitle) && dayTaken.contentType === head.contentType);
 
   async function save() {
     if (!head.contentTitle.trim()) {
@@ -190,11 +227,11 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
     setErr(null);
     try {
       const adding = mode === "new";
-      const entries = toEntries(head, lines);
+      const entriesBody = toEntries(head, lines);
       const res = await fetch(adding ? "/api/social-posts" : "/api/social-posts/day", {
         method: adding ? "POST" : "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(adding ? { entries } : { originalDate, entries }),
+        body: JSON.stringify(adding ? { entries: entriesBody } : { originalDate, entries: entriesBody }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -204,24 +241,51 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
       toast.success(adding ? "Entry added." : "Entry updated.", "Social Media Tracker");
       setMode(null);
       router.refresh();
+      // After changing an entry, land back on its card showing what was saved.
+      if (!adding) void openCard(entryKey(head), head.postDate);
     } finally {
       setBusy(false);
     }
   }
 
-  async function remove(r: TrackerRow) {
-    if (!window.confirm(`Delete the ${platformLabel(r.platform)} line of "${r.contentTitle}" from the tracker?`)) return;
-    const res = await fetch(`/api/social-posts/${r.id}`, { method: "DELETE" });
-    if (res.ok) {
-      toast.success("Entry deleted.", "Social Media Tracker");
-      setViewing(null);
+  function cancel() {
+    setMode(null);
+    const back = returnKey;
+    if (back) {
+      const g = entries.find((e) => e.key === back);
+      void openCard(back, g?.postDate ?? head.postDate);
+    }
+  }
+
+  /** Delete one platform line, or (with `all`) the whole entry. */
+  async function removeLines(g: { contentTitle: string; lines: TrackerRow[] }, only?: TrackerRow) {
+    const targets = only ? [only] : g.lines;
+    const what = only ? `the ${platformLabel(only.platform)} line of "${g.contentTitle}"` : `"${g.contentTitle}" and all of its platforms`;
+    if (!window.confirm(`Delete ${what} from the tracker?`)) return;
+    const results = await Promise.all(targets.map((r) => fetch(`/api/social-posts/${r.id}`, { method: "DELETE" })));
+    if (results.every((r) => r.ok)) {
+      toast.success(only ? "Platform line deleted." : "Entry deleted.", "Social Media Tracker");
+      setFull(null);
+      if (!only || targets.length >= g.lines.length) setViewKey(null);
+      else if (viewKey) void openCard(viewKey, g.lines[0].postDate);
       router.refresh();
     } else {
-      toast.error("Could not delete that entry.");
+      toast.error("Could not delete everything - refresh and try again.");
     }
   }
 
   const isNew = mode === "new";
+
+  // The open card: the entry's full lines when loaded, otherwise what the list has.
+  const listGroup: EntryGroup<TrackerRow> | undefined = viewKey ? entries.find((e) => e.key === viewKey) : undefined;
+  const cardLines: TrackerRow[] | null = viewKey
+    ? full && full.key === viewKey
+      ? full.rows
+      : (listGroup?.lines ?? null)
+    : null;
+  const card = cardLines && cardLines.length
+    ? { key: viewKey as string, postDate: cardLines[0].postDate, contentTitle: cardLines[0].contentTitle, contentType: cardLines[0].contentType, lines: cardLines }
+    : null;
 
   return (
     <div className="space-y-4">
@@ -238,7 +302,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
         <div className="border rounded-lg bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-sm">{isNew ? "Add entry" : "Edit entry"}</h2>
-            <button onClick={() => setMode(null)} className="text-muted-foreground hover:text-foreground" aria-label="Close">
+            <button onClick={cancel} className="text-muted-foreground hover:text-foreground" aria-label="Close">
               <X className="size-4" />
             </button>
           </div>
@@ -365,15 +429,16 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
             >
               {busy && <Loader2 className="size-3.5 animate-spin" />} {isNew ? "Save entry" : "Save changes"}
             </button>
-            <button onClick={() => setMode(null)} className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+            <button onClick={cancel} className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
               Cancel
             </button>
           </div>
         </div>
       )}
 
+      {/* The list: one block per entry, listing every platform it went out on. */}
       <div className="border rounded-lg bg-card overflow-x-auto">
-        {rows.length === 0 ? (
+        {entries.length === 0 ? (
           <div className="p-10 text-center text-sm text-muted-foreground">
             No entries for this view yet.{canManage ? " Use \"Add entry\" to log your first post." : ""}
           </div>
@@ -394,133 +459,201 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                 <th className="py-2 pr-4" />
               </tr>
             </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={r.id}
-                  onClick={() => setViewing(r)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && e.target === e.currentTarget) setViewing(r);
-                  }}
-                  tabIndex={0}
-                  aria-label={`Open ${r.contentTitle}`}
-                  className="border-b last:border-0 align-top cursor-pointer hover:bg-accent/40 focus:bg-accent/40 outline-none"
-                >
-                  <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">{fmtDate(r.postDate)}</td>
-                  <td className="py-2 max-w-[20rem]">
-                    <div className="font-medium break-words">{r.contentTitle}</div>
-                    {r.postLink && (
-                      <a
-                        href={r.postLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-xs text-brand-cyan hover:underline inline-flex items-center gap-1"
-                      >
-                        Open post <ExternalLink className="size-3" />
-                      </a>
-                    )}
-                  </td>
-                  <td className="py-2 whitespace-nowrap">{typeLabel(r.contentType)}</td>
-                  <td className="py-2 whitespace-nowrap">{platformLabel(r.platform)}</td>
-                  <td className="py-2 whitespace-nowrap">
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${STATUS_TONE[r.status] ?? "bg-secondary"}`}>
-                      {statusLabel(r.status)}
-                    </span>
-                  </td>
-                  <td className="py-2 text-right tabular-nums">{num(r.views)}</td>
-                  <td className="py-2 text-right tabular-nums">{num(r.reach)}</td>
-                  <td className="py-2 text-right tabular-nums">{num(r.likes)}</td>
-                  <td className="py-2 text-right tabular-nums">{r.followersIncrease > 0 ? `+${num(r.followersIncrease)}` : num(r.followersIncrease)}</td>
-                  <td className="py-2 text-right tabular-nums">{num(r.leads)}</td>
-                  <td className="py-2 pr-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                    {canManage && (
-                      <>
-                        <button
-                          onClick={() => void openEdit(r)}
-                          title="Edit this day's entry"
-                          className="p-1 text-muted-foreground hover:text-foreground"
-                          aria-label={`Edit ${r.contentTitle}`}
-                        >
-                          <Pencil className="size-3.5" />
-                        </button>
-                        <button
-                          onClick={() => remove(r)}
-                          title="Delete this platform line"
-                          className="p-1 text-muted-foreground hover:text-rose-600"
-                          aria-label={`Delete ${r.contentTitle} on ${platformLabel(r.platform)}`}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
+            {entries.map((g) => {
+              const total = totalsOf(g.lines);
+              const multi = g.lines.length > 1;
+              const span = g.lines.length + (multi ? 1 : 0);
+              const open = () => void openCard(g.key, g.postDate);
+              return (
+                <tbody key={g.key} className="border-b last:border-0">
+                  {g.lines.map((r, i) => (
+                    <tr
+                      key={r.id}
+                      onClick={open}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && e.target === e.currentTarget) open();
+                      }}
+                      tabIndex={0}
+                      aria-label={`Open ${g.contentTitle} on ${platformLabel(r.platform)}`}
+                      className="align-top cursor-pointer hover:bg-accent/40 focus:bg-accent/40 outline-none"
+                    >
+                      {i === 0 && (
+                        <>
+                          <td rowSpan={span} className="px-4 py-2 whitespace-nowrap text-muted-foreground align-top">{fmtDate(g.postDate)}</td>
+                          <td rowSpan={span} className="py-2 pr-3 max-w-[20rem] align-top">
+                            <div className="font-medium break-words">{g.contentTitle}</div>
+                            {multi && <div className="text-xs text-muted-foreground">{g.lines.length} platforms</div>}
+                          </td>
+                          <td rowSpan={span} className="py-2 pr-3 whitespace-nowrap align-top">{typeLabel(g.contentType)}</td>
+                        </>
+                      )}
+                      <td className="py-2 whitespace-nowrap">
+                        <div>{platformLabel(r.platform)}</div>
+                        {r.postLink && (
+                          <a
+                            href={r.postLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs text-brand-cyan hover:underline inline-flex items-center gap-1"
+                          >
+                            Open post <ExternalLink className="size-3" />
+                          </a>
+                        )}
+                      </td>
+                      <td className="py-2 whitespace-nowrap"><StatusChip status={r.status} /></td>
+                      <td className="py-2 text-right tabular-nums">{num(r.views)}</td>
+                      <td className="py-2 text-right tabular-nums">{num(r.reach)}</td>
+                      <td className="py-2 text-right tabular-nums">{num(r.likes)}</td>
+                      <td className="py-2 text-right tabular-nums">{signed(r.followersIncrease)}</td>
+                      <td className="py-2 text-right tabular-nums">{num(r.leads)}</td>
+                      <td className="py-2 pr-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        {canManage && (
+                          <>
+                            <button
+                              onClick={() => void openEdit(g)}
+                              title="Edit this entry"
+                              className="p-1 text-muted-foreground hover:text-foreground"
+                              aria-label={`Edit ${g.contentTitle}`}
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              onClick={() => void removeLines(g, r)}
+                              title="Delete this platform line"
+                              className="p-1 text-muted-foreground hover:text-rose-600"
+                              aria-label={`Delete ${g.contentTitle} on ${platformLabel(r.platform)}`}
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {multi && (
+                    <tr onClick={open} className="cursor-pointer bg-secondary/30 text-xs font-medium">
+                      <td className="py-1.5" colSpan={2}>All platforms</td>
+                      <td className="py-1.5 text-right tabular-nums">{num(total.views)}</td>
+                      <td className="py-1.5 text-right tabular-nums">{num(total.reach)}</td>
+                      <td className="py-1.5 text-right tabular-nums">{num(total.likes)}</td>
+                      <td className="py-1.5 text-right tabular-nums">{signed(total.followersIncrease)}</td>
+                      <td className="py-1.5 text-right tabular-nums">{num(total.leads)}</td>
+                      <td />
+                    </tr>
+                  )}
+                </tbody>
+              );
+            })}
           </table>
         )}
       </div>
 
-      {/* The entry as a card - everything about it without having to open Edit. */}
-      <Dialog open={viewing !== null} onOpenChange={(o) => !o && setViewing(null)}>
-        <DialogContent className="max-w-xl">
-          {viewing && (
+      {/* The entry as a card: every platform it went out on, with all the numbers. */}
+      <Dialog
+        open={viewKey !== null && card !== null}
+        onOpenChange={(o) => {
+          if (!o) {
+            setViewKey(null);
+            setFull(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          {card && (
             <>
               <DialogHeader>
-                <DialogTitle className="break-words">{viewing.contentTitle}</DialogTitle>
+                <DialogTitle className="break-words">{card.contentTitle}</DialogTitle>
                 <DialogDescription>
-                  {fmtDate(viewing.postDate)} · {typeLabel(viewing.contentType)} on {platformLabel(viewing.platform)}
+                  {fmtDate(card.postDate)} · {typeLabel(card.contentType)}
+                  {card.lines.length > 1 ? ` · ${card.lines.length} platforms` : ""}
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="mt-3 flex items-center gap-2">
-                <span className={`px-2 py-0.5 rounded-full text-xs ${STATUS_TONE[viewing.status] ?? "bg-secondary"}`}>
-                  {statusLabel(viewing.status)}
-                </span>
-                {viewing.postLink ? (
-                  <a
-                    href={viewing.postLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-brand-cyan hover:underline inline-flex items-center gap-1"
-                  >
-                    Open post <ExternalLink className="size-3.5" />
-                  </a>
-                ) : (
-                  <span className="text-xs text-muted-foreground">No post link</span>
-                )}
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {(
-                  [
-                    ["Views", viewing.views],
-                    ["Reach", viewing.reach],
-                    ["Likes", viewing.likes],
-                    ["Followers +", viewing.followersIncrease],
-                    ["Leads", viewing.leads],
-                  ] as const
-                ).map(([label, v]) => (
-                  <div key={label} className="rounded-lg border bg-secondary/30 p-3">
-                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-                    <div className="text-lg font-semibold tabular-nums">
-                      {label === "Followers +" && v > 0 ? `+${num(v)}` : num(v)}
+              <div className="mt-4 space-y-3">
+                {card.lines.map((r) => (
+                  <div key={r.id} className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm">{platformLabel(r.platform)}</span>
+                      <StatusChip status={r.status} />
+                      {r.postLink ? (
+                        <a
+                          href={r.postLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-brand-cyan hover:underline inline-flex items-center gap-1"
+                        >
+                          Open post <ExternalLink className="size-3.5" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No post link</span>
+                      )}
+                      {canManage && card.lines.length > 1 && (
+                        <button
+                          onClick={() => void removeLines(card, r)}
+                          title="Delete this platform line"
+                          aria-label={`Delete ${platformLabel(r.platform)}`}
+                          className="ml-auto p-1 text-muted-foreground hover:text-rose-600"
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {(
+                        [
+                          ["Views", num(r.views)],
+                          ["Reach", num(r.reach)],
+                          ["Likes", num(r.likes)],
+                          ["Followers +", signed(r.followersIncrease)],
+                          ["Leads", num(r.leads)],
+                        ] as const
+                      ).map(([label, v]) => (
+                        <div key={label} className="rounded-md border bg-secondary/30 px-3 py-2">
+                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+                          <div className="text-base font-semibold tabular-nums">{v}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
+
+                {card.lines.length > 1 && (
+                  <div className="rounded-lg border bg-secondary/40 p-3">
+                    <div className="text-xs font-semibold mb-2">All platforms together</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-sm">
+                      {(() => {
+                        const t = totalsOf(card.lines);
+                        return (
+                          [
+                            ["Views", num(t.views)],
+                            ["Reach", num(t.reach)],
+                            ["Likes", num(t.likes)],
+                            ["Followers +", signed(t.followersIncrease)],
+                            ["Leads", num(t.leads)],
+                          ] as const
+                        ).map(([label, v]) => (
+                          <div key={label}>
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+                            <div className="font-semibold tabular-nums">{v}</div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {canManage && (
                 <div className="mt-5 flex justify-end gap-2">
                   <button
-                    onClick={() => remove(viewing)}
+                    onClick={() => void removeLines(card)}
                     className="rounded-md border px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-50 inline-flex items-center gap-1.5"
                   >
-                    <Trash2 className="size-3.5" /> Delete
+                    <Trash2 className="size-3.5" /> Delete entry
                   </button>
                   <button
-                    onClick={() => void openEdit(viewing)}
+                    onClick={() => void openEdit(card)}
                     className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1.5"
                   >
                     <Pencil className="size-3.5" /> Edit

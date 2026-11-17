@@ -150,6 +150,36 @@ export function dayRuleError(existing: DayRow[], incoming: DayRow[], opts: { joi
   return duplicatePlatformError([...existing, ...incoming]);
 }
 
+/** Identifies an entry: its day plus its title and type. */
+export const entryKey = (r: { postDate: string; contentTitle: string; contentType: string }) =>
+  `${r.postDate}|${r.contentTitle.trim().toLowerCase()}|${r.contentType}`;
+
+export type EntryGroup<R> = {
+  key: string;
+  postDate: string;
+  contentTitle: string;
+  contentType: string;
+  /** One row per platform the entry went out on, in the order given. */
+  lines: R[];
+};
+
+/**
+ * Fold the flat rows (one per platform) into entries, so a day's content shows as
+ * ONE entry listing every platform. Order follows the first row of each entry.
+ */
+export function groupEntries<R extends { postDate: string; contentTitle: string; contentType: string }>(
+  rows: R[]
+): EntryGroup<R>[] {
+  const out = new Map<string, EntryGroup<R>>();
+  for (const r of rows) {
+    const key = entryKey(r);
+    const g = out.get(key);
+    if (g) g.lines.push(r);
+    else out.set(key, { key, postDate: r.postDate, contentTitle: r.contentTitle, contentType: r.contentType, lines: [r] });
+  }
+  return [...out.values()];
+}
+
 /** The numbers a row carries, for totals. */
 export interface Metrics {
   views: number;
