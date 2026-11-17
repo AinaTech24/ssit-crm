@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can } from "@/lib/auth/rbac";
-import { PostFields, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
+import { MAX_ENTRIES_PER_SAVE, PostFields, parseBatch, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
 
 const good = {
   postDate: "2026-11-10",
@@ -70,5 +70,33 @@ describe("Social Media Tracker permissions", () => {
 
   it("the owner can hand edit to one person through their custom list", () => {
     expect(can(["rm"], "social_tracker.manage", ["task.view.assigned", "social_tracker.manage"])).toBe(true);
+  });
+});
+
+describe("adding several entries at once", () => {
+  const row = { postDate: "2026-11-10", contentTitle: "A", contentType: "post", platform: "instagram", status: "posted" };
+
+  it("accepts a batch and defaults each row's numbers", () => {
+    const r = parseBatch([row, { ...row, contentTitle: "B", platform: "linkedin", views: "50" }]);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.entries).toHaveLength(2);
+      expect(r.entries[1]).toMatchObject({ platform: "linkedin", views: 50, leads: 0 });
+    }
+  });
+
+  it("names the bad row and adds none when one row is wrong", () => {
+    const r = parseBatch([row, { ...row, contentTitle: "  " }]);
+    expect(r).toEqual({ ok: false, error: "Row 2: Enter the content title" });
+  });
+
+  it("does not prefix the row number for a single entry", () => {
+    expect(parseBatch([{ ...row, contentTitle: "" }])).toEqual({ ok: false, error: "Enter the content title" });
+  });
+
+  it("rejects an empty batch and an oversized one", () => {
+    expect(parseBatch([]).ok).toBe(false);
+    expect(parseBatch(Array.from({ length: MAX_ENTRIES_PER_SAVE + 1 }, () => row)).ok).toBe(false);
+    expect(parseBatch(Array.from({ length: MAX_ENTRIES_PER_SAVE }, () => row)).ok).toBe(true);
   });
 });

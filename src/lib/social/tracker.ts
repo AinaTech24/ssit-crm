@@ -75,6 +75,32 @@ export const PostFields = z.object({
 
 export type PostInput = z.infer<typeof PostFields>;
 
+/** Most entries one "Save" may add — the tracker's entry sheet takes several rows at once. */
+export const MAX_ENTRIES_PER_SAVE = 50;
+
+/**
+ * Validate a batch row by row so the message can say WHICH row is wrong
+ * ("Row 2: Enter the content title"). All-or-nothing: one bad row adds none.
+ */
+export function parseBatch(
+  raw: unknown
+): { ok: true; entries: PostInput[] } | { ok: false; error: string } {
+  if (!Array.isArray(raw) || raw.length === 0) return { ok: false, error: "Add at least one entry." };
+  if (raw.length > MAX_ENTRIES_PER_SAVE) {
+    return { ok: false, error: `Add at most ${MAX_ENTRIES_PER_SAVE} entries at a time.` };
+  }
+  const entries: PostInput[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const r = PostFields.safeParse(raw[i]);
+    if (!r.success) {
+      const msg = r.error.issues[0]?.message ?? "Check the fields";
+      return { ok: false, error: raw.length > 1 ? `Row ${i + 1}: ${msg}` : msg };
+    }
+    entries.push(r.data);
+  }
+  return { ok: true, entries };
+}
+
 /** The numbers a row carries, for totals. */
 export interface Metrics {
   views: number;
