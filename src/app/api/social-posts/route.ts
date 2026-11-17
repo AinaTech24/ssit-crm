@@ -14,7 +14,8 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { socialMediaPosts } from "@/db/schema";
-import { parseBatch } from "@/lib/social/tracker";
+import { dayRuleError, duplicatePlatformError, parseBatch, sameEntryError } from "@/lib/social/tracker";
+import { and, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,26 @@ export async function POST(req: NextRequest) {
     if (!parsed.ok) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
+
+    // One ENTRY per day: every line shares the date, title and type, and a platform
+    // appears once. If the day already has an entry, only more platforms of that same
+    // entry may be added to it.
+    const bad = sameEntryError(parsed.entries) ?? duplicatePlatformError(parsed.entries);
+    if (bad) return NextResponse.json({ error: bad }, { status: 400 });
+    const date = parsed.entries[0].postDate;
+
+    const refused = await withTenant(session.tenantId, async (tx) => {
+      const existing = await tx
+        .select({
+          contentTitle: socialMediaPosts.contentTitle,
+          contentType: socialMediaPosts.contentType,
+          platform: socialMediaPosts.platform,
+        })
+        .from(socialMediaPosts)
+        .where(and(eq(socialMediaPosts.tenantId, session.tenantId), eq(socialMediaPosts.postDate, date)));
+      return dayRuleError(existing, parsed.entries, { join: true, date });
+    });
+    if (refused) return NextResponse.json({ error: refused }, { status: 409 });
 
     const rows = await withTenant(session.tenantId, (tx) =>
       tx

@@ -1,15 +1,15 @@
 "use client";
 
 /**
- * The Social Media Tracker table plus its add / edit sheet and entry card.
+ * The Social Media Tracker table plus its entry sheet and entry card.
  *
- * Everyone who can open the tracker sees the table and can click an entry to open
- * it as a card; only people with social_tracker.manage get the Add button and the
- * Edit / Delete controls.
+ * Everyone who can open the tracker sees the table and can click a line to open it
+ * as a card; only people with social_tracker.manage get Add / Edit / Delete.
  *
- * Adding uses an entry sheet: one line per entry, scrolling sideways, with an
- * "Add another row" button underneath so several posts (another platform, another
- * type…) go in with one Save.
+ * An ENTRY is one day's content. Its date, title and type are entered once at the
+ * top; below it is one line per platform it went out on (Instagram, Facebook,
+ * LinkedIn...) with that platform's status, post link and numbers, sliding sideways.
+ * "Add platform" adds another line. A day holds only one entry.
  */
 
 import { useState } from "react";
@@ -19,7 +19,6 @@ import { SelectField } from "@/components/ui/SelectField";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
 import { useToast } from "@/components/ui/Toast";
 import {
-  MAX_ENTRIES_PER_SAVE,
   PLATFORMS,
   POST_STATUSES,
   POST_TYPES,
@@ -43,10 +42,12 @@ export type TrackerRow = {
   leads: number;
 };
 
-type Form = {
-  postDate: string;
-  contentTitle: string;
-  contentType: string;
+/** The three things fixed for the whole entry. */
+type Head = { postDate: string; contentTitle: string; contentType: string };
+
+/** One platform line of an entry. `id` is set for a line that is already saved. */
+type Line = {
+  id?: string;
   platform: string;
   status: string;
   postLink: string;
@@ -59,12 +60,11 @@ type Form = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const blank = (): Form => ({
-  postDate: today(),
-  contentTitle: "",
-  contentType: "post",
-  platform: "instagram",
-  status: "posted",
+const blankHead = (): Head => ({ postDate: today(), contentTitle: "", contentType: "post" });
+
+const blankLine = (platform: string, status = "posted"): Line => ({
+  platform,
+  status,
   postLink: "",
   views: "",
   reach: "",
@@ -73,10 +73,8 @@ const blank = (): Form => ({
   leads: "",
 });
 
-const fromRow = (r: TrackerRow): Form => ({
-  postDate: r.postDate,
-  contentTitle: r.contentTitle,
-  contentType: r.contentType,
+const lineFromRow = (r: TrackerRow): Line => ({
+  id: r.id,
   platform: r.platform,
   status: r.status,
   postLink: r.postLink ?? "",
@@ -86,6 +84,9 @@ const fromRow = (r: TrackerRow): Form => ({
   followersIncrease: String(r.followersIncrease),
   leads: String(r.leads),
 });
+
+/** The first platform not already used by the entry. */
+const nextPlatform = (used: string[]) => PLATFORMS.find((p) => !used.includes(p.key))?.key ?? PLATFORMS[0].key;
 
 const fmtDate = (iso: string) =>
   new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -98,84 +99,110 @@ const STATUS_TONE: Record<string, string> = {
   cancelled: "bg-rose-50 text-rose-700",
 };
 
-/** Column widths of the one-line entry sheet (px), in field order, plus the remove button. */
-const COLS = [140, 260, 120, 130, 120, 230, 90, 90, 90, 110, 80, 36];
+/** Column widths (px) of the sliding platform lines, plus the remove button. */
+const COLS = [150, 130, 280, 100, 100, 100, 120, 90, 36];
 const GRID = { gridTemplateColumns: COLS.map((w) => `${w}px`).join(" ") };
-const SHEET_HEAD = ["Date", "Content title", "Type", "Platform", "Status", "Post link", "Views", "Reach", "Likes", "Followers +", "Leads", ""];
+const LINE_HEAD = ["Platform", "Status", "Post link", "Views", "Reach", "Likes", "Followers +", "Leads", ""];
 const cell = "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm";
+const field = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 
-const toBody = (f: Form) => ({
-  postDate: f.postDate,
-  contentTitle: f.contentTitle,
-  contentType: f.contentType,
-  platform: f.platform,
-  status: f.status,
-  postLink: f.postLink,
-  views: f.views === "" ? 0 : Number(f.views),
-  reach: f.reach === "" ? 0 : Number(f.reach),
-  likes: f.likes === "" ? 0 : Number(f.likes),
-  followersIncrease: f.followersIncrease === "" ? 0 : Number(f.followersIncrease),
-  leads: f.leads === "" ? 0 : Number(f.leads),
-});
+const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+const toEntries = (head: Head, lines: Line[]) =>
+  lines.map((l) => ({
+    ...(l.id ? { id: l.id } : {}),
+    postDate: head.postDate,
+    contentTitle: head.contentTitle,
+    contentType: head.contentType,
+    platform: l.platform,
+    status: l.status,
+    postLink: l.postLink,
+    views: l.views === "" ? 0 : Number(l.views),
+    reach: l.reach === "" ? 0 : Number(l.reach),
+    likes: l.likes === "" ? 0 : Number(l.likes),
+    followersIncrease: l.followersIncrease === "" ? 0 : Number(l.followersIncrease),
+    leads: l.leads === "" ? 0 : Number(l.leads),
+  }));
 
 export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; canManage: boolean }) {
   const router = useRouter();
   const toast = useToast();
-  // null = sheet closed; "new" = adding; an id = editing that entry.
-  const [editing, setEditing] = useState<string | "new" | null>(null);
-  const [sheet, setSheet] = useState<Form[]>([blank()]);
+  // null = sheet closed; "new" = adding an entry; "edit" = changing a day's entry.
+  const [mode, setMode] = useState<"new" | "edit" | null>(null);
+  const [head, setHead] = useState<Head>(blankHead());
+  const [lines, setLines] = useState<Line[]>([blankLine("instagram")]);
+  const [originalDate, setOriginalDate] = useState<string | null>(null);
   const [viewing, setViewing] = useState<TrackerRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const setCell = <K extends keyof Form>(i: number, k: K, v: Form[K]) =>
-    setSheet((rs) => rs.map((r, n) => (n === i ? { ...r, [k]: v } : r)));
+  const setH = <K extends keyof Head>(k: K, v: Head[K]) => setHead((h) => ({ ...h, [k]: v }));
+  const setL = <K extends keyof Line>(i: number, k: K, v: Line[K]) =>
+    setLines((ls) => ls.map((l, n) => (n === i ? { ...l, [k]: v } : l)));
 
   function openNew() {
-    setSheet([blank()]);
+    setHead(blankHead());
+    setLines([blankLine("instagram")]);
+    setOriginalDate(null);
     setErr(null);
-    setEditing("new");
+    setMode("new");
   }
-  function openEdit(r: TrackerRow) {
+
+  /** Open a day's whole entry (every platform line), whichever line was clicked. */
+  async function openEdit(r: TrackerRow) {
     setViewing(null);
-    setSheet([fromRow(r)]);
     setErr(null);
-    setEditing(r.id);
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/social-posts/day?date=${encodeURIComponent(r.postDate)}`, { cache: "no-store" });
+      const j = await res.json().catch(() => ({}));
+      const dayRows: TrackerRow[] = res.ok && Array.isArray(j.rows) && j.rows.length ? j.rows : [r];
+      const first = dayRows[0];
+      setHead({ postDate: first.postDate, contentTitle: first.contentTitle, contentType: first.contentType });
+      setLines(dayRows.map(lineFromRow));
+      setOriginalDate(first.postDate);
+      setMode("edit");
+    } finally {
+      setBusy(false);
+    }
   }
-  /** A new row starts like the one above it — the same day, platform and type usually repeat. */
-  function addRow() {
-    setSheet((rs) => {
-      const last = rs[rs.length - 1] ?? blank();
-      return [...rs, { ...blank(), postDate: last.postDate, contentType: last.contentType, platform: last.platform, status: last.status }];
+
+  function addLine() {
+    setLines((ls) => {
+      const prev = ls[ls.length - 1];
+      return [...ls, blankLine(nextPlatform(ls.map((l) => l.platform)), prev?.status ?? "posted")];
     });
   }
-  const removeRow = (i: number) => setSheet((rs) => (rs.length > 1 ? rs.filter((_, n) => n !== i) : rs));
+  const removeLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, n) => n !== i) : ls));
+
+  // A day already shown in the table (the table can be filtered, so the server has
+  // the final say) - warn before the person has typed everything for nothing.
+  const dayRows = mode === "new" ? rows.filter((r) => r.postDate === head.postDate) : [];
+  const dayTaken = dayRows[0];
+  const dayConflict = !!dayTaken && !!head.contentTitle.trim() && !(sameText(dayTaken.contentTitle, head.contentTitle) && dayTaken.contentType === head.contentType);
 
   async function save() {
-    const bad = sheet.findIndex((r) => !r.contentTitle.trim());
-    if (bad >= 0) {
-      setErr(sheet.length > 1 ? `Row ${bad + 1}: enter the content title.` : "Enter the content title.");
+    if (!head.contentTitle.trim()) {
+      setErr("Enter the content title.");
       return;
     }
     setBusy(true);
     setErr(null);
     try {
-      const adding = editing === "new";
-      const res = await fetch(adding ? "/api/social-posts" : `/api/social-posts/${editing}`, {
-        method: adding ? "POST" : "PATCH",
+      const adding = mode === "new";
+      const entries = toEntries(head, lines);
+      const res = await fetch(adding ? "/api/social-posts" : "/api/social-posts/day", {
+        method: adding ? "POST" : "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(adding ? { entries: sheet.map(toBody) } : toBody(sheet[0])),
+        body: JSON.stringify(adding ? { entries } : { originalDate, entries }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
         setErr(j.error ?? `Save failed (${res.status})`);
         return;
       }
-      toast.success(
-        adding ? (sheet.length > 1 ? `${sheet.length} entries added.` : "Entry added.") : "Entry updated.",
-        "Social Media Tracker"
-      );
-      setEditing(null);
+      toast.success(adding ? "Entry added." : "Entry updated.", "Social Media Tracker");
+      setMode(null);
       router.refresh();
     } finally {
       setBusy(false);
@@ -183,7 +210,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   }
 
   async function remove(r: TrackerRow) {
-    if (!window.confirm(`Delete “${r.contentTitle}” from the tracker?`)) return;
+    if (!window.confirm(`Delete the ${platformLabel(r.platform)} line of "${r.contentTitle}" from the tracker?`)) return;
     const res = await fetch(`/api/social-posts/${r.id}`, { method: "DELETE" });
     if (res.ok) {
       toast.success("Entry deleted.", "Social Media Tracker");
@@ -194,11 +221,11 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
     }
   }
 
-  const isNew = editing === "new";
+  const isNew = mode === "new";
 
   return (
     <div className="space-y-4">
-      {canManage && editing === null && (
+      {canManage && mode === null && (
         <button
           onClick={openNew}
           className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1.5"
@@ -207,122 +234,138 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
         </button>
       )}
 
-      {canManage && editing !== null && (
-        <div className="border rounded-lg bg-card p-4 space-y-3">
+      {canManage && mode !== null && (
+        <div className="border rounded-lg bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-sm">
-              {isNew ? "Add entries" : "Edit entry"}
-              {isNew && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  one line per post — scroll sideways for all fields
-                </span>
-              )}
-            </h2>
-            <button onClick={() => setEditing(null)} className="text-muted-foreground hover:text-foreground" aria-label="Close">
+            <h2 className="font-semibold text-sm">{isNew ? "Add entry" : "Edit entry"}</h2>
+            <button onClick={() => setMode(null)} className="text-muted-foreground hover:text-foreground" aria-label="Close">
               <X className="size-4" />
             </button>
           </div>
 
-          {/* The slider: every entry is one line, the strip scrolls sideways. */}
-          <div className="overflow-x-auto pb-2">
-            <div className="min-w-max space-y-2">
-              <div className="grid gap-2 text-xs font-medium text-muted-foreground" style={GRID}>
-                {SHEET_HEAD.map((h, n) => (
-                  <div key={n}>{h}</div>
+          {/* Fixed for the whole entry. */}
+          <div className="grid grid-cols-1 sm:grid-cols-[11rem_1fr_12rem] gap-3">
+            <label className="block">
+              <div className="text-xs font-medium mb-1">Date</div>
+              <input type="date" value={head.postDate} onChange={(e) => setH("postDate", e.target.value)} className={field} />
+            </label>
+            <label className="block">
+              <div className="text-xs font-medium mb-1">Content title</div>
+              <input
+                value={head.contentTitle}
+                onChange={(e) => setH("contentTitle", e.target.value)}
+                maxLength={300}
+                placeholder="Content title"
+                className={field}
+              />
+            </label>
+            <label className="block">
+              <div className="text-xs font-medium mb-1">Type</div>
+              <SelectField value={head.contentType} onChange={(e) => setH("contentType", e.target.value)} className="w-full">
+                {POST_TYPES.map((o) => (
+                  <option key={o.key} value={o.key}>{o.label}</option>
                 ))}
-              </div>
-              {sheet.map((r, i) => (
-                <div key={i} className="grid gap-2 items-center" style={GRID}>
-                  <input
-                    type="date"
-                    aria-label="Date"
-                    value={r.postDate}
-                    onChange={(e) => setCell(i, "postDate", e.target.value)}
-                    className={cell}
-                  />
-                  <input
-                    aria-label="Content title"
-                    value={r.contentTitle}
-                    onChange={(e) => setCell(i, "contentTitle", e.target.value)}
-                    maxLength={300}
-                    placeholder="Content title"
-                    className={cell}
-                  />
-                  <SelectField aria-label="Type" value={r.contentType} onChange={(e) => setCell(i, "contentType", e.target.value)} className="w-full">
-                    {POST_TYPES.map((o) => (
-                      <option key={o.key} value={o.key}>{o.label}</option>
-                    ))}
-                  </SelectField>
-                  <SelectField aria-label="Platform" value={r.platform} onChange={(e) => setCell(i, "platform", e.target.value)} className="w-full">
-                    {PLATFORMS.map((o) => (
-                      <option key={o.key} value={o.key}>{o.label}</option>
-                    ))}
-                  </SelectField>
-                  <SelectField aria-label="Status" value={r.status} onChange={(e) => setCell(i, "status", e.target.value)} className="w-full">
-                    {POST_STATUSES.map((o) => (
-                      <option key={o.key} value={o.key}>{o.label}</option>
-                    ))}
-                  </SelectField>
-                  <input
-                    aria-label="Post link"
-                    value={r.postLink}
-                    onChange={(e) => setCell(i, "postLink", e.target.value)}
-                    placeholder="https://…"
-                    inputMode="url"
-                    className={cell}
-                  />
-                  {(["views", "reach", "likes", "followersIncrease", "leads"] as const).map((k) => (
-                    <input
-                      key={k}
-                      type="number"
-                      inputMode="numeric"
-                      aria-label={k}
-                      min={k === "followersIncrease" ? undefined : 0}
-                      value={r[k]}
-                      onChange={(e) => setCell(i, k, e.target.value)}
-                      placeholder="0"
-                      className={`${cell} tabular-nums`}
-                    />
+              </SelectField>
+            </label>
+          </div>
+
+          {isNew && dayTaken && (
+            <div
+              className={`rounded-md border p-2 text-xs ${
+                dayConflict ? "border-rose-300 bg-rose-50 text-rose-900" : "border-sky-300 bg-sky-50 text-sky-900"
+              }`}
+            >
+              {dayConflict
+                ? `${fmtDate(head.postDate)} already has an entry ("${dayTaken.contentTitle}"). Only one entry can be created per day - open that entry and use Add platform, or pick another date.`
+                : `${fmtDate(head.postDate)} already has this entry - the platforms you add here are added to it.`}
+            </div>
+          )}
+
+          {/* One line per platform; the strip slides sideways. */}
+          <div>
+            <div className="text-xs font-medium mb-2">
+              Platforms <span className="font-normal text-muted-foreground">- one line per platform, slide sideways for all fields</span>
+            </div>
+            <div className="overflow-x-auto pb-2">
+              <div className="min-w-max space-y-2">
+                <div className="grid gap-2 text-xs font-medium text-muted-foreground" style={GRID}>
+                  {LINE_HEAD.map((h, n) => (
+                    <div key={n}>{h}</div>
                   ))}
-                  {isNew && sheet.length > 1 ? (
-                    <button
-                      onClick={() => removeRow(i)}
-                      title="Remove this row"
-                      aria-label={`Remove row ${i + 1}`}
-                      className="p-1 text-muted-foreground hover:text-rose-600"
-                    >
-                      <X className="size-4" />
-                    </button>
-                  ) : (
-                    <span />
-                  )}
                 </div>
-              ))}
+                {lines.map((l, i) => {
+                  const usedElsewhere = lines.filter((_, n) => n !== i).map((x) => x.platform);
+                  return (
+                    <div key={l.id ?? `new-${i}`} className="grid gap-2 items-center" style={GRID}>
+                      <SelectField aria-label="Platform" value={l.platform} onChange={(e) => setL(i, "platform", e.target.value)} className="w-full">
+                        {PLATFORMS.filter((p) => !usedElsewhere.includes(p.key)).map((o) => (
+                          <option key={o.key} value={o.key}>{o.label}</option>
+                        ))}
+                      </SelectField>
+                      <SelectField aria-label="Status" value={l.status} onChange={(e) => setL(i, "status", e.target.value)} className="w-full">
+                        {POST_STATUSES.map((o) => (
+                          <option key={o.key} value={o.key}>{o.label}</option>
+                        ))}
+                      </SelectField>
+                      <input
+                        aria-label="Post link"
+                        value={l.postLink}
+                        onChange={(e) => setL(i, "postLink", e.target.value)}
+                        placeholder="https://..."
+                        inputMode="url"
+                        className={cell}
+                      />
+                      {(["views", "reach", "likes", "followersIncrease", "leads"] as const).map((k) => (
+                        <input
+                          key={k}
+                          type="number"
+                          inputMode="numeric"
+                          aria-label={k}
+                          min={k === "followersIncrease" ? undefined : 0}
+                          value={l[k]}
+                          onChange={(e) => setL(i, k, e.target.value)}
+                          placeholder="0"
+                          className={`${cell} tabular-nums`}
+                        />
+                      ))}
+                      {lines.length > 1 ? (
+                        <button
+                          onClick={() => removeLine(i)}
+                          title="Remove this platform"
+                          aria-label={`Remove ${platformLabel(l.platform)}`}
+                          className="p-1 text-muted-foreground hover:text-rose-600"
+                        >
+                          <X className="size-4" />
+                        </button>
+                      ) : (
+                        <span />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
-          {isNew && (
-            <button
-              onClick={addRow}
-              disabled={sheet.length >= MAX_ENTRIES_PER_SAVE}
-              className="rounded-md border border-dashed px-3 py-1.5 text-sm hover:bg-accent inline-flex items-center gap-1.5 disabled:opacity-50"
-            >
-              <Plus className="size-4" /> Add another row
-            </button>
-          )}
+          <button
+            onClick={addLine}
+            disabled={lines.length >= PLATFORMS.length}
+            className="rounded-md border border-dashed px-3 py-1.5 text-sm hover:bg-accent inline-flex items-center gap-1.5 disabled:opacity-50"
+          >
+            <Plus className="size-4" /> Add platform
+          </button>
 
           {err && <div className="border border-rose-300 bg-rose-50 text-rose-900 rounded-md p-2 text-xs">{err}</div>}
 
           <div className="flex items-center gap-2">
             <button
               onClick={save}
-              disabled={busy}
+              disabled={busy || dayConflict}
               className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1.5 disabled:opacity-50"
             >
-              {busy && <Loader2 className="size-3.5 animate-spin" />}{" "}
-              {isNew ? (sheet.length > 1 ? `Save ${sheet.length} entries` : "Save entry") : "Save changes"}
+              {busy && <Loader2 className="size-3.5 animate-spin" />} {isNew ? "Save entry" : "Save changes"}
             </button>
-            <button onClick={() => setEditing(null)} className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
+            <button onClick={() => setMode(null)} className="rounded-md border px-3 py-1.5 text-sm hover:bg-accent">
               Cancel
             </button>
           </div>
@@ -332,7 +375,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
       <div className="border rounded-lg bg-card overflow-x-auto">
         {rows.length === 0 ? (
           <div className="p-10 text-center text-sm text-muted-foreground">
-            No entries for this view yet.{canManage ? " Use “Add entry” to log your first post." : ""}
+            No entries for this view yet.{canManage ? " Use \"Add entry\" to log your first post." : ""}
           </div>
         ) : (
           <table className="w-full text-sm min-w-[900px]">
@@ -394,8 +437,8 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                     {canManage && (
                       <>
                         <button
-                          onClick={() => openEdit(r)}
-                          title="Edit"
+                          onClick={() => void openEdit(r)}
+                          title="Edit this day's entry"
                           className="p-1 text-muted-foreground hover:text-foreground"
                           aria-label={`Edit ${r.contentTitle}`}
                         >
@@ -403,9 +446,9 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                         </button>
                         <button
                           onClick={() => remove(r)}
-                          title="Delete"
+                          title="Delete this platform line"
                           className="p-1 text-muted-foreground hover:text-rose-600"
-                          aria-label={`Delete ${r.contentTitle}`}
+                          aria-label={`Delete ${r.contentTitle} on ${platformLabel(r.platform)}`}
                         >
                           <Trash2 className="size-3.5" />
                         </button>
@@ -419,7 +462,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
         )}
       </div>
 
-      {/* The entry as a card — everything about it without having to open Edit. */}
+      {/* The entry as a card - everything about it without having to open Edit. */}
       <Dialog open={viewing !== null} onOpenChange={(o) => !o && setViewing(null)}>
         <DialogContent className="max-w-xl">
           {viewing && (
@@ -477,7 +520,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                     <Trash2 className="size-3.5" /> Delete
                   </button>
                   <button
-                    onClick={() => openEdit(viewing)}
+                    onClick={() => void openEdit(viewing)}
                     className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1.5"
                   >
                     <Pencil className="size-3.5" /> Edit

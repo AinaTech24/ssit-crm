@@ -101,6 +101,55 @@ export function parseBatch(
   return { ok: true, entries };
 }
 
+// ── One entry per day ────────────────────────────────────────────────────────
+// An ENTRY is a day's content: its date, title and type are fixed, and it holds one
+// line per platform it went out on (stored as one row per platform sharing those
+// three). A day may hold only ONE entry, and a platform appears once in it.
+
+const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+type DayRow = { contentTitle: string; contentType: string; platform: string };
+
+/** Every row of one entry must carry the same date, title and type. */
+export function sameEntryError(rows: Array<{ postDate: string; contentTitle: string; contentType: string }>): string | null {
+  const first = rows[0];
+  if (!first) return null;
+  for (const r of rows) {
+    if (r.postDate !== first.postDate || !sameText(r.contentTitle, first.contentTitle) || r.contentType !== first.contentType) {
+      return "The date, content title and type are the same for every platform in an entry.";
+    }
+  }
+  return null;
+}
+
+/** The same platform twice in one entry. */
+export function duplicatePlatformError(rows: Array<{ platform: string }>): string | null {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (seen.has(r.platform)) return `${platformLabel(r.platform)} is in this entry twice - one line per platform.`;
+    seen.add(r.platform);
+  }
+  return null;
+}
+
+/**
+ * May `incoming` be saved onto a day that already holds `existing` (rows on that day
+ * that are NOT being replaced)? One entry per day:
+ *   - nothing there: fine;
+ *   - the day's entry has the same title and type and `join` is true (adding more
+ *     platforms to it): fine, as long as no platform repeats;
+ *   - anything else: refused, with a message that says what to do.
+ */
+export function dayRuleError(existing: DayRow[], incoming: DayRow[], opts: { join: boolean; date: string }): string | null {
+  if (existing.length === 0) return null;
+  const head = existing[0];
+  const same = incoming.every((r) => sameText(r.contentTitle, head.contentTitle) && r.contentType === head.contentType);
+  if (!(opts.join && same)) {
+    return `${opts.date} already has an entry ("${head.contentTitle}"). Only one entry can be created per day - open it and add the platform there, or pick another date.`;
+  }
+  return duplicatePlatformError([...existing, ...incoming]);
+}
+
 /** The numbers a row carries, for totals. */
 export interface Metrics {
   views: number;

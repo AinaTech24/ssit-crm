@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can } from "@/lib/auth/rbac";
-import { MAX_ENTRIES_PER_SAVE, PostFields, parseBatch, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
+import { MAX_ENTRIES_PER_SAVE, PostFields, dayRuleError, duplicatePlatformError, parseBatch, sameEntryError, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
 
 const good = {
   postDate: "2026-11-10",
@@ -98,5 +98,42 @@ describe("adding several entries at once", () => {
     expect(parseBatch([]).ok).toBe(false);
     expect(parseBatch(Array.from({ length: MAX_ENTRIES_PER_SAVE + 1 }, () => row)).ok).toBe(false);
     expect(parseBatch(Array.from({ length: MAX_ENTRIES_PER_SAVE }, () => row)).ok).toBe(true);
+  });
+});
+
+describe("one entry per day", () => {
+  const row = (title: string, platform: string, type = "reel") => ({ contentTitle: title, contentType: type, platform });
+  const day = "17 Nov 2026";
+
+  it("an empty day takes any entry", () => {
+    expect(dayRuleError([], [row("A", "instagram")], { join: false, date: day })).toBeNull();
+  });
+
+  it("a day that has a different entry refuses a second one, and says what to do", () => {
+    const msg = dayRuleError([row("Large cap", "instagram")], [row("Other post", "facebook")], { join: true, date: day });
+    expect(msg).toMatch(/Only one entry can be created per day/);
+    expect(msg).toContain("Large cap");
+  });
+
+  it("more platforms may join the same entry (same title and type), if the platform is new", () => {
+    expect(dayRuleError([row("Large cap", "instagram")], [row("large cap ", "facebook")], { join: true, date: day })).toBeNull();
+    expect(dayRuleError([row("Large cap", "instagram")], [row("Large cap", "instagram")], { join: true, date: day })).toMatch(/twice/);
+  });
+
+  it("when replacing an entry (join off) another entry on the target day is refused even if it looks the same", () => {
+    expect(dayRuleError([row("Large cap", "instagram")], [row("Large cap", "facebook")], { join: false, date: day })).toMatch(/already has an entry/);
+  });
+
+  it("every platform of an entry shares the date, title and type", () => {
+    const a = { postDate: "2026-11-17", contentTitle: "T", contentType: "reel" };
+    expect(sameEntryError([a, { ...a }])).toBeNull();
+    expect(sameEntryError([a, { ...a, contentTitle: "Other" }])).toMatch(/same for every platform/);
+    expect(sameEntryError([a, { ...a, postDate: "2026-11-18" }])).toMatch(/same for every platform/);
+    expect(sameEntryError([a, { ...a, contentType: "post" }])).toMatch(/same for every platform/);
+  });
+
+  it("a platform may not repeat inside an entry", () => {
+    expect(duplicatePlatformError([{ platform: "instagram" }, { platform: "facebook" }])).toBeNull();
+    expect(duplicatePlatformError([{ platform: "instagram" }, { platform: "instagram" }])).toMatch(/Instagram/);
   });
 });
