@@ -6,9 +6,14 @@
  * rows, and upsert into `scheme_nav` (platform-shared reference data). Folio /
  * transaction valuation then joins on the AMFI scheme code.
  *
- * Feed format (semicolon-delimited, grouped by AMC + category):
+ * Feed format (semicolon-delimited, grouped by AMC + category). AMFI changed the
+ * columns in 2026 - it now lists Plan and Option as their own columns:
  *
- *   Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+ *   NOW:    Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Plan;Option;Net Asset Value;Date
+ *   BEFORE: Scheme Code;ISIN Div Payout/ ISIN Growth;ISIN Div Reinvestment;Scheme Name;Net Asset Value;Date
+ *
+ * The parser reads the header row to find each column, so either layout works (and
+ * the next time AMFI moves a column it keeps working as long as the names stay).
  *
  *   Open Ended Schemes(Equity Scheme - Flexi Cap Fund)
  *
@@ -57,12 +62,58 @@ export function parseAmfiDate(s: string): string | null {
   return `${m[3]}-${mon}-${day}`;
 }
 
+/** Where each field sits in a feed row. plan/option are null in the old layout. */
+type Layout = {
+  code: number;
+  isin: number;
+  isinReinvest: number;
+  name: number;
+  plan: number | null;
+  option: number | null;
+  nav: number;
+  date: number;
+};
+const OLD_LAYOUT: Layout = { code: 0, isin: 1, isinReinvest: 2, name: 3, plan: null, option: null, nav: 4, date: 5 };
+const NEW_LAYOUT: Layout = { code: 0, isin: 1, isinReinvest: 2, name: 3, plan: 4, option: 5, nav: 6, date: 7 };
+
+/** Work out the column layout from the feed's header row; null if it is not one. */
+function layoutFromHeader(cols: string[]): Layout | null {
+  const find = (re: RegExp) => cols.findIndex((c) => re.test(c.trim()));
+  const code = find(/^scheme code/i);
+  const name = find(/^scheme name/i);
+  const nav = find(/^(net asset value|nav)/i);
+  const date = find(/^date/i);
+  if (code < 0 || name < 0 || nav < 0 || date < 0) return null;
+  const isin = find(/payout|growth/i);
+  const reinvest = find(/reinvest/i);
+  const plan = find(/^plan/i);
+  const option = find(/^option/i);
+  return {
+    code,
+    isin: isin >= 0 ? isin : 1,
+    isinReinvest: reinvest >= 0 ? reinvest : 2,
+    name,
+    plan: plan >= 0 ? plan : null,
+    option: option >= 0 ? option : null,
+    nav,
+    date,
+  };
+}
+
+/** AMFI writes "-" (or nothing) for an ISIN a scheme does not have. */
+const isinOrNull = (v: string | undefined) => {
+  const t = (v ?? "").trim();
+  return t && t !== "-" ? t : null;
+};
+
 /**
  * Parse the raw NAVAll.txt body into NavRecords. Pure + synchronous so it's
  * unit-testable without a network call.
  */
 export function parseNavAll(body: string): NavRecord[] {
   const out: NavRecord[] = [];
+  let layout: Layout = OLD_LAYOUT;
+  let layoutKnown = false;
   let currentAmc: string | null = null;
   let currentType: string | null = null;
   let currentCategory: string | null = null;
@@ -96,25 +147,43 @@ export function parseNavAll(body: string): NavRecord[] {
     }
 
     const cols = trimmed.split(";");
-    // Expect: code; isinGrowth; isinReinvest; name; nav; date
-    if (cols.length < 6) continue;
-    const schemeCode = cols[0].trim();
-    if (!/^\d+$/.test(schemeCode)) continue; // skip the header row + junk
+    // The header row tells us where each column is.
+    if (/^scheme code$/i.test(cols[0].trim())) {
+      const l = layoutFromHeader(cols);
+      if (l) {
+        layout = l;
+        layoutKnown = true;
+      }
+      continue;
+    }
+    // No header seen yet: infer the layout from the row's width.
+    if (!layoutKnown) layout = cols.length >= 8 ? NEW_LAYOUT : OLD_LAYOUT;
+    if (cols.length <= Math.max(layout.nav, layout.date)) continue;
+    const schemeCode = cols[layout.code].trim();
+    if (!/^\d+$/.test(schemeCode)) continue; // skip junk
 
-    const navRaw = cols[4].trim();
+    const navRaw = cols[layout.nav].trim();
     const nav = Number(navRaw);
     if (!isFinite(nav) || nav <= 0) continue; // "N.A." or suspended schemes
 
-    const navDate = parseAmfiDate(cols[5]);
+    const navDate = parseAmfiDate(cols[layout.date]);
     if (!navDate) continue;
+
+    // The old feed carried plan and option inside the scheme name ("Axis Bluechip
+    // Fund - Direct Plan - Growth"); the new one gives them as separate columns.
+    // Put them back so names stay unique per scheme code and the plan/option
+    // detection downstream (it reads the name) keeps working.
+    const plan = layout.plan !== null ? (cols[layout.plan] ?? "").trim() : "";
+    const option = layout.option !== null ? (cols[layout.option] ?? "").trim() : "";
+    const schemeName = [cols[layout.name].trim(), plan, option].filter(Boolean).join(" - ");
 
     out.push({
       schemeCode,
       // Primary keeps the existing fallback (some schemes list only the reinvest
       // ISIN) so folio matching on scheme_nav.isin doesn't regress.
-      isin: cols[1].trim() || cols[2].trim() || null,
-      isinReinvest: cols[2].trim() || null,
-      schemeName: cols[3].trim(),
+      isin: isinOrNull(cols[layout.isin]) ?? isinOrNull(cols[layout.isinReinvest]),
+      isinReinvest: isinOrNull(cols[layout.isinReinvest]),
+      schemeName,
       amcName: currentAmc,
       schemeType: currentType,
       schemeCategory: currentCategory,

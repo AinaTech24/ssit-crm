@@ -33,20 +33,45 @@ export async function POST() {
     //    metadata? A catalog seeded before that metadata existed has rows but no
     //    scheme_type — re-fetch so the new fields (type/category/reinvest-ISIN)
     //    backfill rather than staying NULL until the nightly NAV worker runs.
-    const { n: navCount, typed } = await withTenant(session.tenantId, async (tx) => {
+    const { n: navCount, typed, ageHours } = await withTenant(session.tenantId, async (tx) => {
       const r = await tx.execute(
-        sql`SELECT COUNT(*)::int AS n, COUNT(scheme_type)::int AS typed FROM scheme_nav`
+        sql`SELECT COUNT(*)::int AS n, COUNT(scheme_type)::int AS typed,
+                   EXTRACT(EPOCH FROM (now() - MAX(updated_at))) / 3600 AS age_hours
+              FROM scheme_nav`
       );
       const row = r.rows[0] as any;
-      return { n: Number(row?.n ?? 0), typed: Number(row?.typed ?? 0) };
+      return {
+        n: Number(row?.n ?? 0),
+        typed: Number(row?.typed ?? 0),
+        ageHours: row?.age_hours == null ? null : Number(row.age_hours),
+      };
     });
+    // The stored prices are old (the nightly refresh has not run, or AMFI changed its
+    // file so it could not read it): "Sync from AMFI" must really go to AMFI.
+    const stale = ageHours === null || ageHours > 20;
 
     // 0b. Empty OR un-enriched → fetch the live AMFI feed now (network OUTSIDE
     //     the transaction). The upsert below then backfills the new columns.
     let navRecords: NavRecord[] = [];
-    if (navCount === 0 || typed === 0) {
-      const body = await fetchNavAll();
-      navRecords = parseNavAll(body);
+    const mustFetch = navCount === 0 || typed === 0;
+    if (mustFetch || stale) {
+      let body: string;
+      try {
+        body = await fetchNavAll();
+      } catch (e) {
+        // Nothing stored to fall back on: say so. Otherwise carry on with what we have.
+        if (mustFetch) throw e;
+        body = "";
+      }
+      navRecords = body ? parseNavAll(body) : [];
+      // A feed we could not read must NOT look like a successful sync (it used to
+      // answer "0 schemes synced" when AMFI changed its columns).
+      if (navRecords.length === 0 && body && mustFetch) {
+        return NextResponse.json(
+          { error: "AMFI's scheme file was downloaded but no schemes could be read from it - its format may have changed. Nothing was changed." },
+          { status: 502 }
+        );
+      }
     }
 
     const result = await withTenant(session.tenantId, async (tx) => {
