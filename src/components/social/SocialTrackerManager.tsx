@@ -3,9 +3,10 @@
 /**
  * The Social Media Tracker: the entry list, the entry sheet and the entry card.
  *
- * An ENTRY is one day's content. Its date, title and type are entered once; under it
- * sits one line per platform it went out on (status, post link, numbers). The list
- * shows each entry once with all of its platforms, clicking it opens a card with
+ * An ENTRY is one day's content. Its date and title are entered once; under it sits
+ * one line per post it went out as - each with its own platform AND type (a Reel on
+ * Instagram, a Video on Facebook), status, post link and numbers. The list
+ * shows each entry once with all of its posts, clicking it opens a card with
  * everything about it, and Edit opens the sheet. Everyone who can open the tracker
  * can read; only people with social_tracker.manage get Add / Edit / Delete.
  */
@@ -44,13 +45,14 @@ export type TrackerRow = {
   leads: number;
 };
 
-/** The three things fixed for the whole entry. */
-type Head = { postDate: string; contentTitle: string; contentType: string };
+/** The two things fixed for the whole entry. */
+type Head = { postDate: string; contentTitle: string };
 
 /** One platform line of an entry. `id` is set for a line that is already saved. */
 type Line = {
   id?: string;
   platform: string;
+  contentType: string;
   status: string;
   postLink: string;
   views: string;
@@ -62,10 +64,11 @@ type Line = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const blankHead = (): Head => ({ postDate: today(), contentTitle: "", contentType: "post" });
+const blankHead = (): Head => ({ postDate: today(), contentTitle: "" });
 
-const blankLine = (platform: string, status = "posted"): Line => ({
+const blankLine = (platform: string, status = "posted", contentType = "post"): Line => ({
   platform,
+  contentType,
   status,
   postLink: "",
   views: "",
@@ -78,6 +81,7 @@ const blankLine = (platform: string, status = "posted"): Line => ({
 const lineFromRow = (r: TrackerRow): Line => ({
   id: r.id,
   platform: r.platform,
+  contentType: r.contentType,
   status: r.status,
   postLink: r.postLink ?? "",
   views: String(r.views),
@@ -103,9 +107,9 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 /** Column widths (px) of the sliding platform lines, plus the remove button. */
-const COLS = [150, 130, 280, 100, 100, 100, 120, 90, 36];
+const COLS = [150, 120, 130, 260, 100, 100, 100, 120, 90, 36];
 const GRID = { gridTemplateColumns: COLS.map((w) => `${w}px`).join(" ") };
-const LINE_HEAD = ["Platform", "Status", "Post link", "Views", "Reach", "Likes", "Followers +", "Leads", ""];
+const LINE_HEAD = ["Platform", "Type", "Status", "Post link", "Views", "Reach", "Likes", "Followers +", "Leads", ""];
 const cell = "w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm";
 const field = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm";
 
@@ -116,7 +120,7 @@ const toEntries = (head: Head, lines: Line[]) =>
     ...(l.id ? { id: l.id } : {}),
     postDate: head.postDate,
     contentTitle: head.contentTitle,
-    contentType: head.contentType,
+    contentType: l.contentType,
     platform: l.platform,
     status: l.status,
     postLink: l.postLink,
@@ -191,7 +195,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
       const mine = all.filter((r) => entryKey(r) === g.key);
       const use = mine.length ? mine : g.lines;
       const first = use[0];
-      setHead({ postDate: first.postDate, contentTitle: first.contentTitle, contentType: first.contentType });
+      setHead({ postDate: first.postDate, contentTitle: first.contentTitle });
       setLines(use.map(lineFromRow));
       setOriginalDate(first.postDate);
       setReturnKey(g.key);
@@ -204,7 +208,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   function addLine() {
     setLines((ls) => {
       const prev = ls[ls.length - 1];
-      return [...ls, blankLine(nextPlatform(ls.map((l) => l.platform)), prev?.status ?? "posted")];
+      return [...ls, blankLine(nextPlatform(ls.map((l) => l.platform)), prev?.status ?? "posted", prev?.contentType ?? "post")];
     });
   }
   const removeLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, n) => n !== i) : ls));
@@ -213,14 +217,24 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   // final say) - warn before the person has typed everything for nothing.
   const dayRows = mode === "new" ? rows.filter((r) => r.postDate === head.postDate) : [];
   const dayTaken = dayRows[0];
-  const dayConflict =
-    !!dayTaken &&
-    !!head.contentTitle.trim() &&
-    !(sameText(dayTaken.contentTitle, head.contentTitle) && dayTaken.contentType === head.contentType);
+  const dayConflict = !!dayTaken && !!head.contentTitle.trim() && !sameText(dayTaken.contentTitle, head.contentTitle);
+  // The same platform AND type twice in one entry (an Instagram Reel and an Instagram
+  // Post are fine; two Instagram Reels are not).
+  const seenLine = new Set<string>();
+  let dupLine: Line | null = null;
+  for (const l of lines) {
+    const k = l.platform + "|" + l.contentType;
+    if (seenLine.has(k) && !dupLine) dupLine = l;
+    seenLine.add(k);
+  }
 
   async function save() {
     if (!head.contentTitle.trim()) {
       setErr("Enter the content title.");
+      return;
+    }
+    if (dupLine) {
+      setErr(platformLabel(dupLine.platform) + " " + typeLabel(dupLine.contentType) + " is in this entry twice - pick a different platform or type.");
       return;
     }
     setBusy(true);
@@ -260,7 +274,9 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   /** Delete one platform line, or (with `all`) the whole entry. */
   async function removeLines(g: { contentTitle: string; lines: TrackerRow[] }, only?: TrackerRow) {
     const targets = only ? [only] : g.lines;
-    const what = only ? `the ${platformLabel(only.platform)} line of "${g.contentTitle}"` : `"${g.contentTitle}" and all of its platforms`;
+    const what = only
+      ? `the ${platformLabel(only.platform)} ${typeLabel(only.contentType)} line of "${g.contentTitle}"`
+      : `"${g.contentTitle}" and all of its platforms`;
     if (!window.confirm(`Delete ${what} from the tracker?`)) return;
     const results = await Promise.all(targets.map((r) => fetch(`/api/social-posts/${r.id}`, { method: "DELETE" })));
     if (results.every((r) => r.ok)) {
@@ -284,7 +300,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
       : (listGroup?.lines ?? null)
     : null;
   const card = cardLines && cardLines.length
-    ? { key: viewKey as string, postDate: cardLines[0].postDate, contentTitle: cardLines[0].contentTitle, contentType: cardLines[0].contentType, lines: cardLines }
+    ? { key: viewKey as string, postDate: cardLines[0].postDate, contentTitle: cardLines[0].contentTitle, lines: cardLines }
     : null;
 
   return (
@@ -308,7 +324,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
           </div>
 
           {/* Fixed for the whole entry. */}
-          <div className="grid grid-cols-1 sm:grid-cols-[11rem_1fr_12rem] gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-[11rem_1fr] gap-3">
             <label className="block">
               <div className="text-xs font-medium mb-1">Date</div>
               <input type="date" value={head.postDate} onChange={(e) => setH("postDate", e.target.value)} className={field} />
@@ -322,14 +338,6 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                 placeholder="Content title"
                 className={field}
               />
-            </label>
-            <label className="block">
-              <div className="text-xs font-medium mb-1">Type</div>
-              <SelectField value={head.contentType} onChange={(e) => setH("contentType", e.target.value)} className="w-full">
-                {POST_TYPES.map((o) => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
-              </SelectField>
             </label>
           </div>
 
@@ -348,7 +356,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
           {/* One line per platform; the strip slides sideways. */}
           <div>
             <div className="text-xs font-medium mb-2">
-              Platforms <span className="font-normal text-muted-foreground">- one line per platform, slide sideways for all fields</span>
+              Posts <span className="font-normal text-muted-foreground">- one line per platform and type, slide sideways for all fields</span>
             </div>
             <div className="overflow-x-auto pb-2">
               <div className="min-w-max space-y-2">
@@ -358,11 +366,15 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                   ))}
                 </div>
                 {lines.map((l, i) => {
-                  const usedElsewhere = lines.filter((_, n) => n !== i).map((x) => x.platform);
                   return (
                     <div key={l.id ?? `new-${i}`} className="grid gap-2 items-center" style={GRID}>
                       <SelectField aria-label="Platform" value={l.platform} onChange={(e) => setL(i, "platform", e.target.value)} className="w-full">
-                        {PLATFORMS.filter((p) => !usedElsewhere.includes(p.key)).map((o) => (
+                        {PLATFORMS.map((o) => (
+                          <option key={o.key} value={o.key}>{o.label}</option>
+                        ))}
+                      </SelectField>
+                      <SelectField aria-label="Type" value={l.contentType} onChange={(e) => setL(i, "contentType", e.target.value)} className="w-full">
+                        {POST_TYPES.map((o) => (
                           <option key={o.key} value={o.key}>{o.label}</option>
                         ))}
                       </SelectField>
@@ -448,8 +460,8 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
               <tr>
                 <th className="text-left px-4 py-2 font-medium">Date</th>
                 <th className="text-left py-2 font-medium">Content title</th>
-                <th className="text-left py-2 font-medium">Type</th>
                 <th className="text-left py-2 font-medium">Platform</th>
+                <th className="text-left py-2 font-medium">Type</th>
                 <th className="text-left py-2 font-medium">Status</th>
                 <th className="text-right py-2 font-medium">Views</th>
                 <th className="text-right py-2 font-medium">Reach</th>
@@ -474,7 +486,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                         if (e.key === "Enter" && e.target === e.currentTarget) open();
                       }}
                       tabIndex={0}
-                      aria-label={`Open ${g.contentTitle} on ${platformLabel(r.platform)}`}
+                      aria-label={`Open ${g.contentTitle} - ${platformLabel(r.platform)} ${typeLabel(r.contentType)}`}
                       className="align-top cursor-pointer hover:bg-accent/40 focus:bg-accent/40 outline-none"
                     >
                       {i === 0 && (
@@ -482,9 +494,8 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                           <td rowSpan={span} className="px-4 py-2 whitespace-nowrap text-muted-foreground align-top">{fmtDate(g.postDate)}</td>
                           <td rowSpan={span} className="py-2 pr-3 max-w-[20rem] align-top">
                             <div className="font-medium break-words">{g.contentTitle}</div>
-                            {multi && <div className="text-xs text-muted-foreground">{g.lines.length} platforms</div>}
+                            {multi && <div className="text-xs text-muted-foreground">{g.lines.length} posts</div>}
                           </td>
-                          <td rowSpan={span} className="py-2 pr-3 whitespace-nowrap align-top">{typeLabel(g.contentType)}</td>
                         </>
                       )}
                       <td className="py-2 whitespace-nowrap">
@@ -501,6 +512,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                           </a>
                         )}
                       </td>
+                      <td className="py-2 pr-3 whitespace-nowrap">{typeLabel(r.contentType)}</td>
                       <td className="py-2 whitespace-nowrap"><StatusChip status={r.status} /></td>
                       <td className="py-2 text-right tabular-nums">{num(r.views)}</td>
                       <td className="py-2 text-right tabular-nums">{num(r.reach)}</td>
@@ -522,7 +534,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                               onClick={() => void removeLines(g, r)}
                               title="Delete this platform line"
                               className="p-1 text-muted-foreground hover:text-rose-600"
-                              aria-label={`Delete ${g.contentTitle} on ${platformLabel(r.platform)}`}
+                              aria-label={`Delete ${g.contentTitle} - ${platformLabel(r.platform)} ${typeLabel(r.contentType)}`}
                             >
                               <Trash2 className="size-3.5" />
                             </button>
@@ -533,7 +545,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                   ))}
                   {multi && (
                     <tr onClick={open} className="cursor-pointer bg-secondary/30 text-xs font-medium">
-                      <td className="py-1.5" colSpan={2}>All platforms</td>
+                      <td className="py-1.5" colSpan={3}>All platforms</td>
                       <td className="py-1.5 text-right tabular-nums">{num(total.views)}</td>
                       <td className="py-1.5 text-right tabular-nums">{num(total.reach)}</td>
                       <td className="py-1.5 text-right tabular-nums">{num(total.likes)}</td>
@@ -565,8 +577,8 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
               <DialogHeader>
                 <DialogTitle className="break-words">{card.contentTitle}</DialogTitle>
                 <DialogDescription>
-                  {fmtDate(card.postDate)} · {typeLabel(card.contentType)}
-                  {card.lines.length > 1 ? ` · ${card.lines.length} platforms` : ""}
+                  {fmtDate(card.postDate)}
+                  {card.lines.length > 1 ? ` · ${card.lines.length} posts` : ""}
                 </DialogDescription>
               </DialogHeader>
 
@@ -575,6 +587,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                   <div key={r.id} className="rounded-lg border p-3 space-y-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm">{platformLabel(r.platform)}</span>
+                      <span className="text-xs rounded-full bg-secondary px-2 py-0.5">{typeLabel(r.contentType)}</span>
                       <StatusChip status={r.status} />
                       {r.postLink ? (
                         <a
@@ -592,7 +605,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                         <button
                           onClick={() => void removeLines(card, r)}
                           title="Delete this platform line"
-                          aria-label={`Delete ${platformLabel(r.platform)}`}
+                          aria-label={`Delete ${platformLabel(r.platform)} ${typeLabel(r.contentType)}`}
                           className="ml-auto p-1 text-muted-foreground hover:text-rose-600"
                         >
                           <Trash2 className="size-3.5" />

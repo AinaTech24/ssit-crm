@@ -14,7 +14,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { socialMediaPosts } from "@/db/schema";
-import { dayRuleError, duplicatePlatformError, parseBatch, sameEntryError } from "@/lib/social/tracker";
+import { dayRuleError, duplicateLineError, parseBatch, sameEntryError } from "@/lib/social/tracker";
 import { and, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -31,10 +31,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
-    // One ENTRY per day: every line shares the date, title and type, and a platform
-    // appears once. If the day already has an entry, only more platforms of that same
-    // entry may be added to it.
-    const bad = sameEntryError(parsed.entries) ?? duplicatePlatformError(parsed.entries);
+    // One ENTRY per day: every line shares the date and title; each line has its own
+    // platform and type (a platform + type appears once). If the day already has an
+    // entry, only more lines of that same entry may be added to it.
+    const bad = sameEntryError(parsed.entries) ?? duplicateLineError(parsed.entries);
     if (bad) return NextResponse.json({ error: bad }, { status: 400 });
     const date = parsed.entries[0].postDate;
 

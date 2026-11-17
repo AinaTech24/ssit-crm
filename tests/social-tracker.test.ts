@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can } from "@/lib/auth/rbac";
-import { MAX_ENTRIES_PER_SAVE, PostFields, dayRuleError, entryKey, groupEntries, duplicatePlatformError, parseBatch, sameEntryError, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
+import { MAX_ENTRIES_PER_SAVE, PostFields, dayRuleError, entryKey, groupEntries, duplicateLineError, parseBatch, sameEntryError, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
 
 const good = {
   postDate: "2026-11-10",
@@ -115,26 +115,32 @@ describe("one entry per day", () => {
     expect(msg).toContain("Large cap");
   });
 
-  it("more platforms may join the same entry (same title and type), if the platform is new", () => {
-    expect(dayRuleError([row("Large cap", "instagram")], [row("large cap ", "facebook")], { join: true, date: day })).toBeNull();
-    expect(dayRuleError([row("Large cap", "instagram")], [row("Large cap", "instagram")], { join: true, date: day })).toMatch(/twice/);
+  it("more posts may join the same entry (same title), each with its own type", () => {
+    // Instagram Reel + Facebook Video + an Instagram Post, all one day's entry.
+    expect(dayRuleError([row("Large cap", "instagram", "reel")], [row("large cap ", "facebook", "video")], { join: true, date: day })).toBeNull();
+    expect(dayRuleError([row("Large cap", "instagram", "reel")], [row("Large cap", "instagram", "post")], { join: true, date: day })).toBeNull();
+  });
+
+  it("the same platform with the same type twice is refused", () => {
+    expect(dayRuleError([row("Large cap", "instagram", "reel")], [row("Large cap", "instagram", "reel")], { join: true, date: day })).toMatch(/twice/);
   });
 
   it("when replacing an entry (join off) another entry on the target day is refused even if it looks the same", () => {
     expect(dayRuleError([row("Large cap", "instagram")], [row("Large cap", "facebook")], { join: false, date: day })).toMatch(/already has an entry/);
   });
 
-  it("every platform of an entry shares the date, title and type", () => {
-    const a = { postDate: "2026-11-17", contentTitle: "T", contentType: "reel" };
+  it("every post of an entry shares the date and title - the type may differ", () => {
+    const a = { postDate: "2026-11-17", contentTitle: "T" };
     expect(sameEntryError([a, { ...a }])).toBeNull();
+    expect(sameEntryError([a, { ...a, contentTitle: "t " }])).toBeNull();
     expect(sameEntryError([a, { ...a, contentTitle: "Other" }])).toMatch(/same for every platform/);
     expect(sameEntryError([a, { ...a, postDate: "2026-11-18" }])).toMatch(/same for every platform/);
-    expect(sameEntryError([a, { ...a, contentType: "post" }])).toMatch(/same for every platform/);
   });
 
-  it("a platform may not repeat inside an entry", () => {
-    expect(duplicatePlatformError([{ platform: "instagram" }, { platform: "facebook" }])).toBeNull();
-    expect(duplicatePlatformError([{ platform: "instagram" }, { platform: "instagram" }])).toMatch(/Instagram/);
+  it("a platform may repeat with a different type, but not with the same one", () => {
+    expect(duplicateLineError([{ platform: "instagram", contentType: "reel" }, { platform: "facebook", contentType: "reel" }])).toBeNull();
+    expect(duplicateLineError([{ platform: "instagram", contentType: "reel" }, { platform: "instagram", contentType: "post" }])).toBeNull();
+    expect(duplicateLineError([{ platform: "instagram", contentType: "reel" }, { platform: "instagram", contentType: "reel" }])).toMatch(/Instagram Reel/);
   });
 });
 
@@ -147,14 +153,14 @@ describe("grouping rows into entries", () => {
     platform,
   });
 
-  it("shows one entry per day with every platform it went out on", () => {
+  it("shows one entry per day with every post it went out as, whatever each one's type", () => {
     const g = groupEntries([
-      r("1", "2026-11-18", "Demo Task", "youtube"),
-      r("2", "2026-11-18", "Demo Task", "linkedin"),
+      r("1", "2026-11-18", "Demo Task", "youtube", "reel"),
+      r("2", "2026-11-18", "Demo Task", "facebook", "video"),
       r("3", "2026-11-17", "Large cap", "instagram"),
     ]);
     expect(g).toHaveLength(2);
-    expect(g[0].lines.map((l) => l.platform)).toEqual(["youtube", "linkedin"]);
+    expect(g[0].lines.map((l) => `${l.platform}:${l.contentType}`)).toEqual(["youtube:reel", "facebook:video"]);
     expect(g[1].lines).toHaveLength(1);
   });
 
@@ -164,8 +170,8 @@ describe("grouping rows into entries", () => {
     expect(g[0].lines.map((l) => l.id)).toEqual(["1", "3"]);
   });
 
-  it("treats the title without regard to case or stray spaces, and a different type as another entry", () => {
+  it("matches the title without regard to case or stray spaces", () => {
     expect(entryKey(r("1", "2026-11-18", " Demo Task ", "x"))).toBe(entryKey(r("2", "2026-11-18", "demo task", "y")));
-    expect(entryKey(r("1", "2026-11-18", "Demo", "x"))).not.toBe(entryKey(r("2", "2026-11-18", "Demo", "x", "post")));
+    expect(entryKey(r("1", "2026-11-18", "Demo", "x"))).not.toBe(entryKey(r("2", "2026-11-19", "Demo", "x")));
   });
 });

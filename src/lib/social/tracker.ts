@@ -102,32 +102,35 @@ export function parseBatch(
 }
 
 // ── One entry per day ────────────────────────────────────────────────────────
-// An ENTRY is a day's content: its date, title and type are fixed, and it holds one
-// line per platform it went out on (stored as one row per platform sharing those
-// three). A day may hold only ONE entry, and a platform appears once in it.
+// An ENTRY is a day's content: its date and title are fixed, and it holds one line
+// per post it went out as - each with its own platform AND type (a Reel on Instagram,
+// a Video on Facebook), stored as one row per line sharing the date and title. A day
+// may hold only ONE entry; the same platform may appear twice only with different
+// types (an Instagram Post and an Instagram Reel).
 
 const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 type DayRow = { contentTitle: string; contentType: string; platform: string };
 
-/** Every row of one entry must carry the same date, title and type. */
-export function sameEntryError(rows: Array<{ postDate: string; contentTitle: string; contentType: string }>): string | null {
+/** Every row of one entry must carry the same date and title. */
+export function sameEntryError(rows: Array<{ postDate: string; contentTitle: string }>): string | null {
   const first = rows[0];
   if (!first) return null;
   for (const r of rows) {
-    if (r.postDate !== first.postDate || !sameText(r.contentTitle, first.contentTitle) || r.contentType !== first.contentType) {
-      return "The date, content title and type are the same for every platform in an entry.";
+    if (r.postDate !== first.postDate || !sameText(r.contentTitle, first.contentTitle)) {
+      return "The date and content title are the same for every platform in an entry.";
     }
   }
   return null;
 }
 
-/** The same platform twice in one entry. */
-export function duplicatePlatformError(rows: Array<{ platform: string }>): string | null {
+/** The same platform AND type twice in one entry. */
+export function duplicateLineError(rows: Array<{ platform: string; contentType: string }>): string | null {
   const seen = new Set<string>();
   for (const r of rows) {
-    if (seen.has(r.platform)) return `${platformLabel(r.platform)} is in this entry twice - one line per platform.`;
-    seen.add(r.platform);
+    const k = `${r.platform}|${r.contentType}`;
+    if (seen.has(k)) return `${platformLabel(r.platform)} ${typeLabel(r.contentType)} is in this entry twice - pick a different platform or type.`;
+    seen.add(k);
   }
   return null;
 }
@@ -136,30 +139,29 @@ export function duplicatePlatformError(rows: Array<{ platform: string }>): strin
  * May `incoming` be saved onto a day that already holds `existing` (rows on that day
  * that are NOT being replaced)? One entry per day:
  *   - nothing there: fine;
- *   - the day's entry has the same title and type and `join` is true (adding more
- *     platforms to it): fine, as long as no platform repeats;
+ *   - the day's entry has the same title and `join` is true (adding more lines to
+ *     it): fine, as long as no platform + type repeats;
  *   - anything else: refused, with a message that says what to do.
  */
 export function dayRuleError(existing: DayRow[], incoming: DayRow[], opts: { join: boolean; date: string }): string | null {
   if (existing.length === 0) return null;
   const head = existing[0];
-  const same = incoming.every((r) => sameText(r.contentTitle, head.contentTitle) && r.contentType === head.contentType);
+  const same = incoming.every((r) => sameText(r.contentTitle, head.contentTitle));
   if (!(opts.join && same)) {
     return `${opts.date} already has an entry ("${head.contentTitle}"). Only one entry can be created per day - open it and add the platform there, or pick another date.`;
   }
-  return duplicatePlatformError([...existing, ...incoming]);
+  return duplicateLineError([...existing, ...incoming]);
 }
 
-/** Identifies an entry: its day plus its title and type. */
-export const entryKey = (r: { postDate: string; contentTitle: string; contentType: string }) =>
-  `${r.postDate}|${r.contentTitle.trim().toLowerCase()}|${r.contentType}`;
+/** Identifies an entry: its day plus its title. */
+export const entryKey = (r: { postDate: string; contentTitle: string }) =>
+  `${r.postDate}|${r.contentTitle.trim().toLowerCase()}`;
 
 export type EntryGroup<R> = {
   key: string;
   postDate: string;
   contentTitle: string;
-  contentType: string;
-  /** One row per platform the entry went out on, in the order given. */
+  /** One row per post (platform + type) the entry went out as, in the order given. */
   lines: R[];
 };
 
@@ -167,7 +169,7 @@ export type EntryGroup<R> = {
  * Fold the flat rows (one per platform) into entries, so a day's content shows as
  * ONE entry listing every platform. Order follows the first row of each entry.
  */
-export function groupEntries<R extends { postDate: string; contentTitle: string; contentType: string }>(
+export function groupEntries<R extends { postDate: string; contentTitle: string }>(
   rows: R[]
 ): EntryGroup<R>[] {
   const out = new Map<string, EntryGroup<R>>();
@@ -175,7 +177,7 @@ export function groupEntries<R extends { postDate: string; contentTitle: string;
     const key = entryKey(r);
     const g = out.get(key);
     if (g) g.lines.push(r);
-    else out.set(key, { key, postDate: r.postDate, contentTitle: r.contentTitle, contentType: r.contentType, lines: [r] });
+    else out.set(key, { key, postDate: r.postDate, contentTitle: r.contentTitle, lines: [r] });
   }
   return [...out.values()];
 }

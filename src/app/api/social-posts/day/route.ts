@@ -21,7 +21,7 @@ import { can, require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { socialMediaPosts } from "@/db/schema";
 import { isIsoDate } from "@/lib/dhandho/schedule";
-import { dayRuleError, duplicatePlatformError, parseBatch, sameEntryError } from "@/lib/social/tracker";
+import { dayRuleError, duplicateLineError, parseBatch, sameEntryError } from "@/lib/social/tracker";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +70,7 @@ export async function PUT(req: NextRequest) {
     const ids = body.data.entries.map((e) => (typeof e.id === "string" && Uuid.safeParse(e.id).success ? e.id : null));
     const lines = parsed.entries;
 
-    const bad = sameEntryError(lines) ?? duplicatePlatformError(lines);
+    const bad = sameEntryError(lines) ?? duplicateLineError(lines);
     if (bad) return NextResponse.json({ error: bad }, { status: 400 });
     const newDate = lines[0].postDate;
 
