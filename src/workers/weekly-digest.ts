@@ -16,6 +16,7 @@
 import { sql } from "drizzle-orm";
 import { withSystem, withTenant } from "@/db/client";
 import { createNotification } from "@/lib/notifications/create";
+import { scopeOwnersOfUser } from "@/lib/notifications/branch-recipients";
 import { resolveEmailSender, type EmailSender } from "@/lib/comms/sender";
 import { emailAdapter } from "@/lib/comms/adapters/resend";
 import { captureError } from "@/lib/observability/capture";
@@ -170,14 +171,22 @@ async function digestTenant(tenantId: string, istDate: string): Promise<{ sent: 
     tenantId,
     async (tx) => {
       const usersRes = await tx.execute(sql`
-        SELECT id, name, email
+        SELECT id, name, email, roles, branch_id
         FROM users
         WHERE status = 'active'
           AND roles && ARRAY['owner','branch_head']::text[]
         ORDER BY name ASC
         LIMIT ${MAX_USERS_PER_TENANT}
       `);
-      const users = usersRes.rows as Array<{ id: string; name: string; email: string }>;
+      // The digest is FIRM-WIDE numbers (every branch's business, leads, requests),
+      // so it goes only to people whose view is the whole firm. A branch head used
+      // to get it too — i.e. another branch's figures.
+      const candidates = usersRes.rows as Array<{ id: string; name: string; email: string; roles: string[]; branch_id: string | null }>;
+      const users: Array<{ id: string; name: string; email: string }> = [];
+      for (const c of candidates) {
+        const owners = await scopeOwnersOfUser(tx, tenantId, { id: String(c.id), roles: c.roles ?? [], branchId: c.branch_id });
+        if (owners === null) users.push(c);
+      }
       if (!users.length) return;
 
       const doneRes = await tx.execute(sql`

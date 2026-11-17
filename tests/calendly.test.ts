@@ -96,11 +96,12 @@ describe("bookOnCalendly", () => {
     if (out.status === "failed") expect(out.reason).toMatch(/not available/);
   });
 
-  it("explains a plan restriction", async () => {
+  it("passes on Calendly's own reason for a refusal, without claiming a paid plan is needed", async () => {
     const { fn } = fakeFetch({ "/invitees": { status: 403, json: { message: "Please upgrade" } } });
     const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "A", inviteeEmail: "a@x.com" }, fn);
-    if (out.status === "failed") expect(out.reason).toMatch(/paid Calendly plan/);
-    else throw new Error("expected failed");
+    if (out.status !== "failed") throw new Error("expected failed");
+    expect(out.reason).toContain("Please upgrade");
+    expect(out.reason).not.toMatch(/paid/i);
   });
 
   it("survives a network error", async () => {

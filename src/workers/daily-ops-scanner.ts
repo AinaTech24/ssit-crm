@@ -50,6 +50,7 @@
 
 import { eq, sql } from "drizzle-orm";
 import { notifyGiftAnniversary } from "@/lib/gifts/notify";
+import { unitOfRecord, usersWithRolesInUnit } from "@/lib/notifications/branch-recipients";
 import { withSystem, withTenant } from "@/db/client";
 import { readSoftDeleteRetentionDays } from "@/lib/platform/retention";
 import { recomputeAllHealth } from "@/lib/investors/health-persist";
@@ -1163,7 +1164,7 @@ export async function scanTenant(tenantId: string): Promise<ScanResult> {
       // notifies owner/branch-head + assignee, and opens an urgent task.
       const srRows = await tx.execute(sql`
         SELECT sr.id, sr.ticket_no, sr.type, sr.assigned_to_user_id, sr.investor_id,
-               i.name AS investor_name,
+               i.name AS investor_name, i.rm_id AS investor_rm_id, i.branch_id AS investor_branch_id,
                (sr.sla_resolution_at < now()) AS resolution_breached,
                (sr.responded_at IS NULL AND sr.sla_response_at < now()) AS response_breached
         FROM service_requests sr
@@ -1176,12 +1177,16 @@ export async function scanTenant(tenantId: string): Promise<ScanResult> {
       `);
       result.srEscalated = srRows.rows.length;
       if (srRows.rows.length) {
-        const leads = await tx.execute(sql`
-          SELECT id FROM users WHERE tenant_id = ${tenantId}::uuid AND roles && ARRAY['owner','branch_head']::text[]
-        `);
-        const leadIds = (leads.rows as Array<{ id: string }>).map((u) => u.id);
         const nowIso = new Date().toISOString();
         for (const sr of srRows.rows as any[]) {
+          // The firm admin plus the head(s) of the BRANCH this client belongs to —
+          // not every branch head in the firm.
+          const unit = await unitOfRecord(tx, tenantId, {
+            branch_id: sr.investor_branch_id,
+            rm_id: sr.investor_rm_id,
+            assigned_to_user_id: sr.assigned_to_user_id,
+          });
+          const leadIds = await usersWithRolesInUnit(tx, tenantId, ["owner", "branch_head"], unit);
           const why = sr.resolution_breached ? "TAT (resolution) breached" : "first response overdue";
           // Flip to escalated + stamp + append a timeline entry (idempotent: escalated_at was NULL).
           await tx.execute(sql`

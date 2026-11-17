@@ -29,6 +29,7 @@
 
 import { sql } from "drizzle-orm";
 import { withSystem, withTenant } from "@/db/client";
+import { unitOfRecord, usersWithRolesInUnit } from "@/lib/notifications/branch-recipients";
 
 export interface ReconResult {
   tenantId: string;
@@ -187,7 +188,7 @@ export async function reconcileTenant(
       // urgent, emit an event, and stamp escalated_at so we notify once.
       const overdue = await tx.execute(sql`
         SELECT r.id, r.investor_id, r.assigned_rm_id, r.rejection_amount, r.scheme_name,
-               i.name AS investor_name
+               i.name AS investor_name, i.rm_id AS investor_rm_id, i.branch_id AS investor_branch_id
         FROM sip_rejections r
         JOIN investors i ON i.id = r.investor_id
         WHERE r.recovery_status IN ('pending', 'client_contacted', 'bank_issue', 'mandate_issue')
@@ -202,18 +203,20 @@ export async function reconcileTenant(
         rejection_amount: string;
         scheme_name: string | null;
         investor_name: string | null;
+        investor_rm_id: string | null;
+        investor_branch_id: string | null;
       }>;
 
       if (overdueRows.length) {
-        // Escalation audience: owners + branch heads of the tenant.
-        const leads = await tx.execute(sql`
-          SELECT id FROM users
-          WHERE tenant_id = ${tenantId}::uuid
-            AND roles && ARRAY['owner', 'branch_head']::text[]
-        `);
-        const leadIds = (leads.rows as Array<{ id: string }>).map((u) => u.id);
-
         for (const r of overdueRows) {
+          // Escalation audience: the firm admin + the head(s) of the branch this
+          // client belongs to (not every branch head), plus the assigned RM.
+          const unit = await unitOfRecord(tx, tenantId, {
+            branch_id: r.investor_branch_id,
+            rm_id: r.investor_rm_id,
+            assigned_to_user_id: r.assigned_rm_id,
+          });
+          const leadIds = await usersWithRolesInUnit(tx, tenantId, ["owner", "branch_head"], unit);
           const recipients = new Set<string>(leadIds);
           if (r.assigned_rm_id) recipients.add(r.assigned_rm_id);
           const amount = "₹" + Number(r.rejection_amount).toLocaleString("en-IN");

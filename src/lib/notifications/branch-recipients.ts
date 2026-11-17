@@ -19,6 +19,8 @@
 
 import { sql } from "drizzle-orm";
 import { ALL_BRANCH_ROLES } from "@/lib/auth/data-scope";
+import type { SessionUser } from "@/lib/auth/jwt";
+import { resolveQueueOwners } from "@/lib/scope/view-filter";
 
 export type Unit = { branchId: string | null; deskId: string | null };
 
@@ -127,4 +129,27 @@ export async function usersWithRolesInUnit(
        ${narrow}
   `);
   return (r.rows as Array<{ id: string }>).map((x) => String(x.id));
+}
+
+/**
+ * Whose records a scheduled digest for this user may count — the same wall the
+ * Command Center page applies when they open it: null = the whole firm (owner,
+ * back office, ops), otherwise the people in their own branch / desk (a branch
+ * head) or just themselves (an RM). A background job has no session, so this builds
+ * the little of one the wall needs from the user row.
+ */
+export async function scopeOwnersOfUser(
+  tx: any,
+  tenantId: string,
+  u: { id: string; roles: string[]; branchId?: string | null }
+): Promise<string[] | null> {
+  const session = {
+    userId: u.id,
+    tenantId,
+    roles: u.roles ?? [],
+    branchId: u.branchId ?? undefined,
+    email: "",
+    name: "",
+  } as SessionUser;
+  return resolveQueueOwners(tx, session, {} as Parameters<typeof resolveQueueOwners>[2]);
 }

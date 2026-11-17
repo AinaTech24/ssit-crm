@@ -9,7 +9,6 @@
  *     rejects anything outside the host's availability or already taken);
  *   - the length is the event type's, not the CRM meeting's;
  *   - Calendly emails the invitee its own confirmation;
- *   - it needs a Calendly plan that includes API access.
  *
  * Each user connects their OWN Calendly (personal access token + booking link),
  * stored encrypted in tenant_integrations (provider "calendly", user-level row).
@@ -70,7 +69,7 @@ function explain(status: number, json: any): string {
     "";
   if (status === 401) return "Calendly rejected the access token — reconnect Calendly in My profile.";
   if (status === 403) {
-    return `Calendly refused this request${detail ? ` (${detail})` : ""} — booking through the API needs a paid Calendly plan.`;
+    return `Calendly refused this request${detail ? ` (${detail})` : ""} — check the token was created in Calendly (Integrations → API & Webhooks) and reconnect.`;
   }
   if (status === 404) return "Calendly could not find that event type — reconnect Calendly in My profile.";
   if (status === 429) return "Calendly is rate-limiting requests — try again in a minute.";

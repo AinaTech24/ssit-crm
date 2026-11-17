@@ -105,7 +105,7 @@ export function CalendlyCard() {
           <p className="text-xs text-muted-foreground">
             Connect your Calendly and every meeting you schedule here is booked on it too. In Calendly open
             Integrations → API &amp; Webhooks → Personal access tokens, create a token and paste it below with
-            your booking link. Booking through the API needs a paid Calendly plan.
+            your booking link.
           </p>
           <label className="block">
             <div className="text-xs font-medium mb-1">Booking link</div>

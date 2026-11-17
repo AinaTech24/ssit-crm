@@ -25,11 +25,11 @@ import { sql } from "drizzle-orm";
 import { withSystem, withTenant } from "@/db/client";
 import { buildCommandQueue, type ActionGroup } from "@/lib/command-center/queue";
 import { createNotification } from "@/lib/notifications/create";
+import { scopeOwnersOfUser } from "@/lib/notifications/branch-recipients";
 import { resolveEmailSender, type EmailSender } from "@/lib/comms/sender";
 import { emailAdapter } from "@/lib/comms/adapters/resend";
 import { captureError } from "@/lib/observability/capture";
 
-const FIRM_WIDE_ROLES = new Set(["owner", "branch_head"]);
 const MAX_USERS_PER_TENANT = 50;
 const MAX_GROUPS_IN_DIGEST = 4;
 
@@ -117,14 +117,14 @@ async function briefTenant(tenantId: string, istDate: string): Promise<{ sent: n
       // Active working users (owner / branch_head / rm). Investor/platform
       // roles never get a briefing; capped so a mega-tenant can't stall the run.
       const usersRes = await tx.execute(sql`
-        SELECT id, name, email, roles
+        SELECT id, name, email, roles, branch_id
         FROM users
         WHERE status = 'active'
           AND roles && ARRAY['owner','branch_head','rm']::text[]
         ORDER BY name ASC
         LIMIT ${MAX_USERS_PER_TENANT}
       `);
-      const users = usersRes.rows as Array<{ id: string; name: string; email: string; roles: string[] }>;
+      const users = usersRes.rows as Array<{ id: string; name: string; email: string; roles: string[]; branch_id: string | null }>;
       if (!users.length) return;
 
       // Dedupe — users already briefed today (IST). One query for the tenant.
@@ -141,11 +141,21 @@ async function briefTenant(tenantId: string, istDate: string): Promise<{ sent: n
           continue;
         }
 
-        // Same call shape as the Command Center page: firm-wide for owners /
-        // branch heads, own-book for everyone else.
-        const roles = Array.isArray(user.roles) ? user.roles : [];
-        const firmWide = roles.some((r) => FIRM_WIDE_ROLES.has(r));
-        const groups = await buildCommandQueue(tx as any, { userId: String(user.id), firmWide });
+        // Same wall as the Command Center page: the whole firm only for the firm
+        // admin / back office / ops; a branch head's briefing counts THEIR branch
+        // (it used to count every branch, so Baroda's overdue work reached the
+        // Wealth branch head); an RM's counts their own book.
+        const owners = await scopeOwnersOfUser(tx, tenantId, {
+          id: String(user.id),
+          roles: Array.isArray(user.roles) ? user.roles : [],
+          branchId: user.branch_id,
+        });
+        const groups = await buildCommandQueue(
+          tx as any,
+          owners === null
+            ? { userId: String(user.id), firmWide: true }
+            : { userId: String(user.id), firmWide: false, userIds: owners }
+        );
         const totalCount = groups.reduce((n, g) => n + g.count, 0);
         if (totalCount === 0) {
           skipped++; // all clear — no noise
