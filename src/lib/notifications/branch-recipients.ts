@@ -113,10 +113,16 @@ export async function usersWithRolesInUnit(
   const roleList = sql`ARRAY[${sql.join(wanted.map((r) => sql`${r}`), sql`, `)}]::text[]`;
   const firmWide = sql`ARRAY[${sql.join(ALL_BRANCH_ROLES.map((r) => sql`${r}`), sql`, `)}]::text[]`;
 
+  // A desk IS the branch for a firm that runs its structure at desk level (every
+  // user sits under ONE registered branch, e.g. "Head Office", and the desks —
+  // Wealth, Vadodara, Surat — are the real branches). So someone who is on a desk
+  // is matched by their DESK only: matching on the shared branch too would match
+  // every head in the firm. Only someone with no desk falls back to the branch.
+  // This is the same rule the data wall applies (lib/auth/data-scope.ts).
   const inUnit: ReturnType<typeof sql>[] = [];
   if (hasUnit(unit)) {
     if (unit.deskId) inUnit.push(sql`desk_id = ${unit.deskId}::uuid`);
-    if (unit.branchId) inUnit.push(sql`branch_id = ${unit.branchId}::uuid`);
+    if (unit.branchId) inUnit.push(sql`(desk_id IS NULL AND branch_id = ${unit.branchId}::uuid)`);
   }
   const narrow = inUnit.length ? sql` AND (roles && ${firmWide} OR ${sql.join(inUnit, sql` OR `)})` : sql``;
 

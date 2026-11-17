@@ -45,3 +45,33 @@ describe("branch-wise recipients", () => {
     expect(await unitOfRecord(tx, "t", null)).toBeNull();
   });
 });
+
+describe("a firm run by desks under one shared branch", () => {
+  // Every user sits under "Head Office"; the desks are the real branches. Matching a
+  // desk member on the shared branch as well told every head in the firm.
+  it("matches a person on a desk by the desk, and falls back to the branch only for people with no desk", async () => {
+    // Flatten the drizzle query (nested fragments included) into plain text.
+    const flat = (c: any): string =>
+      typeof c === "string"
+        ? c
+        : Array.isArray(c)
+          ? c.map(flat).join("")
+          : c?.queryChunks
+            ? flat(c.queryChunks)
+            : c?.value !== undefined
+              ? flat(c.value)
+              : "?";
+    let captured = "";
+    const tx = {
+      execute: async (q: any) => {
+        captured = flat(q);
+        return { rows: [] };
+      },
+    };
+    await usersWithRolesInUnit(tx, "t", ["branch_head"], { branchId: "head-office", deskId: "wealth" });
+    const q = captured.replace(/\s+/g, " ");
+    expect(q).toContain("desk_id =");
+    expect(q).toContain("desk_id IS NULL AND branch_id =");
+    expect(q).not.toMatch(/OR branch_id =/);
+  });
+});

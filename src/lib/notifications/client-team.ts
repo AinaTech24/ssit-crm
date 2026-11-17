@@ -63,6 +63,9 @@ export async function notifyClientTeam(
     const units: { branch: string | null; desk: string | null }[] = [{ branch: inv.rm_branch, desk: inv.rm_desk }];
     if (actor) units.push({ branch: actor.branch_id, desk: actor.desk_id });
 
+    // A head on a desk is matched by that desk alone. Matching the shared branch as
+    // well ("Head Office", which every user sits under) told every branch head about
+    // every branch's clients.
     for (const u of units) {
       if (!u.branch && !u.desk) continue;
       const heads = await tx.execute(sql`
@@ -72,7 +75,7 @@ export async function notifyClientTeam(
            AND 'branch_head' = ANY(roles)
            AND (
              (desk_id IS NOT NULL AND desk_id IS NOT DISTINCT FROM ${u.desk}::uuid)
-             OR branch_id IS NOT DISTINCT FROM ${u.branch}::uuid
+             OR (desk_id IS NULL AND branch_id IS NOT DISTINCT FROM ${u.branch}::uuid)
            )
       `);
       for (const h of heads.rows as { id: string }[]) to.add(h.id);
