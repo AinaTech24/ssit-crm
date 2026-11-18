@@ -2,7 +2,7 @@ import { handleApiError } from "@/lib/api/error-handler";
 /**
  * GET /api/proposals/[id]/pdf
  *
- * The proposal PDF, rendered by the SAME renderProposalPdf() the "Send via
+ * The proposal PDF, rendered by the SAME renderClientProposalPdf() the "Send via
  * email" attachment uses — so the downloaded file is byte-for-byte the document
  * the client receives. ?download=1 forces a save dialog (default: inline).
  */
@@ -13,7 +13,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, can } from "@/lib/auth/rbac";
 import { proposals, tenants } from "@/db/schema";
-import { renderProposalPdf } from "@/lib/proposal/proposal-pdf";
+import { brandFromTenant, renderClientProposalPdf } from "@/lib/proposal/render";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,18 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       if (!p) return null;
       if (!seesAll && p.preparedByUserId !== session.userId) return null;
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1);
-      const pdf = await renderProposalPdf({
-        proposal: p as any,
-        brand: {
-          displayName: (t as any)?.displayName,
-          legalName: (t as any)?.legalName,
-          arn: (t as any)?.arn,
-          euin: (t as any)?.euin,
-          primaryColor: (t as any)?.primaryColor,
-          secondaryColor: (t as any)?.secondaryColor,
-          logoUrl: (t as any)?.logoUrl,
-        },
-      });
+      const pdf = await renderClientProposalPdf({ proposal: p as any, brand: brandFromTenant(t) });
       return { pdf, num: p.proposalNumber ?? id };
     });
 
