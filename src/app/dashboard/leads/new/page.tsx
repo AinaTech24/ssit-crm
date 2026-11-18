@@ -60,7 +60,6 @@ export default function NewLeadPage() {
   // Documents picked before the lead exists: held here and filed against the lead
   // the moment it has been created.
   const [files, setFiles] = useState<File[]>([]);
-  const [canDocs, setCanDocs] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const docInput = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
@@ -123,7 +122,6 @@ export default function NewLeadPage() {
         const meId = j?.user?.id;
         if (alive && meId) setForm((f) => (f.ownerId ? f : { ...f, ownerId: meId }));
         if (alive) setRaSales(Array.isArray(j?.user?.roles) && j.user.roles.includes("ra_sales"));
-        if (alive) setCanDocs(Array.isArray(j?.capabilities) && j.capabilities.includes("document.upload"));
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -271,30 +269,40 @@ export default function NewLeadPage() {
     const failed: string[] = [];
     for (const file of files) {
       try {
-        const fd = new FormData();
-        fd.append("file", file);
-        fd.append("kind", "kyc");
-        fd.append("docType", "kyc");
-        if (form.name) fd.append("clientName", form.name);
-        const up = await fetch("/api/compliance/upload", { method: "POST", body: fd })
-          .then((r) => r.json())
-          .catch(() => ({}));
-        if (!up?.key) {
-          failed.push(file.name);
-          continue;
+        if (investorId) {
+          // The lead became a client on the spot: file it on the client (the client's
+          // route takes a stored file's key, so store it first).
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("kind", "kyc");
+          fd.append("docType", "kyc");
+          if (form.name) fd.append("clientName", form.name);
+          const up = await fetch("/api/compliance/upload", { method: "POST", body: fd })
+            .then((r) => r.json())
+            .catch(() => ({}));
+          if (!up?.key) {
+            failed.push(file.name);
+            continue;
+          }
+          const reg = await fetch(`/api/investors/${investorId}/documents`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              name: file.name,
+              storageKey: up.key,
+              mimeType: up.contentType ?? (file.type || "application/octet-stream"),
+              sizeBytes: up.sizeBytes ?? file.size,
+              category: "kyd",
+            }),
+          });
+          if (!reg.ok) failed.push(file.name);
+        } else {
+          // One call: stored and filed against the lead.
+          const fd = new FormData();
+          fd.append("file", file);
+          const reg = await fetch(`/api/leads/${leadId}/documents`, { method: "POST", body: fd });
+          if (!reg.ok) failed.push(file.name);
         }
-        const reg = await fetch(investorId ? `/api/investors/${investorId}/documents` : `/api/leads/${leadId}/documents`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: file.name,
-            storageKey: up.key,
-            mimeType: up.contentType ?? (file.type || "application/octet-stream"),
-            sizeBytes: up.sizeBytes ?? file.size,
-            ...(investorId ? { category: "kyd" } : {}),
-          }),
-        });
-        if (!reg.ok) failed.push(file.name);
       } catch {
         failed.push(file.name);
       }
@@ -718,8 +726,7 @@ export default function NewLeadPage() {
 
         {/* Documents - optional, picked now and filed against the lead as soon as it
             is created; they move to the client when the lead is converted. */}
-        {canDocs && (
-          <div className="sm:col-span-2">
+        <div className="sm:col-span-2">
             <div className="text-xs font-medium mb-1">
               Documents
               <span className="ml-1 text-[10px] text-muted-foreground font-normal">· optional, e.g. PAN, Aadhaar, cheque</span>
@@ -775,8 +782,7 @@ export default function NewLeadPage() {
                 ))}
               </ul>
             )}
-          </div>
-        )}
+        </div>
 
         {/* Everything below is optional detail — hidden until asked for, so a
             lead can be captured mid-phone-call in four fields. */}

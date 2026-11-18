@@ -401,11 +401,10 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
           leadId={l.id}
           leadName={l.name}
           converted={!!(l as any).convertedInvestorId}
-          canView={can(session.roles, "document.view", session.permissions)}
+          canView
           canUpload={
-            can(session.roles, "document.upload", session.permissions) &&
-            (can(session.roles, "lead.edit.all", session.permissions) ||
-              can(session.roles, "lead.edit.assigned", session.permissions))
+            can(session.roles, "lead.edit.all", session.permissions) ||
+            can(session.roles, "lead.edit.assigned", session.permissions)
           }
         />
       </RelatedListSection>

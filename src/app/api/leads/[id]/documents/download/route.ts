@@ -11,7 +11,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
 import { complianceDocuments } from "@/db/schema";
 import { presignedGetUrl } from "@/lib/storage/s3";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
@@ -37,7 +36,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "document.view", session.permissions);
     const sp = new URL(req.url).searchParams;
     const docId = sp.get("docId");
     const inline = sp.get("inline") === "1";

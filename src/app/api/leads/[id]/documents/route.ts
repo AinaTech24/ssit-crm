@@ -12,41 +12,38 @@ import { handleApiError } from "@/lib/api/error-handler";
  * Converting the lead to a client moves these onto the client (see the convert
  * route), so nothing has to be uploaded twice.
  *
- * Upload flow: browser -> POST /api/compliance/upload (stores the file, returns a
- * storage key) -> POST here with that key.
+ * Upload: the browser POSTs the file here (multipart/form-data, field "file"); this
+ * route stores it in the document vault and files it against the lead in one step.
  *
- * Who may: viewing needs document.view AND the lead inside the caller's data wall;
- * adding / removing needs document.upload AND the right to edit that lead.
+ * Who may: anyone who may OPEN the lead (inside their data wall) may see its
+ * documents; anyone who may EDIT the lead may add and remove them. These follow the
+ * lead, NOT the separate Documents capability - a role that can work a lead (an RM, a
+ * branch head) was being locked out of its documents whenever that capability was not
+ * ticked on their record.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { and, desc, eq, isNull } from "drizzle-orm";
-import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { complianceDocuments } from "@/db/schema";
-import { deleteObject } from "@/lib/storage/s3";
+import { deleteObject, putObject, vaultKey } from "@/lib/storage/s3";
+import { contentTypeMatches } from "@/lib/storage/file-sniff";
+import { firmFolderName } from "@/lib/storage/firm-folder";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { loadEditableLead, loadViewableLead } from "@/lib/leads/access";
 
 export const dynamic = "force-dynamic";
 
-const CreateBody = z.object({
-  name: z.string().min(1).max(300),
-  description: z.string().max(1000).optional(),
-  storageKey: z.string().min(1).max(500),
-  mimeType: z.string().max(120).optional(),
-  sizeBytes: z.number().int().nonnegative().optional(),
-});
+/** Largest file accepted per document. */
+const MAX_BYTES = 15 * 1024 * 1024;
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "document.view", session.permissions);
     const rows = await withTenant(session.tenantId, async (tx) => {
       const lead = await loadViewableLead(tx, session, id);
       if (!lead) return null;
@@ -82,31 +79,61 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
+export const runtime = "nodejs";
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "document.upload", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
-    const parse = CreateBody.safeParse(await req.json().catch(() => ({})));
-    if (!parse.success) return NextResponse.json({ error: "invalid body", issues: parse.error.issues }, { status: 400 });
-    const b = parse.data;
+
+    const form = await req.formData().catch(() => null);
+    const file = form?.get("file");
+    if (!form || !(file instanceof File)) {
+      return NextResponse.json({ error: "Choose a file to upload." }, { status: 400 });
+    }
+    if (file.size === 0) return NextResponse.json({ error: "That file is empty." }, { status: 400 });
+    if (file.size > MAX_BYTES) {
+      return NextResponse.json({ error: `File too large - max ${Math.floor(MAX_BYTES / 1024 / 1024)} MB` }, { status: 413 });
+    }
     const meta = clientMetaFromHeaders(req.headers);
 
+    // 1. May this person add documents to THIS lead? (404 / 403 otherwise.) Checked
+    //    before the file is stored so a refused request leaves nothing behind.
+    const lead = await withTenant(session.tenantId, (tx) => loadEditableLead(tx, session, id));
+
+    // 2. Store the file in the document vault.
+    const contentType = file.type || "application/octet-stream";
+    const buf = Buffer.from(await file.arrayBuffer());
+    // A renamed executable must not pass for a PDF.
+    if (!contentTypeMatches(contentType, buf)) {
+      return NextResponse.json({ error: "File content doesn't match its type - it may be renamed or corrupt." }, { status: 400 });
+    }
+    const firm = await firmFolderName(session.tenantId);
+    const key = vaultKey(session.tenantId, "kyc", file.name || "document", {
+      firm,
+      uploader: session.name,
+      client: lead.name,
+      docType: "kyc",
+    });
+    try {
+      await putObject(key, buf, contentType);
+    } catch (e: any) {
+      const detail = e?.name || e?.Code || e?.message || "unknown error";
+      return NextResponse.json({ error: `Storage upload failed (${detail}).` }, { status: 502 });
+    }
+
+    // 3. File it against the lead.
     const docId = uuid();
     await withTenant(session.tenantId, async (tx) => {
-      // Throws 404 / 403 when the lead is missing or outside this person's wall.
-      await loadEditableLead(tx, session, id);
-
       await tx.insert(complianceDocuments).values({
         id: docId,
         tenantId: session.tenantId,
         category: "kyd",
-        name: b.name,
-        description: b.description ?? null,
-        storageKey: b.storageKey,
-        mimeType: b.mimeType ?? null,
-        sizeBytes: b.sizeBytes != null ? String(b.sizeBytes) : null,
+        name: file.name || "document",
+        storageKey: key,
+        mimeType: contentType,
+        sizeBytes: String(buf.length),
         relatedEntityType: "lead",
         relatedEntityId: id,
         tags: ["lead"],
@@ -119,7 +146,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         action: "document.upload",
         entityType: "compliance_document",
         entityId: docId,
-        after: { name: b.name, leadId: id } as any,
+        after: { name: file.name, leadId: id } as any,
         ...meta,
       });
     });
@@ -134,7 +161,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const { id } = await params;
   try {
     const session = await requireSession();
-    requireCap(session.roles, "document.upload", session.permissions);
     await assertActiveLicense(session.tenantId, session.roles);
     const docId = new URL(req.url).searchParams.get("docId");
     if (!docId) return NextResponse.json({ error: "docId required" }, { status: 400 });

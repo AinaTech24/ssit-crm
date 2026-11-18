@@ -38,14 +38,14 @@ function fmtDate(s?: string): string {
 
 export function LeadDocumentsSection({
   leadId,
-  leadName,
   canUpload,
   canView = true,
   converted = false,
 }: {
   leadId: string;
+  /** Kept for callers that still pass it; the server names the vault folder itself. */
   leadName?: string;
-  /** May this person see documents at all (document.view)? */
+  /** May this person see the lead's documents? Follows access to the lead itself. */
   canView?: boolean;
   /** May this person add and remove files (document.upload + edit rights on the lead)? */
   canUpload: boolean;
@@ -95,30 +95,10 @@ export function LeadDocumentsSection({
           toast.error(`${file.name} is over 15 MB`, "Too large");
           continue;
         }
-        // 1. Store the file (server puts it into the document vault) -> a storage key.
+        // One call: the server stores the file and files it against this lead.
         const fd = new FormData();
         fd.append("file", file);
-        fd.append("kind", "kyc");
-        fd.append("docType", "kyc");
-        if (leadName) fd.append("clientName", leadName);
-        const up = await fetch("/api/compliance/upload", { method: "POST", body: fd })
-          .then((r) => r.json())
-          .catch(() => ({}));
-        if (!up?.key) {
-          toast.error(up?.error ?? "Could not upload", "Upload failed");
-          continue;
-        }
-        // 2. File it against this lead.
-        const reg = await fetch(`/api/leads/${leadId}/documents`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            name: file.name,
-            storageKey: up.key,
-            mimeType: up.contentType ?? (file.type || "application/octet-stream"),
-            sizeBytes: up.sizeBytes ?? file.size,
-          }),
-        });
+        const reg = await fetch(`/api/leads/${leadId}/documents`, { method: "POST", body: fd });
         if (reg.ok) ok += 1;
         else {
           const j = await reg.json().catch(() => ({}));
@@ -175,8 +155,7 @@ export function LeadDocumentsSection({
           <FolderOpen className="size-4" /> Documents &amp; attachments
         </div>
         <div className="p-4 text-sm text-muted-foreground">
-          Your role does not include access to documents. Ask your admin to turn on <strong>Documents</strong> for
-          you (Employees &rarr; your record &rarr; permissions).
+          You do not have access to this lead's documents.
         </div>
       </div>
     );
