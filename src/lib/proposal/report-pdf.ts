@@ -1,25 +1,28 @@
 /**
- * The proposal as an "Investment Analysis & Performance Report" - the layout the firm
- * sends to clients:
+ * The proposal as an "Investment Analysis & Performance Report", laid out like the
+ * firm's reference report (A4 landscape):
  *
- *   1. Cover page   - prepared for / by, contact, website, report date, disclaimer.
- *   2. Particulars  - investor, SIP / lumpsum amount, period, expected return, risk.
- *   3. Suggested schemes - category, risk, period, return, amounts, allocation, with a
- *                    grand total and the projected value.
+ *   1. Cover         - navy sidebar (logo, prepared for / by, contact, website) and the
+ *                      report title, date and disclaimer on the right.
+ *   2. Particulars   - investor, SIP / lumpsum amount, period, expected returns, riskometer.
+ *   3. Suggested schemes - category, risk, period, return, amounts, allocation, grand total
+ *                      and the projected value.
  *   4. Trailing returns and the historical return of a monthly SIP (XIRR) - worked out
- *                    from each scheme's NAV history. Left out for a scheme whose
- *                    history cannot be fetched.
+ *                      from each scheme's NAV history. Left out for a scheme whose
+ *                      history cannot be fetched.
  *   5. "What if" the SIP is topped up 5 / 10 / 15% a year.
  *   6. Allocation by AMC, asset class and category.
- *   7. Insurance / PMS / AIF items, as before, in the same format.
+ *   7. Insurance / PMS / AIF items, in the same boxed format.
  *   8. Disclaimer page.
  *
- * Not included: scheme AUM, peer rank, and the top-10 sector / holdings tables - those
- * need a fund-data provider the CRM does not have.
+ * Not included: scheme AUM, peer rank, category averages and the top-10 sector /
+ * holdings tables - those need a fund-data provider the CRM does not have.
+ *
+ * Text is Helvetica (metric twin of the reference's Arial); only the rupee sign is
+ * drawn from the embedded DejaVu font, as Helvetica has no such glyph.
  */
 
-import { PDFDocument, rgb, type PDFFont, type PDFPage, type PDFImage, type RGB } from "pdf-lib";
-import { drawContinuationHeader, drawPageNumbers } from "@/lib/pdf/report-header";
+import { PDFDocument, StandardFonts, rgb, setCharacterSpacing, type PDFFont, type PDFPage, type PDFImage, type RGB } from "pdf-lib";
 import { embedPdfFonts, pdfSanitize } from "@/lib/pdf/fonts";
 import { lineItemFutureValue, lineItemInvestment } from "@/lib/proposals/projections";
 import { colsFor, isBlankCell, pruneEmptyCols, type ProposalData } from "@/lib/proposal/proposal-pdf";
@@ -44,28 +47,51 @@ export type ReportBrand = {
   address?: { line1?: string; line2?: string; city?: string; state?: string; pincode?: string } | string | null;
 };
 
-const INK: RGB = rgb(0.06, 0.09, 0.16);
-const SLATE: RGB = rgb(0.2, 0.255, 0.333);
-const MUTED: RGB = rgb(0.45, 0.5, 0.58);
-const GREEN: RGB = rgb(0.02, 0.6, 0.41);
-const LINE: RGB = rgb(0.89, 0.91, 0.94);
-const HEADBG: RGB = rgb(0.95, 0.96, 0.98);
-const TOTALBG: RGB = rgb(0.97, 0.98, 0.99);
-const WHITE: RGB = rgb(1, 1, 1);
-const DEFAULT_PRIMARY: RGB = rgb(0.055, 0.145, 0.341);
+const c = (r: number, g: number, b: number): RGB => rgb(r / 255, g / 255, b / 255);
+const NAVY = c(22, 43, 74);
+const NAVY_LINE = c(52, 74, 106);
+const SIDE_LABEL = c(143, 165, 192);
+const TEAL = c(0, 145, 170);
+const TITLE_BLUE = c(27, 58, 99);
+const ACCENT = c(41, 171, 212);
+const BLUE = c(60, 91, 147);
+const HEAD_BLUE = c(31, 63, 143);
+const LINK_BLUE = c(26, 40, 190);
+const BORDER = c(125, 150, 190);
+const BAND_BG = c(240, 240, 240);
+const HEAD_BG = c(250, 250, 251);
+const ZEBRA = c(247, 248, 250);
+const DOT = c(150, 150, 150);
+const INK = c(15, 15, 15);
+const GREY = c(110, 110, 110);
+const MUTED = c(122, 132, 148);
+const WHITE = rgb(1, 1, 1);
+const G1 = c(228, 240, 220);
+const G3 = c(253, 243, 212);
+const G5 = c(230, 235, 247);
+const G10 = c(251, 229, 229);
 
-const A4: [number, number] = [595.28, 841.89];
-const MARGIN = 40;
+const PW = 841.89;
+const PH = 595.28;
+const ML = 45;
+const CW = PW - 2 * ML;
+const BOTTOM = 30;
+const GAP = 12;
+const BAND_H = 20;
+const HEAD_H = 21.5;
+const ROW_H = 20.8;
+const SZ = 8.2;
+const PAD = 4;
 
 const MF_DISCLAIMER =
   "Mutual Fund Investments are subject to market risks, read all scheme related documents carefully. Past performance may or may not be sustained in the future. Investors should consult with their Mutual Fund Distributor or Financial Advisor before investing.";
 
-const LONG_DISCLAIMER = [
-  "We have gathered all the data, information, statistics from the sources believed to be highly reliable and true. All necessary precautions have been taken to avoid any error, lapse or insufficiency; however, no representations or warranties are made (express or implied) as to the reliability, accuracy or completeness of such information. We cannot be held liable for any loss arising directly or indirectly from the use of, or any action taken on, any information appearing herein. The user is advised to verify the contents of the report independently. It is not an Investment recommendation or personal financial, Investment or professional advice and should not be treated as such.",
-  "The Risk Level of any of the schemes must always be commensurate with the risk profile, Investment objective or financial goals of the investor concerned. Therefore, the Investors should assess their risk profile before making any Investment decision and consider the asset allocation accordingly.",
-  "Returns less than 1 year are in absolute (%) and greater than 1 year are compounded annualised (CAGR %). SIP returns are shown in XIRR (%). Expected returns are assumptions supplied for illustration and are not guaranteed.",
-  MF_DISCLAIMER,
-];
+const LONG_DISCLAIMER_1 =
+  "We have gathered all the data, information, statistics from the sources believed to be highly reliable and true. All necessary precautions have been taken to avoid any error, lapse or insufficiency; however, no representations or warranties are made (express or implied) as to the reliability, accuracy or completeness of such information. We cannot be held liable for any loss arising directly or indirectly from the use of, or any action taken on, any information appearing herein. The user is advised to verify the contents of the report independently. It is not an Investment recommendation or personal financial, Investment or professional advice and should not be treated as such.";
+const LONG_DISCLAIMER_2 =
+  "The Risk Level of any of the schemes must always be commensurate with the risk profile, Investment objective or financial goals of the investor concerned. Therefore, the Investors should assess their risk profile before making any Investment decision and consider the asset allocation accordingly.";
+const LONG_DISCLAIMER_3 =
+  "Returns less than 1 year are in absolute (%) and greater than 1 year are compounded annualised (CAGR %). SIP returns are shown in XIRR (%). Expected returns are assumptions supplied for illustration and are not guaranteed.";
 
 const KIND_TITLE: Record<string, string> = {
   insurance: "Insurance",
@@ -87,7 +113,29 @@ type McItem = {
   code: string;
 };
 
-type TCol = { h: string; w: number; align?: "l" | "r" };
+type Al = "l" | "r" | "c";
+type CellObj = {
+  t?: string;
+  parts?: Array<{ t: string; b?: boolean }>;
+  span?: number;
+  al?: Al;
+  b?: boolean;
+  size?: number;
+  fill?: RGB;
+  color?: RGB;
+  draw?: (x: number, top: number, w: number, h: number) => void;
+};
+type Cell = string | CellObj;
+type ColSpec = { w: number; al: Al };
+type Row = { cells: Cell[]; fill?: RGB; minH?: number; noDots?: boolean };
+type TableSpec = {
+  title?: string;
+  titleAl?: Al;
+  cols: ColSpec[];
+  head?: Cell[][];
+  rows: Row[];
+  zebra?: boolean;
+};
 
 /** Build the report. `analytics` may be passed in (tests); otherwise it is fetched. */
 export async function renderProposalReportPdf(args: {
@@ -100,11 +148,15 @@ export async function renderProposalReportPdf(args: {
   const generatedAt = args.generatedAt ?? new Date().toISOString();
 
   const doc = await PDFDocument.create();
-  const { font: helv, bold, rupeeOk } = await embedPdfFonts(doc);
+  const dj = await embedPdfFonts(doc); // DejaVu: only for the rupee sign
+  const rupeeOk = dj.rupeeOk;
+  const hv = await doc.embedFont(StandardFonts.Helvetica);
+  const hb = await doc.embedFont(StandardFonts.HelveticaBold);
   const T = (s: string | null | undefined) => pdfSanitize(String(s ?? "").replace(/·/g, "-"), rupeeOk);
-  const primary = hexToRgb(brand.primaryColor);
+
   const firm = brand.legalName ?? brand.displayName ?? "Your Advisor";
   const arnText = brand.arn ? `ARN-${String(brand.arn).replace(/^ARN[-:\s]*/i, "")}` : "";
+  const house = T(brand.displayName ?? brand.legalName ?? "Your Advisor").toUpperCase();
 
   doc.setTitle(T(`Investment report ${p.proposalNumber ?? ""} - ${p.recipientName ?? "Client"}`));
   doc.setProducer("Equitywala");
@@ -112,8 +164,44 @@ export async function renderProposalReportPdf(args: {
   if (p.proposalNumber) doc.setSubject(`Ref ${p.proposalNumber}`);
 
   const logo = await embedLogo(doc, brand.logoUrl);
-  const W = A4[0];
-  const usable = W - 2 * MARGIN;
+
+  // ── text primitives (Helvetica, rupee sign from DejaVu) ──
+  const segs = (s: string) => s.split(/(₹)/).filter(Boolean);
+  const fontFor = (seg: string, b: boolean): PDFFont => (seg === "₹" ? (b ? dj.bold : dj.font) : b ? hb : hv);
+  const tw = (s: string, size: number, b = false) => segs(s).reduce((a, x) => a + fontFor(x, b).widthOfTextAtSize(x, size), 0);
+  /** Draw at a baseline measured from the page top. */
+  const put = (s: string, x: number, top: number, size: number, b: boolean, color: RGB, spacing = 0) => {
+    const page = cur.page;
+    let cx = x;
+    if (spacing) page.pushOperators(setCharacterSpacing(spacing));
+    for (const seg of segs(s)) {
+      const f = fontFor(seg, b);
+      page.drawText(seg, { x: cx, y: PH - top, size, font: f, color });
+      cx += f.widthOfTextAtSize(seg, size) + (spacing ? spacing * seg.length : 0);
+    }
+    if (spacing) page.pushOperators(setCharacterSpacing(0));
+  };
+  const wrapT = (text: string, size: number, b: boolean, maxW: number): string[] => {
+    const lines: string[] = [];
+    for (const para of (text || "").split(/\n/)) {
+      let line = "";
+      for (const w of para.split(/\s+/).filter(Boolean)) {
+        const trial = line ? `${line} ${w}` : w;
+        if (tw(trial, size, b) <= maxW || !line) line = trial;
+        else {
+          lines.push(line);
+          line = w;
+        }
+      }
+      lines.push(line);
+    }
+    return lines.length ? lines : [""];
+  };
+  const fit = (text: string, size: number, b: boolean, maxW: number, min = 6) => {
+    let s = size;
+    while (s > min && tw(text, s, b) > maxW) s -= 0.4;
+    return s;
+  };
 
   // ── What is in the proposal ──
   const products = (p.products ?? []) as Array<Record<string, any>>;
@@ -141,206 +229,356 @@ export async function renderProposalReportPdf(args: {
   const hasLump = mf.some((m) => m.lumpsum > 0);
   const kindLabel = hasSip && hasLump ? "SIP + Lumpsum" : hasLump ? "Lumpsum" : "SIP";
   const hasMf = mf.length > 0;
-  const reportTitle = hasMf ? ["INVESTMENT ANALYSIS", "& PERFORMANCE REPORT"] : ["INVESTMENT", "PROPOSAL"];
+  const reportTitle = hasMf ? "INVESTMENT ANALYSIS & PERFORMANCE REPORT" : "INVESTMENT PROPOSAL";
   const subtitle = hasMf ? `Investment Presentation - ${kindLabel}` : p.title || "Investment Proposal";
   const reportDate = dmy(generatedAt);
 
-  // NAV-history analytics (best effort; sections quietly drop out without them).
   const analytics =
     args.analytics ?? (hasMf ? await loadSchemeAnalytics(mf.map((m) => m.code).filter(Boolean)) : new Map<string, SchemeAnalytics>());
 
-  // ─────────────────────────── page flow ───────────────────────────
-  const cover = doc.addPage(A4);
-  const cur = { page: doc.addPage(A4), y: 0 };
-  const newPage = () => {
-    cur.page = doc.addPage(A4);
-    cur.y = drawContinuationHeader({
-      page: cur.page, helv, bold, pageWidth: W, pageHeight: A4[1], margin: MARGIN,
-      firmName: firm, title: "Investment report", primary,
-    });
+  // ── page flow (cursor = distance from the page top) ──
+  const cover = doc.addPage([PW, PH]);
+  const body1 = doc.addPage([PW, PH]);
+  const cur = { page: body1, top: 0 };
+
+  const addrLines = addressLines(brand.address);
+  const contactLine = [brand.phone ? `Phone: ${brand.phone}` : "", brand.email ? `Email: ${brand.email}` : ""].filter(Boolean).join(" | ");
+
+  const drawLogoFit = (page: PDFPage, img: PDFImage, x: number, top: number, maxW: number, maxH: number, rightAlign = false) => {
+    let w = (img.width / img.height) * maxH;
+    let h = maxH;
+    if (w > maxW) {
+      w = maxW;
+      h = (img.height / img.width) * maxW;
+    }
+    page.drawImage(img, { x: rightAlign ? x - w : x, y: PH - top - h, width: w, height: h });
   };
-  const ensure = (need: number) => {
-    if (cur.y - need < 96) newPage();
+
+  const newPage = () => {
+    cur.page = doc.addPage([PW, PH]);
+    put(house, ML, 18.5, 11.6, true, HEAD_BLUE);
+    put("AMFI Registered Mutual Fund Distributor", ML, 34.5, 9.4, false, INK);
+    cur.top = 51;
+  };
+  const limit = PH - BOTTOM;
+  const ensure = (h: number) => {
+    if (cur.top + h > limit) newPage();
   };
 
   // ═══════════════ COVER ═══════════════
   {
-    const H = A4[1];
-    let y = H - MARGIN;
-    if (logo) {
-      const maxH = 52, maxW = 200;
-      let dw = (logo.width / logo.height) * maxH, dh = maxH;
-      if (dw > maxW) { dw = maxW; dh = (logo.height / logo.width) * maxW; }
-      cover.drawImage(logo, { x: MARGIN, y: y - dh, width: dw, height: dh });
-      y -= dh;
-    } else {
-      cover.drawText(T(firm), { x: MARGIN, y: y - 16, size: 16, font: bold, color: INK });
-      y -= 24;
+    cur.page = cover;
+    cover.drawRectangle({ x: 0, y: 0, width: 219.2, height: PH, color: NAVY });
+    // logo card
+    cover.drawSvgPath(roundedRect(166, 62.3, 4), { x: 26.2, y: PH - 27, color: WHITE });
+    if (logo) drawLogoFit(cover, logo, 26.2 + 12, 27 + 10, 142, 42.3);
+    else {
+      const nm = T(brand.displayName ?? firm);
+      const s = fit(nm, 13, true, 140);
+      put(nm, 26.2 + 83 - tw(nm, s, true) / 2, 27 + 36, s, true, NAVY);
     }
-    // colour band with the title
-    const bandH = 140, bandY = y - 40 - bandH;
-    cover.drawRectangle({ x: 0, y: bandY, width: W, height: bandH, color: primary });
-    cover.drawText(reportTitle[0], { x: MARGIN, y: bandY + bandH - 52, size: 26, font: bold, color: WHITE });
-    cover.drawText(reportTitle[1], { x: MARGIN, y: bandY + bandH - 82, size: 26, font: bold, color: WHITE });
-    cover.drawText(T(subtitle), { x: MARGIN, y: bandY + 22, size: 13, font: helv, color: WHITE });
-
-    let cy = bandY - 40;
-    const label = (txt: string, x: number, yy: number) =>
-      cover.drawText(spaced(txt), { x, y: yy, size: 7.5, font: bold, color: MUTED });
-    const block = (title: string, lines: Array<{ t: string; size?: number; bold?: boolean }>, x: number, y0: number, width: number) => {
-      label(title, x, y0);
-      let yy = y0 - 16;
-      for (const l of lines) {
-        for (const w of wrap(T(l.t), l.bold ? bold : helv, l.size ?? 9.5, width)) {
-          cover.drawText(w, { x, y: yy, size: l.size ?? 9.5, font: l.bold ? bold : helv, color: l.bold ? INK : SLATE });
-          yy -= (l.size ?? 9.5) + 4;
+    const hr = (top: number) => cover.drawRectangle({ x: 26.2, y: PH - top, width: 166, height: 0.7, color: NAVY_LINE });
+    const label = (s: string, top: number) => put(s, 26.2, top, 6.6, false, SIDE_LABEL, 2.1);
+    const side = (s: string, top: number, size = 9.6) => put(s, 26.2, top, size, false, WHITE);
+    hr(115.3);
+    label("PREPARED FOR", 150);
+    let y = 171;
+    for (const l of wrapT(T(p.recipientName ?? "Client"), 9.6, false, 166)) {
+      side(l, y);
+      y += 16;
+    }
+    hr(203);
+    label("PREPARED BY", 237.5);
+    y = 258.5;
+    for (const l of [...wrapT(T(firm), 9.6, false, 166), ...(brand.arn ? wrapT(`AMFI Registered Mutual Fund Distributor (${arnText})`, 9.6, false, 166) : [])]) {
+      side(l, y);
+      y += 16.4;
+    }
+    y = Math.max(y - 16.4 + 36, 328);
+    if (brand.phone || brand.email || addrLines.length) {
+      label("CONTACT", y);
+      y += 21;
+      const icon = (kind: "phone" | "mail" | "pin", top: number) => {
+        const ix = 26.2;
+        if (kind === "phone") cover.drawSvgPath("M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z", { x: ix - 1, y: PH - (top - 7.2), scale: 0.45, color: WHITE });
+        if (kind === "mail") {
+          cover.drawRectangle({ x: ix, y: PH - (top + 1), width: 8.4, height: 6, color: WHITE });
+          cover.drawLine({ start: { x: ix, y: PH - (top - 5) }, end: { x: ix + 4.2, y: PH - (top - 1.2) }, thickness: 0.8, color: NAVY });
+          cover.drawLine({ start: { x: ix + 8.4, y: PH - (top - 5) }, end: { x: ix + 4.2, y: PH - (top - 1.2) }, thickness: 0.8, color: NAVY });
+        }
+        if (kind === "pin") {
+          cover.drawSvgPath("M0 0 L5.6 0 L2.8 6.6 Z", { x: ix + 1.2, y: PH - (top - 3.6), color: WHITE });
+          cover.drawCircle({ x: ix + 4, y: PH - (top - 5.2), size: 3.3, color: WHITE });
+          cover.drawCircle({ x: ix + 4, y: PH - (top - 5.2), size: 1.2, color: NAVY });
+        }
+      };
+      if (brand.phone) {
+        icon("phone", y);
+        put(T(brand.phone), 40, y, 9, false, WHITE);
+        y += 15;
+      }
+      if (brand.email) {
+        icon("mail", y);
+        put(T(brand.email), 40, y, 9, false, WHITE);
+        y += 15;
+      }
+      if (addrLines.length) {
+        icon("pin", y);
+        const lines = wrapT(T(addrLines.join(", ")), 9, false, 150);
+        for (const l of lines) {
+          put(l, 40, y, 9, false, WHITE);
+          y += 15;
         }
       }
-      return yy;
-    };
-    const colW = (usable - 30) / 2;
-    const left = block("PREPARED FOR", [{ t: p.recipientName ?? "Client", size: 18, bold: true }], MARGIN, cy, colW);
-    const right = block(
-      "PREPARED BY",
-      [
-        { t: firm, size: 11, bold: true },
-        ...(brand.arn ? [{ t: `AMFI Registered Mutual Fund Distributor (${arnText})` }] : []),
-      ],
-      MARGIN + colW + 30, cy, colW
-    );
-    cy = Math.min(left, right) - 22;
-
-    const addr = addressLine(brand.address);
-    const contact: Array<{ t: string }> = [];
-    if (brand.phone) contact.push({ t: `Phone: ${brand.phone}` });
-    if (brand.email) contact.push({ t: `Email: ${brand.email}` });
-    if (addr) contact.push({ t: addr });
-    const leftEnd = contact.length ? block("CONTACT", contact, MARGIN, cy, colW) : cy;
-    const rightEnd = block(
-      "REPORT DATE",
-      [{ t: reportDate, size: 12, bold: true }],
-      MARGIN + colW + 30, cy, colW
-    );
-    cy = Math.min(leftEnd, rightEnd) - 22;
-    if (brand.website) cy = block("WEBSITE", [{ t: brand.website }], MARGIN, cy, colW) - 10;
-
-    // disclaimer pinned to the foot of the cover
-    cover.drawRectangle({ x: MARGIN, y: 112, width: usable, height: 0.8, color: LINE });
-    let dy = 98;
-    for (const l of wrap(T(`Disclaimer: ${MF_DISCLAIMER}`), helv, 7.5, usable)) {
-      cover.drawText(l, { x: MARGIN, y: dy, size: 7.5, font: helv, color: MUTED });
-      dy -= 10;
+      y += 16;
     }
-  }
-
-  // ═══════════════ BODY, page 1: letterhead ═══════════════
-  {
-    const H = A4[1];
-    let y = H - MARGIN;
-    if (logo) {
-      const maxH = 34, maxW = 150;
-      let dw = (logo.width / logo.height) * maxH, dh = maxH;
-      if (dw > maxW) { dw = maxW; dh = (logo.height / logo.width) * maxW; }
-      cur.page.drawImage(logo, { x: MARGIN, y: y - dh, width: dw, height: dh });
-    } else {
-      cur.page.drawText(T(firm).toUpperCase(), { x: MARGIN, y: y - 12, size: 12, font: bold, color: primary });
+    if (brand.website) {
+      label("WEBSITE", y);
+      side(T(brand.website), y + 23, 9);
     }
-    // contact block, right aligned
-    const right: string[] = [];
-    if (brand.arn) right.push(`AMFI Registered Mutual Fund Distributor (${arnText})`);
-    const addr = addressLine(brand.address);
-    if (addr) right.push(addr);
-    const pe = [brand.phone ? `Phone: ${brand.phone}` : "", brand.email ? `Email: ${brand.email}` : ""].filter(Boolean).join(" | ");
-    if (pe) right.push(pe);
-    if (brand.website) right.push(brand.website);
-    let ry = y - 8;
-    for (const l of right) {
-      const t = T(l);
-      cur.page.drawText(t, { x: W - MARGIN - helv.widthOfTextAtSize(t, 7.5), y: ry, size: 7.5, font: helv, color: SLATE });
-      ry -= 10;
-    }
-    const lineY = Math.min(y - (logo ? 40 : 22), ry) - 4;
-    cur.page.drawRectangle({ x: MARGIN, y: lineY, width: usable, height: 1.4, color: primary });
-    cur.y = lineY - 22;
-  }
 
-  // ── helpers that draw into the flow ──
-  const heading = (text: string, size = 9) => {
-    ensure(40);
-    cur.page.drawText(T(text).toUpperCase(), { x: MARGIN, y: cur.y, size, font: bold, color: primary });
-    cur.y -= size + 7;
-  };
-  const para = (text: string, size = 8, color: RGB = SLATE, gap = 3) => {
-    for (const l of wrap(T(text), helv, size, usable)) {
-      ensure(size + gap + 2);
-      cur.page.drawText(l, { x: MARGIN, y: cur.y, size, font: helv, color });
-      cur.y -= size + gap;
-    }
-  };
-
-  /** A table whose columns are fractions of the page width. Rows may wrap onto 2-3 lines. */
-  const table = (cols: TCol[], rows: string[][], opts: { boldLast?: boolean; size?: number } = {}) => {
-    const size = opts.size ?? 7.8;
-    const pad = 4;
-    const widths = cols.map((c) => c.w * usable);
-    const headLines = cols.map((c, i) => wrap(T(c.h), bold, 6.6, widths[i] - pad * 2).slice(0, 3));
-    const headH = Math.max(...headLines.map((l) => l.length)) * 8 + 8;
-    const drawHead = () => {
-      ensure(headH + 14);
-      cur.page.drawRectangle({ x: MARGIN, y: cur.y - headH + 6, width: usable, height: headH, color: HEADBG });
-      let x = MARGIN;
-      cols.forEach((c, i) => {
-        headLines[i].forEach((ln, k) => {
-          const w = bold.widthOfTextAtSize(ln, 6.6);
-          cur.page.drawText(ln, { x: c.align === "r" ? x + widths[i] - pad - w : x + pad, y: cur.y - 2 - k * 8, size: 6.6, font: bold, color: MUTED });
-        });
-        x += widths[i];
-      });
-      cur.y -= headH + 3;
-    };
-    drawHead();
-    rows.forEach((row, ri) => {
-      const last = opts.boldLast && ri === rows.length - 1;
-      const f = last ? bold : helv;
-      const cells = row.map((v, i) =>
-        cols[i].align === "r" ? [T(v)] : wrap(T(v), f, size, widths[i] - pad * 2).slice(0, 3)
-      );
-      const rowH = Math.max(...cells.map((c) => c.length)) * (size + 3) + 5;
-      const before = cur.page;
-      ensure(rowH + 4);
-      if (cur.page !== before) drawHead();
-      if (last) cur.page.drawRectangle({ x: MARGIN, y: cur.y - rowH + size + 1, width: usable, height: rowH, color: TOTALBG });
-      let x = MARGIN;
-      cols.forEach((c, i) => {
-        cells[i].forEach((ln, k) => {
-          if (c.align === "r") {
-            const s = fitText(ln, f, size, widths[i] - pad * 2, 5.5);
-            cur.page.drawText(ln, { x: x + widths[i] - pad - f.widthOfTextAtSize(ln, s), y: cur.y - k * (size + 3), size: s, font: f, color: INK });
-          } else {
-            cur.page.drawText(ln, { x: x + pad, y: cur.y - k * (size + 3), size, font: i === 0 || last ? bold : helv, color: INK });
-          }
-        });
-        x += widths[i];
-      });
-      cur.page.drawRectangle({ x: MARGIN, y: cur.y - rowH + size - 1, width: usable, height: 0.5, color: LINE });
-      cur.y -= rowH;
+    // right side
+    const target = 438;
+    const ts = 13.4;
+    const nat = tw(reportTitle, ts, true);
+    const sp = Math.max(0.6, (target - nat) / (reportTitle.length - 1));
+    put(reportTitle, 264, 55.5, ts, true, TEAL, sp);
+    const sub = T(subtitle);
+    const sSize = fit(sub, 26.2, true, 540, 14);
+    put(sub, 264, 149, sSize, true, TITLE_BLUE);
+    cover.drawRectangle({ x: 264, y: PH - 180, width: 52, height: 3, color: ACCENT });
+    put("REPORT DATE", 264, 251.5, 6.6, false, MUTED, 2.1);
+    put(reportDate, 264, 271, 11, true, TITLE_BLUE);
+    let dy = 474.5;
+    const dl = wrapT(`Disclaimer : ${MF_DISCLAIMER}`, 9.3, false, 505);
+    dl.forEach((l, i) => {
+      if (i === 0 && l.startsWith("Disclaimer :")) {
+        put("Disclaimer :", 264, dy, 9.3, true, c(110, 110, 110));
+        put(l.slice("Disclaimer :".length), 264 + tw("Disclaimer :", 9.3, true), dy, 9.3, false, c(130, 130, 130));
+      } else put(l, 264, dy, 9.3, false, c(130, 130, 130));
+      dy += 16.9;
     });
-    cur.y -= 10;
+  }
+
+  // ═══════════════ BODY page 1: letterhead ═══════════════
+  {
+    cur.page = body1;
+    put(house, ML, 36, 11.6, true, INK);
+    put(T(brand.arn ? `AMFI Registered Mutual Fund Distributor (${arnText})` : "AMFI Registered Mutual Fund Distributor"), ML, 51.3, 10.3, false, INK);
+    let ay = 85.7;
+    const small = [...addrLines.map((l, i) => (i < addrLines.length - 1 && !l.endsWith(",") ? `${l},` : l)), contactLine].filter(Boolean);
+    for (const l of small) {
+      put(T(l), ML, ay, 7.4, false, INK);
+      ay += 11.6;
+    }
+    if (logo) drawLogoFit(cur.page, logo, PW - ML - 7, 47, 150, 34, true);
+    else {
+      const nm = T(brand.displayName ?? firm);
+      put(nm, PW - ML - 7 - tw(nm, 16, true), 70, 16, true, TITLE_BLUE);
+    }
+    if (brand.website) {
+      const w = T(brand.website);
+      put(w, PW - ML - tw(w, 7.4), 111, 7.4, false, LINK_BLUE);
+    }
+    cur.page.drawRectangle({ x: ML, y: PH - 122, width: CW, height: 1.3, color: c(30, 30, 30) });
+    put(T(subtitle), ML, 146, 12.6, false, BLUE);
+    const rd = `Report as on: ${reportDate}`;
+    put(rd, PW - ML - tw(rd, 8.6), 141, 8.6, false, INK);
+    cur.top = 158;
+  }
+
+  // ═══════════════ table engine ═══════════════
+  const norm = (cols: ColSpec[], total: number) => {
+    const sum = cols.reduce((a, x) => a + x.w, 0) || 1;
+    return cols.map((x) => (x.w / sum) * total);
+  };
+  const place = (cells: Cell[], widths: number[]) => {
+    const out: Array<{ c: CellObj; x: number; w: number; ci: number }> = [];
+    let ci = 0;
+    let x = 0;
+    for (const raw of cells) {
+      const cell: CellObj = typeof raw === "string" ? { t: raw } : raw;
+      const span = cell.span ?? 1;
+      let w = 0;
+      for (let k = 0; k < span; k++) w += widths[ci + k] ?? 0;
+      out.push({ c: cell, x, w, ci });
+      x += w;
+      ci += span;
+    }
+    return out;
+  };
+  const LEAD = SZ + 1.8;
+  const cellLines = (cell: CellObj, w: number, al: Al): string[] => {
+    if (cell.parts) return [""];
+    const txt = T(cell.t ?? "");
+    if (al !== "l" || cell.draw) return [txt];
+    return wrapT(txt, cell.size ?? SZ, !!cell.b, w - PAD * 2).slice(0, 3);
+  };
+  const rowHeight = (row: Row, spec: TableSpec, widths: number[]) => {
+    let lines = 1;
+    for (const pl of place(row.cells, widths)) {
+      const al = pl.c.al ?? spec.cols[pl.ci]?.al ?? "l";
+      lines = Math.max(lines, cellLines(pl.c, pl.w, al).length);
+    }
+    return Math.max(row.minH ?? ROW_H, lines * LEAD + 11);
+  };
+  const dotted = (x: number, top: number, w: number) =>
+    cur.page.drawLine({ start: { x, y: PH - top }, end: { x: x + w, y: PH - top }, thickness: 0.6, color: DOT, dashArray: [0.8, 1.3] });
+
+  const drawCell = (pl: { c: CellObj; x: number; w: number; ci: number }, spec: TableSpec, x0: number, top: number, h: number, base: { b?: boolean; color?: RGB; size?: number }) => {
+    const cell = pl.c;
+    const al = cell.al ?? spec.cols[pl.ci]?.al ?? "l";
+    const x = x0 + pl.x;
+    if (cell.fill) cur.page.drawRectangle({ x, y: PH - top - h, width: pl.w, height: h, color: cell.fill });
+    if (cell.draw) {
+      cell.draw(x, top, pl.w, h);
+      return;
+    }
+    const b = cell.b ?? base.b ?? false;
+    const color = cell.color ?? base.color ?? INK;
+    let size = cell.size ?? base.size ?? SZ;
+    if (cell.parts) {
+      const adv = (q: { t: string; b?: boolean }) => tw(T(q.t), size, !!q.b) + (/\s$/.test(q.t) ? tw(" ", size, !!q.b) : 0);
+      const whole = cell.parts.reduce((a, q) => a + adv(q), 0);
+      let cx = al === "r" ? x + pl.w - PAD - whole : al === "c" ? x + (pl.w - whole) / 2 : x + PAD;
+      for (const q of cell.parts) {
+        put(T(q.t), cx, top + h / 2 + size * 0.34, size, !!q.b, color);
+        cx += adv(q);
+      }
+      return;
+    }
+    const lines = cellLines(cell, pl.w, al);
+    if (al !== "l") size = fit(lines[0], size, b, pl.w - PAD * 2);
+    const block = lines.length * LEAD;
+    lines.forEach((ln, k) => {
+      if (!ln) return;
+      const base0 = top + h / 2 - block / 2 + LEAD * k + LEAD / 2 + size * 0.34 - 0.4;
+      const wv = tw(ln, size, b);
+      const lx = al === "r" ? x + pl.w - PAD - wv : al === "c" ? x + (pl.w - wv) / 2 : x + PAD;
+      put(ln, lx, base0, size, b, color);
+    });
   };
 
-  // ── Report heading ──
-  cur.page.drawText(T(`${subtitle}${hasMf ? "" : ""}`), { x: MARGIN, y: cur.y, size: 12, font: bold, color: INK });
-  {
-    const rd = `Report as on: ${reportDate}`;
-    cur.page.drawText(rd, { x: W - MARGIN - helv.widthOfTextAtSize(rd, 8.5), y: cur.y, size: 8.5, font: helv, color: SLATE });
-  }
-  cur.y -= 22;
+  const drawBand = (spec: TableSpec, x: number, top: number, w: number) => {
+    cur.page.drawRectangle({ x, y: PH - top - BAND_H, width: w, height: BAND_H, color: BAND_BG });
+    const t = T(spec.title ?? "");
+    const tx = spec.titleAl === "c" ? x + (w - tw(t, SZ + 0.2, true)) / 2 : x + PAD + 0.5;
+    put(t, tx, top + BAND_H / 2 + 2.9, SZ + 0.2, true, BLUE);
+    return BAND_H;
+  };
+  const drawHead = (spec: TableSpec, widths: number[], x: number, top: number, w: number) => {
+    let t = top;
+    const rows = spec.head ?? [];
+    rows.forEach((hr, i) => {
+      cur.page.drawRectangle({ x, y: PH - t - HEAD_H, width: w, height: HEAD_H, color: HEAD_BG });
+      for (const pl of place(hr, widths)) drawCell(pl, spec, x, t, HEAD_H, { b: true, color: BLUE });
+      if (i === rows.length - 1) cur.page.drawRectangle({ x, y: PH - t - HEAD_H, width: w, height: 0.9, color: c(25, 25, 25) });
+      t += HEAD_H;
+    });
+    return rows.length * HEAD_H;
+  };
+  const drawBodyRow = (spec: TableSpec, row: Row, idx: number, widths: number[], x: number, top: number, w: number, h: number) => {
+    const fill = row.fill ?? (spec.zebra && idx % 2 === 1 ? ZEBRA : undefined);
+    if (fill) cur.page.drawRectangle({ x, y: PH - top - h, width: w, height: h, color: fill });
+    for (const pl of place(row.cells, widths)) drawCell(pl, spec, x, top, h, {});
+    if (!row.noDots) dotted(x, top + h, w);
+  };
+  const border = (x: number, top: number, w: number, bottom: number) =>
+    cur.page.drawRectangle({ x, y: PH - bottom, width: w, height: bottom - top, borderColor: BORDER, borderWidth: 0.9 });
 
-  if (p.coverLetter && p.coverLetter.trim()) {
-    heading("Note from your advisor");
-    para(p.coverLetter, 8.5, SLATE, 4);
-    cur.y -= 8;
-  }
+  /** A full-width table that flows over pages, repeating its heading on each. */
+  const table = (spec: TableSpec) => {
+    const widths = norm(spec.cols, CW);
+    const headH = (spec.head?.length ?? 0) * HEAD_H;
+    const bandH = spec.title ? BAND_H : 0;
+    const heights = spec.rows.map((r) => rowHeight(r, spec, widths));
+    ensure(bandH + headH + (heights[0] ?? 0) + 2);
+    let boxTop = cur.top;
+    const start = () => {
+      boxTop = cur.top;
+      if (spec.title) cur.top += drawBand(spec, ML, cur.top, CW);
+      cur.top += drawHead(spec, widths, ML, cur.top, CW);
+    };
+    start();
+    spec.rows.forEach((row, i) => {
+      if (cur.top + heights[i] > limit) {
+        border(ML, boxTop, CW, cur.top);
+        newPage();
+        start();
+      }
+      drawBodyRow(spec, row, i, widths, ML, cur.top, CW, heights[i]);
+      cur.top += heights[i];
+    });
+    border(ML, boxTop, CW, cur.top);
+    cur.top += GAP;
+  };
+
+  /** A box of a fixed size at a given spot (for the side-by-side allocation tables). */
+  const boxHeightOf = (spec: TableSpec, w: number) => {
+    const widths = norm(spec.cols, w);
+    return (spec.title ? BAND_H : 0) + (spec.head?.length ?? 0) * HEAD_H + spec.rows.reduce((a, r) => a + rowHeight(r, spec, widths), 0);
+  };
+  const staticBox = (spec: TableSpec, x: number, top: number, w: number) => {
+    const widths = norm(spec.cols, w);
+    let t = top;
+    if (spec.title) t += drawBand(spec, x, t, w);
+    t += drawHead(spec, widths, x, t, w);
+    spec.rows.forEach((row, i) => {
+      const h = rowHeight(row, spec, widths);
+      drawBodyRow(spec, row, i, widths, x, t, w, h);
+      t += h;
+    });
+    border(x, top, w, t);
+    return t - top;
+  };
+
+  /** Boxed block of wrapped text (the advisor's note). */
+  const textBox = (title: string, text: string) => {
+    const lines = wrapT(T(text), 8.6, false, CW - 2 * PAD - 6);
+    const lead = 12;
+    ensure(BAND_H + lead * 2 + 14);
+    let boxTop = cur.top;
+    const spec: TableSpec = { title, cols: [{ w: 1, al: "l" }], rows: [] };
+    cur.top += drawBand(spec, ML, cur.top, CW);
+    cur.top += 6;
+    for (const l of lines) {
+      if (cur.top + lead + 6 > limit) {
+        border(ML, boxTop, CW, cur.top + 4);
+        newPage();
+        boxTop = cur.top;
+        cur.top += 6;
+      }
+      put(l, ML + PAD + 3, cur.top + 8, 8.6, false, INK);
+      cur.top += lead;
+    }
+    cur.top += 6;
+    border(ML, boxTop, CW, cur.top);
+    cur.top += GAP;
+  };
+
+  // ── numbers/format helpers used below ──
+  const risk = p.riskRating ? String(p.riskRating) : highestRisk(mf.map((m) => m.risk));
+  const riskometer = (x: number, top: number, w: number, h: number) => {
+    const bw = 150;
+    const bx = x + (w - bw) / 2;
+    const by = top + h / 2 - 3;
+    const seg = bw / 5;
+    const cols = [c(125, 190, 66), c(181, 211, 52), c(240, 179, 35), c(235, 140, 40), c(200, 76, 70)];
+    cols.forEach((col, i) => cur.page.drawRectangle({ x: bx + i * seg, y: PH - by - 7.7, width: seg + 0.2, height: 7.7, color: col }));
+    put("Riskometer", bx, top + 6.4, 4.8, true, INK);
+    put("Conservative", bx, by + 17, 4.6, false, c(90, 140, 90));
+    const mid = "Moderate / Aggressive";
+    put(mid, bx + bw * 0.5 - tw(mid, 4.6) / 2 + 6, by + 17, 4.6, false, c(235, 140, 40));
+    put("Aggressive", bx + bw - tw("Aggressive", 4.6), by + 17, 4.6, false, c(110, 120, 150));
+    const idx = riskIndex(risk);
+    if (idx != null) {
+      const mx = bx + idx * seg + seg / 2;
+      cur.page.drawSvgPath("M0 0 L6 0 L3 5 Z", { x: mx - 3, y: PH - (by - 6), color: NAVY });
+    }
+  };
+
+  // ── Advisor's note ──
+  if (p.coverLetter && p.coverLetter.trim()) textBox("Note from your advisor:", p.coverLetter);
 
   // ═══════════════ MUTUAL FUNDS ═══════════════
   if (hasMf) {
@@ -350,107 +588,128 @@ export async function renderProposalReportPdf(args: {
     const totalLump = mf.reduce((s, m) => s + m.lumpsum, 0);
     const wRet = totalInvested > 0 ? mf.reduce((s, m) => s + m.ret * m.invested, 0) / totalInvested : 0;
     const maxYears = Math.max(...mf.map((m) => m.years), 0);
-    const risk = p.riskRating ? String(p.riskRating) : highestRisk(mf.map((m) => m.risk));
 
     // Particulars
-    heading("Particulars");
     {
-      const cols: TCol[] = [{ h: "Investor Name", w: 0.30 }];
-      const row: string[] = [p.recipientName ?? "-"];
-      if (hasSip) { cols.push({ h: "SIP Inv. Amt. (₹)", w: 0.16, align: "r" }); row.push(inr(totalMonthly)); }
-      if (hasLump) { cols.push({ h: "Lumpsum Inv. Amt. (₹)", w: 0.16, align: "r" }); row.push(inr(totalLump)); }
-      cols.push({ h: "Period", w: 0.12, align: "r" }); row.push(maxYears ? `${trim(maxYears)} Years` : "-");
-      cols.push({ h: "Expected Returns", w: 0.14, align: "r" }); row.push(wRet ? `${wRet.toFixed(2)}%` : "-");
-      cols.push({ h: "Risk Profile", w: 0.16, align: "r" }); row.push(risk || "-");
-      const sum = cols.reduce((a, c) => a + c.w, 0);
-      table(cols.map((c) => ({ ...c, w: c.w / sum })), [row]);
+      const cols: ColSpec[] = [{ w: 151, al: "c" }];
+      const head: Cell[] = ["Investor Name"];
+      const row: Cell[] = [{ t: p.recipientName ?? "-", b: true, size: 8.6 }];
+      if (hasSip) {
+        cols.push({ w: 147, al: "c" });
+        head.push("SIP Inv. Amt.");
+        row.push({ t: `₹${inr(totalMonthly)}`, b: true, size: 8.6 });
+      }
+      if (hasLump) {
+        cols.push({ w: 147, al: "c" });
+        head.push("Lumpsum Inv. Amt.");
+        row.push({ t: `₹${inr(totalLump)}`, b: true, size: 8.6 });
+      }
+      cols.push({ w: 70, al: "c" }, { w: 258, al: "c" }, { w: 351, al: "c" });
+      head.push("Period", "Expected Returns", "Risk Profile");
+      row.push(
+        { t: maxYears ? `${trim(maxYears)} Years` : "-", b: true, size: 8.6 },
+        { t: "Custom Expected Returns", b: true, size: 8.6 },
+        { t: "", draw: riskometer }
+      );
+      table({ title: "Particulars", titleAl: "c", cols, head: [head], rows: [{ cells: row, minH: 29.5, noDots: true }] });
     }
 
     // Suggested schemes
-    heading(hasSip && !hasLump ? "Suggested SIP Schemes" : hasLump && !hasSip ? "Suggested Lumpsum Schemes" : "Suggested Schemes");
     {
-      const cols: TCol[] = [
-        { h: "Scheme", w: 0.25 },
-        { h: "Category", w: 0.15 },
-        { h: "Risk Profile", w: 0.09 },
-        { h: "Period", w: 0.07, align: "r" },
-        { h: "Expected Ret (%)*", w: 0.09, align: "r" },
+      const cols: ColSpec[] = [
+        { w: 256, al: "l" }, { w: 127, al: "l" }, { w: 78, al: "l" }, { w: 47, al: "r" }, { w: 123, al: "r" },
       ];
-      if (hasLump) cols.push({ h: "Lumpsum (₹)", w: 0.10, align: "r" });
-      if (hasSip) cols.push({ h: "Monthly SIP Amt (₹)", w: 0.10, align: "r" });
-      cols.push({ h: "Total Invested (₹)", w: 0.11, align: "r" }, { h: "Allocation (%)", w: 0.09, align: "r" });
-      const sum = cols.reduce((a, c) => a + c.w, 0);
-      const rows = mf.map((m) => {
-        const r = [m.name, m.category || "-", m.risk || "-", m.years ? `${trim(m.years)} Yrs` : "-", m.ret ? m.ret.toFixed(2) : "-"];
+      const head: Cell[] = ["Scheme", "Category", "Risk Profile", "Period", "Expected Ret (%)*"];
+      if (hasLump) {
+        cols.push({ w: 120, al: "r" });
+        head.push("Lumpsum Amt (₹)");
+      }
+      if (hasSip) {
+        cols.push({ w: 130, al: "r" });
+        head.push("Monthly SIP Amt (₹)");
+      }
+      cols.push({ w: 120, al: "r" }, { w: 96, al: "r" });
+      head.push("Total Invested (₹)", "Allocation (%)");
+      const rows: Row[] = mf.map((m) => {
+        const r: Cell[] = [m.name, m.category || "-", m.risk || "-", m.years ? `${trim(m.years)} Yrs` : "-", m.ret ? m.ret.toFixed(2) : "-"];
         if (hasLump) r.push(m.lumpsum ? inr(m.lumpsum) : "-");
         if (hasSip) r.push(m.monthly ? inr(m.monthly) : "-");
         r.push(inr(m.invested), totalInvested ? pct2((m.invested / totalInvested) * 100) : "-");
-        return r;
+        return { cells: r };
       });
-      const totalRow = ["Grand Total:", "", "", "", ""];
-      if (hasLump) totalRow.push(inr(totalLump));
-      if (hasSip) totalRow.push(inr(totalMonthly));
-      totalRow.push(inr(totalInvested), "100.00");
-      table(cols.map((c) => ({ ...c, w: c.w / sum })), [...rows, totalRow], { boldLast: true });
-      if (totalFv > 0) {
-        ensure(24);
-        const s1 = `Expected Return (%): ${wRet ? wRet.toFixed(2) : "-"}`;
-        const s2 = `Projected value: ${inr(totalFv)}`;
-        cur.page.drawText(T(s1), { x: MARGIN, y: cur.y, size: 9, font: bold, color: INK });
-        cur.page.drawText(T(s2), { x: MARGIN + 190, y: cur.y, size: 9, font: bold, color: GREEN });
-        cur.y -= 14;
+      const gt: Cell[] = [{ t: "Grand Total:", span: 4, al: "r", b: true }, ""];
+      const ex: Cell[] = [{ t: "Expected Return (%):", span: 4, al: "r", b: true }, { t: wRet ? wRet.toFixed(2) : "-", b: true }];
+      if (hasLump) {
+        gt.push({ t: inr(totalLump), b: true });
+        ex.push("");
       }
-      para("* Expected returns are assumptions for illustration and are not guaranteed. Projected values compound the monthly SIP and any lumpsum at the expected return.", 7, MUTED);
-      cur.y -= 6;
+      if (hasSip) {
+        gt.push({ t: inr(totalMonthly), b: true });
+        ex.push("");
+      }
+      gt.push({ t: inr(totalInvested), b: true }, { t: "100.00", b: true });
+      ex.push({ t: totalFv > 0 ? inr(totalFv) : "-", b: true }, "");
+      rows.push({ cells: gt, fill: ZEBRA, minH: 22 }, { cells: ex, fill: ZEBRA, minH: 22 });
+      table({
+        title: hasSip && !hasLump ? "Suggested SIP Schemes:" : hasLump && !hasSip ? "Suggested Lumpsum Schemes:" : "Suggested Schemes:",
+        cols, head: [head], rows, zebra: true,
+      });
     }
 
     // Trailing returns + historical SIP (only for schemes with NAV history)
     const withData = mf.filter((m) => analytics.get(cleanCode(m.code)));
     if (withData.length) {
-      heading("Trailing Returns");
-      table(
-        [
-          { h: "Scheme", w: 0.34 },
-          { h: "Category", w: 0.20 },
-          { h: "Inception Date", w: 0.12, align: "r" },
-          { h: "1 Yr Ret (%)", w: 0.085, align: "r" },
-          { h: "3 Yrs Ret (%)", w: 0.085, align: "r" },
-          { h: "5 Yrs Ret (%)", w: 0.085, align: "r" },
-          { h: "10 Yrs Ret (%)", w: 0.085, align: "r" },
+      const f = (v: number | null) => (v == null ? "-" : v.toFixed(2));
+      table({
+        title: "Trailing Returns:",
+        cols: [
+          { w: 277, al: "l" }, { w: 160, al: "l" }, { w: 100, al: "r" },
+          { w: 110, al: "r" }, { w: 110, al: "r" }, { w: 110, al: "r" }, { w: 110, al: "r" },
         ],
-        withData.map((m) => {
+        head: [
+          ["", "", "", "1 Yr", "3 Yrs", "5 Yrs", "10 Yrs"],
+          ["Scheme", "Category", "Incep Date", "Ret (%)", "Ret (%)", "Ret (%)", "Ret (%)"],
+        ],
+        rows: withData.map((m) => {
           const a = analytics.get(cleanCode(m.code))!;
-          const f = (v: number | null) => (v == null ? "-" : v.toFixed(2));
-          return [m.name, m.category || "-", a.inceptionDate ? dmy(a.inceptionDate) : "-", f(a.returns.y1), f(a.returns.y3), f(a.returns.y5), f(a.returns.y10)];
-        })
-      );
-      para("Returns less than 1 year are absolute; 1 year and above are compounded annualised (CAGR). Based on NAV history; past performance may or may not be sustained.", 7, MUTED);
-      cur.y -= 6;
+          return { cells: [m.name, m.category || "-", a.inceptionDate ? dmy(a.inceptionDate) : "-", f(a.returns.y1), f(a.returns.y3), f(a.returns.y5), f(a.returns.y10)] };
+        }),
+        zebra: true,
+      });
 
-      const sipRows: string[][] = [];
-      for (const m of withData) {
+      // Growth of Rs. 10,000 monthly SIP (historical)
+      const periods: Array<[string, keyof SchemeAnalytics["sip"], RGB]> = [["1 Yr", "y1", G1], ["3 Yrs", "y3", G3], ["5 Yrs", "y5", G5], ["10 Yrs", "y10", G10]];
+      const anySip = withData.some((m) => {
         const a = analytics.get(cleanCode(m.code))!;
-        const per: Array<[string, keyof SchemeAnalytics["sip"]]> = [["1 Yr", "y1"], ["3 Yrs", "y3"], ["5 Yrs", "y5"], ["10 Yrs", "y10"]];
-        let first = true;
-        for (const [lbl, k] of per) {
-          const h = a.sip[k];
-          if (!h) continue;
-          sipRows.push([first ? m.name : "", lbl, inr(h.invested), inr(h.value), h.xirr == null ? "-" : h.xirr.toFixed(2)]);
-          first = false;
+        return periods.some(([, k]) => a.sip[k]);
+      });
+      if (anySip) {
+        const cols: ColSpec[] = [{ w: 224, al: "l" }];
+        const h1: Cell[] = [""];
+        const h2: Cell[] = ["Scheme Name"];
+        for (const [lbl, , fill] of periods) {
+          for (let i = 0; i < 3; i++) cols.push({ w: 62.7, al: "r" });
+          h1.push({ t: lbl, span: 3, al: "c", fill });
+          h2.push({ t: "Tot SIP Inv", fill }, { t: "Curr Value", fill }, { t: "XIRR (%)", fill });
         }
-      }
-      if (sipRows.length) {
-        heading("Growth of Rs. 10,000 Monthly SIP - Historical Return");
-        table(
-          [
-            { h: "Scheme", w: 0.42 },
-            { h: "Period", w: 0.10, align: "r" },
-            { h: "Tot SIP Inv (₹)", w: 0.16, align: "r" },
-            { h: "Curr Value (₹)", w: 0.16, align: "r" },
-            { h: "XIRR (%)", w: 0.16, align: "r" },
-          ],
-          sipRows
-        );
+        table({
+          title: "Growth of Rs. 10,000 Monthly SIP - (Historical Return)",
+          cols,
+          head: [h1, h2],
+          rows: withData.map((m) => {
+            const a = analytics.get(cleanCode(m.code))!;
+            const cells: Cell[] = [m.name];
+            for (const [, k, fill] of periods) {
+              const h = a.sip[k];
+              cells.push(
+                { t: h ? inr(h.invested) : "-", fill },
+                { t: h ? inr(h.value) : "-", fill },
+                { t: h && h.xirr != null ? h.xirr.toFixed(2) : "-", fill }
+              );
+            }
+            return { cells };
+          }),
+        });
       }
     }
 
@@ -469,48 +728,61 @@ export async function renderProposalReportPdf(args: {
           { invested: 0, fv: 0 }
         );
       const base = calc(0);
-      heading(`What if scenario @ ${sipRet.toFixed(2)}% expected return - ${trim(sipYears)} Years`);
-      table(
-        [
-          { h: "Top-up", w: 0.25 },
-          { h: "Initial SIP Amount (₹)", w: 0.12, align: "r" },
-          { h: "Total Amount Invested (₹)", w: 0.14, align: "r" },
-          { h: "Total Growth (₹)", w: 0.12, align: "r" },
-          { h: "Total Future Value (₹)", w: 0.14, align: "r" },
-          { h: "Enhanced Growth Amount (₹)", w: 0.13, align: "r" },
-          { h: "Enhanced Growth (%)", w: 0.10, align: "r" },
+      table({
+        title: `What if scenario @ ${sipRet.toFixed(2)}% expected return - ${trim(sipYears)} Years`,
+        cols: [
+          { w: 203, al: "l" }, { w: 131, al: "r" }, { w: 141, al: "r" }, { w: 84, al: "r" }, { w: 116, al: "r" }, { w: 164, al: "r" }, { w: 138, al: "r" },
         ],
-        [0, 5, 10, 15].map((t) => {
+        head: [["Top-up", "Initial SIP Amount", "Total Amount Invested", "Total Growth", "Total Future Value", "Enhanced Growth Amount", "Enhanced Growth (%)"]],
+        rows: [0, 5, 10, 15].map((t) => {
           const r = calc(t);
-          const growth = r.fv - r.invested;
           const extra = r.fv - base.fv;
-          return [
-            t === 0 ? "SIP Amount Without Top-up" : `SIP Amount With ${t}% Annual Top-up`,
-            inr(sipTotal), inr(r.invested), inr(growth), inr(r.fv),
-            t === 0 ? "-" : inr(extra), t === 0 || base.fv <= 0 ? "-" : pct2((extra / base.fv) * 100),
-          ];
-        })
-      );
+          return {
+            cells: [
+              { parts: [{ t: "SIP Amount " }, { t: t === 0 ? "Without Top-up" : `With ${t}% Annual Top-up`, b: true }] },
+              inr(sipTotal), inr(r.invested), inr(r.fv - r.invested), inr(r.fv),
+              { t: t === 0 ? "-" : inr(extra), b: t !== 0, size: t === 0 ? SZ : 9.2 },
+              { t: t === 0 || base.fv <= 0 ? "-" : pct2((extra / base.fv) * 100), b: t !== 0, size: t === 0 ? SZ : 9.2 },
+            ] as Cell[],
+            minH: 22.5,
+          };
+        }),
+      });
     }
 
-    // Allocation tables
+    // Allocation tables, side by side
     const group = (keyOf: (m: McItem) => string) => {
       const map = new Map<string, number>();
       for (const m of mf) map.set(keyOf(m) || "Other", (map.get(keyOf(m) || "Other") ?? 0) + m.invested);
-      return [...map.entries()].sort((a, b) => b[1] - a[1]);
+      const all = [...map.entries()].sort((a, b) => b[1] - a[1]);
+      if (all.length <= 12) return all;
+      const rest = all.slice(11).reduce((s, [, v]) => s + v, 0);
+      return [...all.slice(0, 11), ["Others", rest] as [string, number]];
     };
-    const allocTable = (title: string, head: string, entries: Array<[string, number]>) => {
-      if (!entries.length || totalInvested <= 0) return;
-      heading(title);
-      table(
-        [{ h: head, w: 0.55 }, { h: "Amount (₹)", w: 0.25, align: "r" }, { h: "Allocation (%)", w: 0.20, align: "r" }],
-        [...entries.map(([k, v]) => [k, inr(v), pct2((v / totalInvested) * 100)]), ["Grand Total:", inr(totalInvested), "100.00"]],
-        { boldLast: true }
-      );
-    };
-    allocTable("AMC Allocation", "AMC", group((m) => m.amc));
-    allocTable("Asset Allocation", "Asset Allocation", group((m) => assetClassOf(m.category)));
-    allocTable("Category Allocation", "Category", group((m) => m.category));
+    if (totalInvested > 0) {
+      const allocSpec = (title: string, head: string, entries: Array<[string, number]>): TableSpec => ({
+        title,
+        cols: [{ w: 38, al: "l" }, { w: 31, al: "r" }, { w: 31, al: "r" }],
+        head: [[head, "Amount (₹)", "Allocation (%)"]],
+        rows: [
+          ...entries.map(([k, v]) => ({ cells: [k, inr(v), pct2((v / totalInvested) * 100)] as Cell[] })),
+          { cells: [{ t: "Grand Total:", b: true }, { t: inr(totalInvested), b: true }, { t: "100.00", b: true }] as Cell[], fill: WHITE, minH: 22 },
+        ],
+        zebra: true,
+      });
+      const specs = [
+        allocSpec("AMC Allocation:", "AMC", group((m) => m.amc)),
+        allocSpec("Asset Allocation:", "Asset Allocation", group((m) => assetClassOf(m.category))),
+        allocSpec("Category Allocation:", "Category", group((m) => m.category)),
+      ];
+      const gap = 4;
+      const bw = (CW - 2 * gap) / 3;
+      const tallest = Math.max(...specs.map((s) => boxHeightOf(s, bw)));
+      ensure(tallest + 2);
+      const top = cur.top;
+      specs.forEach((s, i) => staticBox(s, ML + i * (bw + gap), top, bw));
+      cur.top = top + tallest + GAP;
+    }
   }
 
   // ═══════════════ INSURANCE / PMS / AIF ═══════════════
@@ -518,43 +790,77 @@ export async function renderProposalReportPdf(args: {
   for (const it of products) if (it?.kind && it.kind !== "mf") (others[it.kind] ??= []).push(it);
   for (const [kind, items] of Object.entries(others)) {
     const cols = pruneEmptyCols(colsFor(kind), items);
-    heading(KIND_TITLE[kind] ?? kind);
-    table(
-      cols.map((c) => ({ h: c.h, w: c.w, align: c.align })),
-      items.map((it) => cols.map((c) => (isBlankCell(c.get(it)) ? "-" : String(c.get(it))))),
-    );
+    table({
+      title: `${KIND_TITLE[kind] ?? kind}:`,
+      cols: cols.map((x) => ({ w: x.w, al: (x.align === "r" ? "r" : "l") as Al })),
+      head: [cols.map((x) => x.h)],
+      rows: items.map((it) => ({ cells: cols.map((x) => (isBlankCell(x.get(it)) ? "-" : String(x.get(it)))) })),
+      zebra: true,
+    });
   }
-  if (products.length === 0) para("No products have been added to this proposal yet.", 9, MUTED);
-
+  if (products.length === 0) {
+    ensure(24);
+    put("No products have been added to this proposal yet.", ML, cur.top + 8, 9, false, GREY);
+    cur.top += 20;
+  }
   if (p.validUntil) {
     ensure(20);
-    para(`This proposal is valid until ${dmy(p.validUntil)}.`, 8.5, SLATE);
+    put(`This proposal is valid until ${dmy(p.validUntil)}.`, ML, cur.top + 8, 8.6, false, INK);
+    cur.top += 16;
   }
 
   // ═══════════════ DISCLAIMER PAGE ═══════════════
   newPage();
-  heading("Disclaimer", 10);
-  cur.y -= 4;
-  for (const t of LONG_DISCLAIMER) {
-    para(t, 8.5, SLATE, 4.5);
-    cur.y -= 6;
+  {
+    const x0 = 48.5;
+    const width = 744;
+    const size = 8.4;
+    const lead = 14.3;
+    type Run = { t: string; b?: boolean };
+    const paragraph = (runs: Run[], gapAfter: number) => {
+      const words: Array<{ w: string; b: boolean }> = [];
+      for (const r of runs) for (const w of T(r.t).split(/\s+/).filter(Boolean)) words.push({ w, b: !!r.b });
+      const lines: Array<typeof words> = [];
+      let line: typeof words = [];
+      let lw = 0;
+      const sp = tw(" ", size);
+      for (const wd of words) {
+        const w = tw(wd.w, size, wd.b);
+        if (line.length && lw + sp + w > width) {
+          lines.push(line);
+          line = [];
+          lw = 0;
+        }
+        lw += (line.length ? sp : 0) + w;
+        line.push(wd);
+      }
+      if (line.length) lines.push(line);
+      lines.forEach((ln, i) => {
+        ensure(lead);
+        const natural = ln.reduce((a, wd) => a + tw(wd.w, size, wd.b), 0);
+        const last = i === lines.length - 1;
+        const space = !last && ln.length > 1 ? (width - natural) / (ln.length - 1) : sp;
+        let x = x0;
+        for (const wd of ln) {
+          put(wd.w, x, cur.top + 9, size, wd.b, wd.b ? c(85, 85, 85) : c(105, 105, 105));
+          x += tw(wd.w, size, wd.b) + space;
+        }
+        cur.top += lead;
+      });
+      cur.top += gapAfter;
+    };
+    cur.top += 6;
+    paragraph([{ t: "Disclaimer : ", b: true }, { t: LONG_DISCLAIMER_1 }], 3);
+    paragraph([{ t: LONG_DISCLAIMER_2 }], 0);
+    paragraph([{ t: LONG_DISCLAIMER_3 }], 0);
+    paragraph(
+      [
+        { t: "Mutual Fund Investments are subject to market risks, read all scheme related documents carefully.", b: true },
+        { t: " Past performance may or may not be sustained in the future. Investors should consult with their Mutual Fund Distributor or Financial Advisor before investing." },
+      ],
+      0
+    );
   }
-
-  // ── Footer + page numbers (not on the cover) ──
-  const pages = doc.getPages();
-  pages.forEach((pg, i) => {
-    if (i === 0) return;
-    pg.drawRectangle({ x: MARGIN, y: 52, width: W - 2 * MARGIN, height: 1, color: LINE });
-    pg.drawText(T(`${firm}${arnText ? `  -  ${arnText}` : ""}`), { x: MARGIN, y: 40, size: 8, font: bold, color: SLATE });
-    const gen = T(`Generated ${dmy(generatedAt)}${p.proposalNumber ? ` - Ref ${p.proposalNumber}` : ""}`);
-    pg.drawText(gen, { x: W - MARGIN - helv.widthOfTextAtSize(gen, 7.5), y: 40, size: 7.5, font: helv, color: MUTED });
-    let dy = 26;
-    for (const l of wrap(T(MF_DISCLAIMER), helv, 6.6, W - 2 * MARGIN).slice(0, 2)) {
-      pg.drawText(l, { x: MARGIN, y: dy, size: 6.6, font: helv, color: MUTED });
-      dy -= 8.5;
-    }
-  });
-  drawPageNumbers(doc, helv, W, 8);
 
   return Buffer.from(await doc.save());
 }
@@ -565,7 +871,6 @@ const trim = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const cleanCode = (c: string) => String(c ?? "").replace(/[^0-9A-Za-z]/g, "");
 const inr = (n: number) => Math.round(n).toLocaleString("en-IN");
 const pct2 = (n: number) => n.toFixed(2);
-const spaced = (s: string) => s.split("").join(" ");
 
 function dmy(d: string | Date): string {
   const t = new Date(d);
@@ -575,10 +880,16 @@ function dmy(d: string | Date): string {
   return `${dd}-${mm}-${t.getFullYear()}`;
 }
 
-function addressLine(a: ReportBrand["address"]): string {
-  if (!a) return "";
-  if (typeof a === "string") return a;
-  return [a.line1, a.line2, [a.city, a.pincode].filter(Boolean).join(" - ")].filter(Boolean).join(", ");
+/** Address as printed lines: street, then locality / city - pincode. */
+function addressLines(a: ReportBrand["address"]): string[] {
+  if (!a) return [];
+  if (typeof a === "string") return a.trim() ? [a.trim()] : [];
+  const second = [a.line2, [a.city, a.pincode].filter(Boolean).join(" - ")].filter(Boolean).join(",");
+  return [a.line1, second].filter((x): x is string => !!x && x.trim().length > 0);
+}
+
+function roundedRect(w: number, h: number, r: number): string {
+  return `M${r} 0 H${w - r} Q${w} 0 ${w} ${r} V${h - r} Q${w} ${h} ${w - r} ${h} H${r} Q0 ${h} 0 ${h - r} V${r} Q0 0 ${r} 0 Z`;
 }
 
 const RISK_ORDER = ["low", "low to moderate", "moderate", "moderately high", "high", "very high"];
@@ -593,6 +904,18 @@ function highestRisk(risks: string[]): string {
     }
   }
   return best;
+}
+
+/** Position (0-4) on the riskometer for a risk-profile / risk-rating text. */
+export function riskIndex(text: string | null | undefined): number | null {
+  const t = (text ?? "").trim().toLowerCase();
+  if (!t) return null;
+  if (/moderately (high|aggressive)/.test(t)) return 3;
+  if (/very high|aggressive|^high/.test(t)) return 4;
+  if (/low to moderate|moderately (low|conservative)/.test(t)) return 1;
+  if (/moderate|balanced/.test(t)) return 2;
+  if (/conservative|^low/.test(t)) return 0;
+  return null;
 }
 
 function absUrl(url: string): string {
@@ -615,31 +938,4 @@ async function embedLogo(doc: PDFDocument, rawUrl?: string | null): Promise<PDFI
   } catch {
     return null;
   }
-}
-function fitText(text: string, font: PDFFont, size: number, maxWidth: number, min: number): number {
-  let s = size;
-  while (s > min && font.widthOfTextAtSize(text, s) > maxWidth) s -= 0.5;
-  return s;
-}
-function wrap(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const lines: string[] = [];
-  for (const para of (text || "").split(/\n/)) {
-    let line = "";
-    for (const w of para.split(/\s+/).filter(Boolean)) {
-      const trial = line ? `${line} ${w}` : w;
-      if (font.widthOfTextAtSize(trial, size) <= maxWidth || !line) line = trial;
-      else {
-        lines.push(line);
-        line = w;
-      }
-    }
-    lines.push(line);
-  }
-  return lines.length ? lines : [""];
-}
-function hexToRgb(hex: string | null | undefined): RGB {
-  const m = (hex ?? "").replace(/^#/, "").match(/^([0-9a-fA-F]{6})$/);
-  if (!m) return DEFAULT_PRIMARY;
-  const [r, g, b] = m[1].match(/.{2}/g)!.map((x) => parseInt(x, 16) / 255);
-  return rgb(r, g, b);
 }

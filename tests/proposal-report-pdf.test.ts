@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractText, getDocumentProxy } from "unpdf";
-import { renderProposalReportPdf } from "@/lib/proposal/report-pdf";
+import { renderProposalReportPdf, riskIndex } from "@/lib/proposal/report-pdf";
 import { analyseSeries, type NavPoint } from "@/lib/proposal/report-analytics";
 
 const DAY = 86_400_000;
@@ -44,8 +44,8 @@ describe("proposal report PDF", () => {
     const all = text.join("\n").replace(/\s+/g, " ");
 
     // cover
-    expect(text[0]).toContain("INVESTMENT ANALYSIS");
-    expect(text[0]).toContain("PERFORMANCE REPORT");
+    // the report title is letter-spaced, so compare without spaces
+    expect(text[0].replace(/\s+/g, "")).toContain("INVESTMENTANALYSIS&PERFORMANCEREPORT");
     expect(text[0]).toContain("Investment Presentation - SIP");
     expect(all).toContain("SSIT FINSERV PRIVATE LIMITED");
     expect(all).toContain("ARN-268616");
@@ -53,28 +53,30 @@ describe("proposal report PDF", () => {
     expect(all).toContain("www.equitywala.com");
 
     // particulars + schemes (figures from the sample report)
-    expect(all).toContain("PARTICULARS");
+    expect(all).toContain("Particulars");
+    expect(all).toContain("Custom Expected Returns");
+    expect(all).toContain("Riskometer");
     expect(all).toContain("Grand Total:");
     expect(all).toContain("9,00,000");
     expect(all).toContain("60.00");
     expect(all).toContain("20.00");
 
     // what-if top-up (totals invested match the sample)
-    expect(all).toContain("WHAT IF SCENARIO");
+    expect(all).toContain("What if scenario @ 12.00% expected return - 3 Years");
     expect(all).toContain("SIP Amount With 5% Annual Top-up");
     expect(all).toContain("9,45,750");
     expect(all).toContain("9,93,000");
     expect(all).toContain("10,41,750");
 
     // allocations
-    expect(all).toContain("AMC ALLOCATION");
-    expect(all).toContain("ASSET ALLOCATION");
+    expect(all).toContain("AMC Allocation:");
+    expect(all).toContain("Asset Allocation:");
     expect(all).toContain("Equity Schemes");
-    expect(all).toContain("CATEGORY ALLOCATION");
+    expect(all).toContain("Category Allocation:");
 
     // disclaimer page
-    expect(text[pages - 1]).toContain("DISCLAIMER");
-    expect(all).toContain("not an Investment recommendation".replace("not", "It is not"));
+    expect(text[pages - 1]).toContain("Disclaimer :");
+    expect(text[pages - 1].replace(/\s+/g, " ")).toContain("It is not an Investment recommendation");
   });
 
   it("adds trailing returns and the SIP history when NAV history is available, and leaves them out when not", async () => {
@@ -82,13 +84,13 @@ describe("proposal report PDF", () => {
     const analytics = new Map([["1001", analyseSeries("1001", s)]]);
     const withIt = await textOf(await renderProposalReportPdf({ proposal, brand, analytics }));
     const joined = withIt.text.join("\n");
-    expect(joined).toContain("TRAILING RETURNS");
-    expect(joined).toContain("GROWTH OF RS. 10,000 MONTHLY SIP");
+    expect(joined).toContain("Trailing Returns:");
+    expect(joined).toContain("Growth of Rs. 10,000 Monthly SIP");
     expect(joined).toContain("XIRR");
 
     const without = (await textOf(await renderProposalReportPdf({ proposal, brand, analytics: new Map() }))).text.join("\n");
-    expect(without).not.toContain("TRAILING RETURNS");
-    expect(without).not.toContain("MONTHLY SIP - HISTORICAL");
+    expect(without).not.toContain("Trailing Returns:");
+    expect(without).not.toContain("Historical Return");
   });
 
   it("handles a lumpsum-only plan and non-mutual-fund items", async () => {
@@ -104,9 +106,9 @@ describe("proposal report PDF", () => {
     const all = (await textOf(await renderProposalReportPdf({ proposal: p, brand, analytics: new Map() }))).text.join("\n");
     expect(all).toContain("Investment Presentation - Lumpsum");
     expect(all).toContain("Lumpsum Inv. Amt.");
-    expect(all).toContain("INSURANCE");
+    expect(all).toContain("Insurance:");
     expect(all).toContain("Term Cover");
-    expect(all).not.toContain("WHAT IF SCENARIO"); // no SIP
+    expect(all).not.toContain("What if scenario"); // no SIP
   });
 
   it("still renders a proposal with no products", async () => {
@@ -115,5 +117,53 @@ describe("proposal report PDF", () => {
     );
     expect(pages).toBeGreaterThanOrEqual(2);
     expect(text.join("\n")).toContain("No products have been added");
+  });
+
+  it("is A4 landscape, like the reference report", async () => {
+    const buf = await renderProposalReportPdf({ proposal, brand, analytics: new Map() });
+    const pdf = await getDocumentProxy(new Uint8Array(buf));
+    const page = await pdf.getPage(1);
+    const [, , w, h] = page.view;
+    expect(w).toBeGreaterThan(h);
+    expect(Math.round(w)).toBe(842);
+  });
+
+  it("keeps long plans flowing onto further pages with every row present", async () => {
+    const many = {
+      title: "Big",
+      proposalNumber: "P9",
+      recipientName: "Client",
+      products: Array.from({ length: 30 }, (_, i) => ({
+        kind: "mf",
+        schemeName: `Scheme number ${i + 1} Direct Growth`,
+        amcName: `AMC ${i % 5}`,
+        schemeCode: `9${i}`,
+        category: `Equity: Cat ${i % 7}`,
+        riskRating: "High",
+        monthlyAmount: 1000 + i,
+        sipTermYears: 5,
+        expectedReturn: 12,
+      })),
+    } as any;
+    const { pages, text } = await textOf(await renderProposalReportPdf({ proposal: many, brand, analytics: new Map() }));
+    const all = text.join(" ");
+    expect(pages).toBeGreaterThanOrEqual(4);
+    expect(all).toContain("Scheme number 1 Direct Growth");
+    expect(all).toContain("Scheme number 30 Direct Growth");
+  });
+});
+
+describe("riskometer position", () => {
+  it("maps a risk text to one of five segments", () => {
+    expect(riskIndex("Conservative")).toBe(0);
+    expect(riskIndex("Low")).toBe(0);
+    expect(riskIndex("Low to Moderate")).toBe(1);
+    expect(riskIndex("Moderate")).toBe(2);
+    expect(riskIndex("Moderately High")).toBe(3);
+    expect(riskIndex("Moderately Aggressive")).toBe(3);
+    expect(riskIndex("Very High")).toBe(4);
+    expect(riskIndex("aggressive")).toBe(4);
+    expect(riskIndex("")).toBeNull();
+    expect(riskIndex("something else")).toBeNull();
   });
 });
