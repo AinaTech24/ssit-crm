@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Edit / remove one of the firm's OWN library uploads. Shown only to people
- * holding "Content Library — edit"; the API enforces the same rule and refuses
- * the shared Equitywala assets.
+ * Edit / delete one of the firm's OWN library uploads. Edit needs "Content Library
+ * — edit", Delete needs "Content Library — delete"; the API enforces the same rules
+ * and refuses the shared Equitywala assets.
  */
 
 import { useState } from "react";
@@ -16,7 +16,11 @@ export function AssetEditPanel({
   description: initialDescription,
   category: initialCategory,
   categories,
+  canEdit = true,
+  canDelete = true,
 }: {
+  canEdit?: boolean;
+  canDelete?: boolean;
   assetId: string;
   title: string;
   description: string | null;
@@ -67,9 +71,19 @@ export function AssetEditPanel({
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="btn-secondary text-xs inline-flex items-center gap-1">
-        <Pencil className="size-3.5" /> Edit details
-      </button>
+      <div className="flex items-center gap-2 flex-wrap">
+        {canEdit && (
+          <button type="button" onClick={() => setOpen(true)} className="btn-secondary text-xs inline-flex items-center gap-1">
+            <Pencil className="size-3.5" /> Edit details
+          </button>
+        )}
+        {canDelete && (
+          <button type="button" disabled={busy} onClick={remove} className="btn-secondary text-xs inline-flex items-center gap-1 text-rose-600">
+            <Trash2 className="size-3.5" /> Delete
+          </button>
+        )}
+        {err && <span className="text-xs text-rose-600">{err}</span>}
+      </div>
     );
   }
 
@@ -100,9 +114,11 @@ export function AssetEditPanel({
         <button type="button" disabled={busy} onClick={() => setOpen(false)} className="btn-secondary text-xs">
           Cancel
         </button>
-        <button type="button" disabled={busy} onClick={remove} className="ml-auto text-xs text-rose-600 hover:underline inline-flex items-center gap-1">
-          <Trash2 className="size-3.5" /> Remove from library
-        </button>
+        {canDelete && (
+          <button type="button" disabled={busy} onClick={remove} className="ml-auto text-xs text-rose-600 hover:underline inline-flex items-center gap-1">
+            <Trash2 className="size-3.5" /> Delete from library
+          </button>
+        )}
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  * Single-asset endpoints.
  *   GET    /api/content-library/[id]
  *   PATCH  /api/content-library/[id]   (platform admins; firm users with content_library.edit on their own uploads)
- *   DELETE /api/content-library/[id]   (soft = isActive=false; same rule — hard delete is platform-only)
+ *   DELETE /api/content-library/[id]   (soft = isActive=false; firm users need content_library.delete, own uploads only — hard delete is platform-only)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -122,7 +122,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!isPlatformAdmin(session.roles)) {
       // Firm users remove (deactivate) their own uploads only — never permanently,
       // and never the shared Equitywala assets.
-      requireAny(session.roles, ["content_library.edit"], session.permissions);
+      requireAny(session.roles, ["content_library.delete"], session.permissions);
       const removed = await withTenant(session.tenantId, async (tx) =>
         tx
           .update(contentLibraryAssets)

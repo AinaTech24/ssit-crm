@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Image as ImageIcon,
   FileText,
@@ -12,6 +13,7 @@ import {
   Download,
   X,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
@@ -48,8 +50,28 @@ const TYPE_TONE: Record<string, string> = {
   other: "bg-gray-50 text-gray-700",
 };
 
-export function LibraryGrid({ rows }: { rows: Asset[] }) {
+export function LibraryGrid({ rows, canDelete = false }: { rows: Asset[]; canDelete?: boolean }) {
+  const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  /** Remove one of the firm's own uploads (the API refuses the shared Equitywala ones). */
+  async function removeAsset(a: Asset) {
+    if (!confirm(`Delete "${a.title}" from your library? It will no longer be listed or sendable.`)) return;
+    setDeleting(a.id);
+    setError(null);
+    try {
+      const r = await fetch(`/api/content-library/${a.id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? "Could not delete");
+      setSelectedIds((ids) => ids.filter((x) => x !== a.id));
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not delete");
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   function toggleSelect(id: string) {
     if (selectedIds.includes(id)) {
@@ -66,6 +88,7 @@ export function LibraryGrid({ rows }: { rows: Asset[] }) {
 
   return (
     <div className="space-y-6">
+      {error && <div className="text-xs text-rose-600">{error}</div>}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {rows.map((a) => {
           const Icon = TYPE_ICON[a.type] ?? File;
@@ -89,6 +112,22 @@ export function LibraryGrid({ rows }: { rows: Asset[] }) {
                 onClick={(e) => e.stopPropagation()}
                 className="absolute top-2 right-2 size-4 rounded border-gray-300 text-brand-cyan focus:ring-brand-cyan z-20 accent-brand-cyan cursor-pointer"
               />
+
+              {canDelete && a.tenantId && (
+                <button
+                  type="button"
+                  title="Delete this creative"
+                  aria-label={`Delete ${a.title}`}
+                  disabled={deleting === a.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeAsset(a);
+                  }}
+                  className="absolute top-1.5 right-8 z-20 grid place-items-center size-6 rounded-full bg-background/90 border border-border text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
 
               <Link
                 href={`/dashboard/ssit-library/${a.id}`}

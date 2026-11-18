@@ -180,6 +180,7 @@ export type Capability =
   | "content_library.view"
   | "content_library.add"
   | "content_library.edit"
+  | "content_library.delete"
   | "dhandho.view"
   | "social_tracker.view"
   | "social_tracker.manage"
@@ -433,6 +434,7 @@ const MATRIX: Record<Capability, Role[]> = {
   ],
   "content_library.add": ["marketing"],
   "content_library.edit": ["marketing"],
+  "content_library.delete": ["marketing"],
   // Dhandho speaker schedule: everyone can SEE it by default; loading or changing the
   // schedule is the owner / admin only (an empty list = owner-only). Both are separate
   // capabilities so the owner can hand "add / edit" to one person, or take "view"

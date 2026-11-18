@@ -53,6 +53,7 @@ export default async function EquitywalaLibraryDetailPage({
   const session = await requireSession();
   if (!can(session.roles, "content_library.view", session.permissions)) notFound();
   const canEditAsset = can(session.roles, "content_library.edit", session.permissions);
+  const canDeleteAsset = can(session.roles, "content_library.delete", session.permissions);
   // Tenant context: the bespoke RLS policy (global OR own tenant) scopes the
   // lookup; the explicit predicate is belt-and-suspenders. (withSystem would
   // crash here — it leaves app.tenant_id at the role's empty-string default,
@@ -110,8 +111,10 @@ export default async function EquitywalaLibraryDetailPage({
       </div>
 
       {/* Only the firm's own uploads are editable — the shared assets are Equitywala's. */}
-      {canEditAsset && asset.tenantId === session.tenantId && (
+      {(canEditAsset || canDeleteAsset) && asset.tenantId === session.tenantId && (
         <AssetEditPanel
+          canEdit={canEditAsset}
+          canDelete={canDeleteAsset}
           assetId={asset.id}
           title={asset.title}
           description={asset.description}

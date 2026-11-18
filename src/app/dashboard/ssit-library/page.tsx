@@ -33,6 +33,7 @@ export default async function EquitywalaLibraryPage({
     );
   }
   const canUpload = can(session.roles, "content_library.add", session.permissions);
+  const canDelete = can(session.roles, "content_library.delete", session.permissions);
 
   // Platform-shared assets (tenant_id IS NULL) PLUS this tenant's own uploads.
   // Run in tenant context: the bespoke RLS policy on content_library_assets
@@ -138,7 +139,7 @@ export default async function EquitywalaLibraryPage({
           </p>
         </div>
       ) : (
-        <LibraryGrid rows={rows} />
+        <LibraryGrid rows={rows} canDelete={canDelete} />
       )}
     </div>
   );
