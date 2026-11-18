@@ -16,6 +16,7 @@ import { requireSession } from "@/lib/auth/session";
 import { isPlatformAdmin } from "@/lib/platform";
 import { can } from "@/lib/auth/rbac";
 import { assetVisibleTo, isUnsafeAssetUrl } from "@/lib/content/asset-url";
+import { emailContentAdded, notifyContentAdded, type ContentRecipient } from "@/lib/content/notify-added";
 import {
   contentLibraryAssets,
   ASSET_TYPES,
@@ -150,6 +151,7 @@ export async function POST(req: NextRequest) {
         } as any);
       });
     } else {
+      let toEmail: ContentRecipient[] = [];
       await withTenant(session.tenantId, async (tx) => {
         await tx.insert(contentLibraryAssets).values({
           id,
@@ -173,7 +175,37 @@ export async function POST(req: NextRequest) {
           tenantId: session.tenantId,
           isActive: true,
         } as any);
+
+        // Tell the team (in-app now, email once this is committed). Whoever holds the
+        // add capability triggers it. In a savepoint, so a notification problem can
+        // never undo the upload.
+        try {
+          toEmail = await tx.transaction(async (sp) =>
+            notifyContentAdded(sp, {
+              tenantId: session.tenantId,
+              assetId: id,
+              addedByUserId: session.userId,
+              addedByName: session.name || "A teammate",
+              title: body.title,
+              type: body.type,
+              category: body.category,
+              origin: req.nextUrl.origin,
+            })
+          );
+        } catch (e) {
+          console.warn("[content-library] could not notify the team:", (e as Error)?.message);
+        }
       });
+      // Email after the upload is saved, without making the uploader wait for it.
+      if (toEmail.length) {
+        void emailContentAdded(session.tenantId, id, toEmail, {
+          addedByName: session.name || "A teammate",
+          title: body.title,
+          type: body.type,
+          category: body.category,
+          origin: req.nextUrl.origin,
+        });
+      }
     }
     return NextResponse.json({ id }, { status: 201 });
   } catch (err: any) {
