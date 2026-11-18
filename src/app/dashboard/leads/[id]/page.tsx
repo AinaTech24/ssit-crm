@@ -68,7 +68,8 @@ const LEAD_DETAIL_SECTIONS: RelatedListDef[] = [
 /** Tab groups for the lead-detail page — the header stays pinned above. */
 const LEAD_DETAIL_TABS = [
   { key: "overview", label: "Overview", sections: ["signals", "blueprint", "onboarding", "converted_banner"] },
-  { key: "details", label: "Details", sections: ["edit_panel", "documents"] },
+  { key: "details", label: "Details", sections: ["edit_panel"] },
+  { key: "documents", label: "Documents", sections: ["documents"] },
   { key: "activity", label: "Activity", sections: ["whatsapp", "emails", "meetings", "activity"] },
 ];
 
@@ -393,22 +394,21 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         />
       </RelatedListSection>
 
-      {/* Documents - the same drop-and-list panel a client has. They move to the
-          client when the lead is converted. Hidden for roles without document access. */}
-      {can(session.roles, "document.view", session.permissions) && (
-        <RelatedListSection moduleKey="leads-detail" sectionKey="documents">
-          <LeadDocumentsSection
-            leadId={l.id}
-            leadName={l.name}
-            converted={!!(l as any).convertedInvestorId}
-            canUpload={
-              can(session.roles, "document.upload", session.permissions) &&
-              (can(session.roles, "lead.edit.all", session.permissions) ||
-                can(session.roles, "lead.edit.assigned", session.permissions))
-            }
-          />
-        </RelatedListSection>
-      )}
+      {/* Documents - the same drop-and-list panel a client has, on its own tab so it
+          is easy to find. They move to the client when the lead is converted. */}
+      <RelatedListSection moduleKey="leads-detail" sectionKey="documents">
+        <LeadDocumentsSection
+          leadId={l.id}
+          leadName={l.name}
+          converted={!!(l as any).convertedInvestorId}
+          canView={can(session.roles, "document.view", session.permissions)}
+          canUpload={
+            can(session.roles, "document.upload", session.permissions) &&
+            (can(session.roles, "lead.edit.all", session.permissions) ||
+              can(session.roles, "lead.edit.assigned", session.permissions))
+          }
+        />
+      </RelatedListSection>
 
       {/* MFD-defined custom fields (renders only if the firm has defined any). */}
       <CustomFieldsCard entity="lead" recordId={l.id} initialValues={(l as any).customFields ?? null} />

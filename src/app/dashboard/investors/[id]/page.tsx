@@ -128,7 +128,8 @@ const INVESTOR_DETAIL_TABS = [
   { key: "overview", label: "Overview", sections: ["health", "recommended", "summary"] },
   { key: "portfolio", label: "Portfolio", sections: ["valuation", "holdings", "churn", "allocation", "sip_health", "transactions", "expected_inflows", "cross_sell"] },
   { key: "profile", label: "KYC & Profile", sections: ["nominees", "referrals", "custom_fields", "master"] },
-  { key: "engagement", label: "Engagement", sections: ["family", "notes", "calls", "meeting_notes", "documents", "emails", "whatsapp", "gifts", "blueprint", "related"] },
+  { key: "engagement", label: "Engagement", sections: ["family", "notes", "calls", "meeting_notes", "emails", "whatsapp", "gifts", "blueprint", "related"] },
+  { key: "documents", label: "Documents", sections: ["documents"] },
   // Rarely-opened detail — tucked behind "More" so the core tabs stay uncluttered.
   { key: "more", label: "More", sections: ["completeness", "kyc_data", "risk_history", "task_log", "sr_log", "meeting_log"] },
 ];

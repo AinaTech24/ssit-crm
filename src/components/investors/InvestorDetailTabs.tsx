@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   MessagesSquare,
   FileText,
+  FolderOpen,
   Activity,
   MoreHorizontal,
   type LucideIcon,
@@ -35,6 +36,7 @@ const ICONS: Record<string, LucideIcon> = {
   profile: ShieldCheck,
   engagement: MessagesSquare,
   details: FileText,
+  documents: FolderOpen,
   activity: Activity,
   more: MoreHorizontal,
 };

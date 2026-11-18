@@ -40,10 +40,13 @@ export function LeadDocumentsSection({
   leadId,
   leadName,
   canUpload,
+  canView = true,
   converted = false,
 }: {
   leadId: string;
   leadName?: string;
+  /** May this person see documents at all (document.view)? */
+  canView?: boolean;
   /** May this person add and remove files (document.upload + edit rights on the lead)? */
   canUpload: boolean;
   /** The lead has become a client - its files now live on the client's record. */
@@ -57,21 +60,30 @@ export function LeadDocumentsSection({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [viewer, setViewer] = useState<ViewerDoc | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch(`/api/leads/${leadId}/documents`, { cache: "no-store" });
       const j = await res.json().catch(() => ({}));
-      if (res.ok && Array.isArray(j.documents)) setDocs(j.documents as Doc[]);
+      if (res.ok && Array.isArray(j.documents)) {
+        setDocs(j.documents as Doc[]);
+        setLoadError(null);
+      } else {
+        setLoadError(j.error ?? `Could not load documents (${res.status})`);
+      }
+    } catch {
+      setLoadError("Could not load documents - check your connection and refresh.");
     } finally {
       setLoading(false);
     }
   }, [leadId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (canView) void load();
+    else setLoading(false);
+  }, [load, canView]);
 
   async function uploadFiles(files: File[]) {
     if (!files.length) return;
@@ -156,6 +168,20 @@ export function LeadDocumentsSection({
     }
   }
 
+  if (!canView) {
+    return (
+      <div className="border rounded-lg bg-card" id="documents">
+        <div className="border-b px-4 py-2.5 font-medium flex items-center gap-2">
+          <FolderOpen className="size-4" /> Documents &amp; attachments
+        </div>
+        <div className="p-4 text-sm text-muted-foreground">
+          Your role does not include access to documents. Ask your admin to turn on <strong>Documents</strong> for
+          you (Employees &rarr; your record &rarr; permissions).
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="border rounded-lg bg-card" id="documents">
       <div className="border-b px-4 py-2.5 font-medium flex items-center justify-between gap-2">
@@ -207,7 +233,9 @@ export function LeadDocumentsSection({
           onChange={(e) => e.target.files && void uploadFiles(Array.from(e.target.files))}
         />
 
-        {loading ? (
+        {loadError ? (
+          <div className="rounded-md border border-rose-300 bg-rose-50 text-rose-900 text-xs p-2">{loadError}</div>
+        ) : loading ? (
           <div className="text-sm text-muted-foreground py-3 flex items-center gap-2">
             <Loader2 className="size-4 animate-spin" /> Loading…
           </div>
