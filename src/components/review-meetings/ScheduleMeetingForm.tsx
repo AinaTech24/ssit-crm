@@ -262,6 +262,7 @@ export function ScheduleMeetingForm({
             value={form.investorId}
             onChange={(v) => set("investorId", v)}
             placeholder="Search a client by name or PAN…"
+            remoteKind="client"
           />
         </Field>
       )}
@@ -272,6 +273,7 @@ export function ScheduleMeetingForm({
             value={form.leadId}
             onChange={(v) => set("leadId", v)}
             placeholder="Search a lead by name or phone…"
+            remoteKind="lead"
           />
           {leads.length === 0 && (
             <div className="text-[11px] text-muted-foreground mt-1.5">
@@ -454,24 +456,66 @@ export function ScheduleMeetingForm({
   );
 }
 
-/** Lightweight searchable single-select (typeahead) over an in-memory list. */
+type PickOpt = { value: string; label: string; sub?: string };
+
+/**
+ * Searchable single-select (typeahead). It filters the pre-loaded list instantly and,
+ * when `remoteKind` is set, ALSO searches the whole book on the server - the
+ * pre-loaded list is only the first few hundred, so a client further down the book
+ * would otherwise show "No matches" however it is spelled.
+ */
 function SearchSelect({
   options,
   value,
   onChange,
   placeholder,
+  remoteKind,
 }: {
-  options: Array<{ value: string; label: string; sub?: string }>;
+  options: PickOpt[];
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  remoteKind?: "client" | "lead";
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [remote, setRemote] = useState<PickOpt[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [picked, setPicked] = useState<PickOpt | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const selected = options.find((o) => o.value === value);
+  const selected = options.find((o) => o.value === value) ?? (picked && picked.value === value ? picked : undefined);
   const needle = q.trim().toLowerCase();
-  const filtered = (needle ? options.filter((o) => `${o.label} ${o.sub ?? ""}`.toLowerCase().includes(needle)) : options).slice(0, 50);
+  const local = needle ? options.filter((o) => `${o.label} ${o.sub ?? ""}`.toLowerCase().includes(needle)) : options;
+  const seen = new Set(local.map((o) => o.value));
+  const filtered = [...local, ...remote.filter((o) => !seen.has(o.value))].slice(0, 50);
+
+  // Search the whole book on the server once two letters are typed.
+  useEffect(() => {
+    if (!remoteKind || needle.length < 2) {
+      setRemote([]);
+      setSearching(false);
+      return;
+    }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      fetch(`/api/review-meetings/subjects?kind=${remoteKind}&q=${encodeURIComponent(q.trim())}`)
+        .then((r) => (r.ok ? r.json() : { rows: [] }))
+        .then((j) => {
+          if (!cancelled) setRemote(Array.isArray(j.rows) ? j.rows : []);
+        })
+        .catch(() => {
+          if (!cancelled) setRemote([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [q, remoteKind, needle.length]);
 
   // Close on outside click / Escape. (The old version used a full-screen
   // overlay div, but because this control sits inside a <label>, clicking the
@@ -515,12 +559,14 @@ function SearchSelect({
             className="w-full px-3 py-2 text-sm border-b border-border bg-transparent outline-none"
           />
           <ul className="max-h-60 overflow-y-auto py-1">
-            {filtered.length === 0 && <li className="px-3 py-2 text-xs text-muted-foreground">No matches</li>}
+            {filtered.length === 0 && (
+              <li className="px-3 py-2 text-xs text-muted-foreground">{searching ? "Searching…" : "No matches"}</li>
+            )}
             {filtered.map((o) => (
               <li key={o.value}>
                 <button
                   type="button"
-                  onClick={() => { onChange(o.value); setOpen(false); setQ(""); }}
+                  onClick={() => { setPicked(o); onChange(o.value); setOpen(false); setQ(""); }}
                   className={`w-full text-left px-3 py-1.5 text-sm hover:bg-accent ${o.value === value ? "bg-accent/50 font-medium" : ""}`}
                 >
                   {o.label}
@@ -529,8 +575,13 @@ function SearchSelect({
               </li>
             ))}
           </ul>
-          {options.length > 50 && (
-            <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-t border-border">Showing 50 — refine your search.</div>
+          {(searching || filtered.length >= 50) && (
+            <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-t border-border">
+              {searching ? "Searching your whole book…" : "Showing 50 — refine your search."}
+            </div>
+          )}
+          {remoteKind && needle.length < 2 && options.length >= 50 && (
+            <div className="px-3 py-1.5 text-[11px] text-muted-foreground border-t border-border">Type 2+ letters to search everyone.</div>
           )}
         </div>
       )}

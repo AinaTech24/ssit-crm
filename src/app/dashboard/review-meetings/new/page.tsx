@@ -10,6 +10,8 @@ import { ScheduleMeetingForm } from "@/components/review-meetings/ScheduleMeetin
 
 export const dynamic = "force-dynamic";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function NewReviewMeetingPage({
   searchParams,
 }: {
@@ -62,7 +64,31 @@ export default async function NewReviewMeetingPage({
         LIMIT 300
       `),
     ]);
-    return { investors: invRes.rows as any[], leads: leadRes.rows as any[], families: famRes.rows as any[] };
+    const investorRows = invRes.rows as any[];
+    const leadRows = leadRes.rows as any[];
+    // Booking from a client / lead page pre-selects them. Only the first few hundred
+    // are listed above, so make sure the pre-selected one is always in the list (still
+    // behind the same data wall).
+    if (sp.investorId && UUID_RE.test(sp.investorId) && !investorRows.some((r) => r.id === sp.investorId)) {
+      const one = await tx.execute(sql`
+        SELECT id, name, pan, segment_tag, last_review_at, next_review_at
+        FROM investors
+        WHERE id = ${sp.investorId}::uuid AND tenant_id = ${session.tenantId}::uuid AND deleted_at IS NULL
+          AND ${invScope}
+        LIMIT 1
+      `).catch(() => ({ rows: [] as any[] }));
+      investorRows.unshift(...(one.rows as any[]));
+    }
+    if (sp.leadId && UUID_RE.test(sp.leadId) && !leadRows.some((r) => r.id === sp.leadId)) {
+      const one = await tx.execute(sql`
+        SELECT id, name, phone, stage
+        FROM leads
+        WHERE id = ${sp.leadId}::uuid AND tenant_id = ${session.tenantId}::uuid AND ${leadScope}
+        LIMIT 1
+      `).catch(() => ({ rows: [] as any[] }));
+      leadRows.unshift(...(one.rows as any[]));
+    }
+    return { investors: investorRows, leads: leadRows, families: famRes.rows as any[] };
   });
 
   return (
