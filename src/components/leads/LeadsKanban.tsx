@@ -133,6 +133,42 @@ export function LeadsKanban({
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
+  // Horizontal "slider" pinned to the bottom of the screen. The board is as tall as its
+  // longest column (hundreds of New leads), so the board's own scrollbar sat at the very
+  // bottom of the page; this mirrors it in a bar that stays in view while scrolling down,
+  // so the stages to the right are always one drag away.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [scrollW, setScrollW] = useState(0);
+  const [viewW, setViewW] = useState(0);
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const measure = () => {
+      setScrollW(board.scrollWidth);
+      setViewW(board.clientWidth);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(board);
+    if (board.firstElementChild) ro.observe(board.firstElementChild);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [rows.length]);
+  const syncBar = () => {
+    const b = boardRef.current;
+    const bar = barRef.current;
+    if (b && bar && bar.scrollLeft !== b.scrollLeft) bar.scrollLeft = b.scrollLeft;
+  };
+  const syncBoard = () => {
+    const b = boardRef.current;
+    const bar = barRef.current;
+    if (b && bar && b.scrollLeft !== bar.scrollLeft) b.scrollLeft = bar.scrollLeft;
+  };
+
   // Modal interception state
   const [pendingTransition, setPendingTransition] = useState<{
     leadId: string;
@@ -383,7 +419,8 @@ export function LeadsKanban({
            card. The page scrolls horizontally to reach the right-hand stages.
            No scroll-snap: snapping made the auto-scroll jump column-to-column
            during a drag, so you couldn't release on a middle stage. */}
-        <div className="flex gap-3 overflow-x-auto scrollbar-thin pb-2 -mx-1 px-1">
+        <div className="relative">
+        <div ref={boardRef} onScroll={syncBar} className="flex gap-3 overflow-x-auto scrollbar-none pb-2 -mx-1 px-1">
           {stages.map((s) => {
             const tone = TONE_STYLES[s.tone];
             const items = byStage[s.key] ?? [];
@@ -414,6 +451,17 @@ export function LeadsKanban({
               </DroppableColumn>
             );
           })}
+        </div>
+        {scrollW > viewW + 1 && (
+          <div
+            ref={barRef}
+            onScroll={syncBoard}
+            aria-label="Scroll the pipeline sideways"
+            className="h-slider sticky bottom-0 z-30 overflow-x-scroll rounded-full border border-border bg-card/95 shadow-md backdrop-blur"
+          >
+            <div style={{ width: scrollW, height: 1 }} />
+          </div>
+        )}
         </div>
 
         {/* Floating drag preview */}

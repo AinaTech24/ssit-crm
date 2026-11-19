@@ -651,6 +651,18 @@
   .scrollbar-none::-webkit-scrollbar { display: none; }
   .scrollbar-none { scrollbar-width: none; }
 
+  /* A clearly visible horizontal slider (the leads pipeline's pinned scroll bar). */
+  .h-slider { scrollbar-width: auto; scrollbar-color: hsl(var(--muted-foreground) / 0.55) transparent; }
+  .h-slider::-webkit-scrollbar { height: 12px; }
+  .h-slider::-webkit-scrollbar-track { background: transparent; }
+  .h-slider::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  .h-slider::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--muted-foreground) / 0.75); background-clip: padding-box; }
+
   /* Standard data-table scroll viewport — one consistent height for EVERY
    * module's list table (so risk-profiles, clients, proposals… all match,
    * whether the table is full or empty), butter-smooth momentum scroll, and
