@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { isMeetingParticipantSql } from "@/lib/meetings/participants";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
                      AND a.occurred_at >= date_trunc('day', now()))::int AS calls,
                 (SELECT count(*) FROM review_meetings m
                    WHERE m.tenant_id = ${session.tenantId}::uuid
-                     AND m.rm_id = ${session.userId}::uuid
+                     AND ${isMeetingParticipantSql("m", session.userId)}
                      AND m.status = 'completed'
                      AND m.updated_at >= date_trunc('day', now()))::int AS meetings,
                 (SELECT count(*) FROM tasks t

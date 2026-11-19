@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
+import { referralLinksSql } from "@/lib/referrals/links";
 import { Users, TrendingUp, Heart, CheckCircle2 } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -57,7 +58,7 @@ export default async function ReferralsPage({
         )::int AS lost,
         COALESCE(SUM(inv.aum::numeric), 0)::numeric AS converted_aum
       FROM investors i
-      JOIN leads l ON l.referred_by_investor_id = i.id
+      JOIN ${referralLinksSql} l ON l.referred_by_investor_id = i.id
       LEFT JOIN investors inv ON inv.id = l.converted_investor_id
       ${whereSql}
       GROUP BY i.id, i.name, i.phone, i.email, i.segment_tag, i.service_tier
@@ -77,7 +78,7 @@ export default async function ReferralsPage({
         ) AS conversion_pct,
         COALESCE(SUM(inv.aum::numeric), 0)::numeric AS converted_aum
       FROM investors i
-      JOIN leads l ON l.referred_by_investor_id = i.id
+      JOIN ${referralLinksSql} l ON l.referred_by_investor_id = i.id
       LEFT JOIN investors inv ON inv.id = l.converted_investor_id
       WHERE i.deleted_at IS NULL AND ${wall}
     `);
@@ -91,7 +92,7 @@ export default async function ReferralsPage({
              COUNT(l.id)::int AS referrals,
              COUNT(DISTINCT i.id)::int AS referrers,
              COUNT(l.id) FILTER (WHERE l.converted_investor_id IS NOT NULL OR l.stage = 'converted')::int AS converted
-        FROM leads l
+        FROM ${referralLinksSql} l
         JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
         LEFT JOIN users u ON u.id = i.rm_id
        WHERE i.deleted_at IS NULL AND ${wall}
@@ -126,7 +127,7 @@ export default async function ReferralsPage({
               AND i.tenant_id = d.tenant_id
               AND i.deleted_at IS NULL
               AND ${wall}
-        LEFT JOIN leads l
+        LEFT JOIN ${referralLinksSql} l
                ON l.referred_by_investor_id = i.id
               AND l.tenant_id = d.tenant_id
        WHERE d.tenant_id = ${session.tenantId}::uuid
@@ -142,7 +143,7 @@ export default async function ReferralsPage({
     const noDesk = await tx.execute(sql`
       SELECT COUNT(l.id)::int AS referrals,
              COUNT(l.id) FILTER (WHERE l.converted_investor_id IS NOT NULL OR l.stage = 'converted')::int AS converted
-        FROM leads l
+        FROM ${referralLinksSql} l
         JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
         LEFT JOIN users u ON u.id = i.rm_id
        WHERE i.deleted_at IS NULL AND ${wall}
@@ -154,7 +155,7 @@ export default async function ReferralsPage({
     // total, which is correct and worth saying on the card.
     const byProduct = await tx.execute(sql`
       SELECT p.product AS name, COUNT(*)::int AS referrals
-        FROM leads l
+        FROM ${referralLinksSql} l
         JOIN investors i ON i.id = l.referred_by_investor_id AND i.tenant_id = l.tenant_id
         CROSS JOIN LATERAL jsonb_array_elements_text(
           CASE WHEN jsonb_typeof(l.interest_products) = 'array'
@@ -175,7 +176,7 @@ export default async function ReferralsPage({
        WHERE e.status <> 'cancelled'
          AND e.investor_id IN (SELECT i.id FROM investors i WHERE ${wall})
          AND e.investor_id IN (
-           SELECT l.converted_investor_id FROM leads l
+           SELECT l.converted_investor_id FROM ${referralLinksSql} l
             WHERE l.referred_by_investor_id IS NOT NULL
               AND l.converted_investor_id IS NOT NULL
          )

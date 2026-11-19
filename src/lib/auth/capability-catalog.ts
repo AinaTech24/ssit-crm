@@ -180,6 +180,7 @@ export const CAPABILITY_CATALOG: Record<Capability, CapabilityMeta> = {
   "social_tracker.manage": { group: "Workflows & Marketing", label: "Social Media Tracker — add / edit", hint: "Add, update and delete tracker entries" },
   "dhandho.view": { group: "Team & Office", label: "Dhandho — view", hint: "See the speaker calendar and today's speaker" },
   "dhandho.manage": { group: "Team & Office", label: "Dhandho — add / edit speaker schedule", hint: "Upload the monthly speaker sheet, add, change or remove a day" },
+  "dhandho.notes": { group: "Team & Office", label: "Dhandho — add session notes", hint: "Write what was shared in a day's session; the whole team is notified. The day's own speaker can always add that day's notes" },
   "content_library.edit": { group: "Workflows & Marketing", label: "Content Library — edit", hint: "Rename or re-categorise the firm's own uploads" },
   "content_library.delete": { group: "Workflows & Marketing", label: "Content Library — delete", hint: "Remove the firm's own uploads from the library" },
   "campaign.send": { group: "Workflows & Marketing", label: "Send marketing campaigns" },

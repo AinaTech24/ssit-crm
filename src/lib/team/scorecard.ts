@@ -13,6 +13,7 @@
  */
 
 import { sql } from "drizzle-orm";
+import { meetingParticipantsLateral } from "@/lib/meetings/participants";
 import { currentFiscalYear } from "@/lib/business/sif-status";
 
 type Tx = { execute: (q: any) => Promise<{ rows: any[] }> };
@@ -143,7 +144,7 @@ export async function loadScorecard(tx: Tx, tenantId: string, from: string, to: 
   const newClients = await single(tx, sql`SELECT rm_id AS uid, count(*) AS v FROM investors WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND merged_into_id IS NULL AND deleted_at IS NULL AND created_at >= ${tsLo} AND created_at < ${tsHi} GROUP BY rm_id`);
   const aum = await single(tx, sql`SELECT rm_id AS uid, COALESCE(SUM(aum),0) AS v FROM investors WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND status='active' AND merged_into_id IS NULL AND deleted_at IS NULL GROUP BY rm_id`);
   const converted = await single(tx, sql`SELECT owner_id AS uid, count(*) AS v FROM leads WHERE tenant_id=${t}::uuid AND owner_id IS NOT NULL AND converted_at >= ${tsLo} AND converted_at < ${tsHi} GROUP BY owner_id`);
-  const meetings = await single(tx, sql`SELECT rm_id AS uid, count(*) AS v FROM review_meetings WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND status IN ('completed','confirmed') AND meeting_date >= ${tsLo} AND meeting_date < ${tsHi} GROUP BY rm_id`);
+  const meetings = await single(tx, sql`SELECT mp.uid AS uid, count(*) AS v FROM review_meetings m ${meetingParticipantsLateral("m")} WHERE m.tenant_id=${t}::uuid AND m.status IN ('completed','confirmed') AND m.meeting_date >= ${tsLo} AND m.meeting_date < ${tsHi} GROUP BY mp.uid`);
   const activities = await single(tx, sql`SELECT owner_user_id AS uid, count(*) AS v FROM activities WHERE tenant_id=${t}::uuid AND owner_user_id IS NOT NULL AND occurred_at >= ${tsLo} AND occurred_at < ${tsHi} GROUP BY owner_user_id`);
   const tasksCompleted = await single(tx, sql`SELECT assignee_id AS uid, count(*) AS v FROM tasks WHERE tenant_id=${t}::uuid AND assignee_id IS NOT NULL AND status='completed' AND completed_at >= ${tsLo} AND completed_at < ${tsHi} GROUP BY assignee_id`);
 

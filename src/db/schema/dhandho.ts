@@ -22,6 +22,10 @@ export const dhandhoSessions = pgTable(
     /** Set on a holiday / "no session" day — no meeting, no reminder. */
     offReason: text("off_reason"),
     remindedAt: timestamp("reminded_at", { withTimezone: true }),
+    /** What was shared that day - written afterwards by the speaker or a notes-writer (0262). */
+    notes: text("notes"),
+    notesBy: uuid("notes_by").references(() => users.id),
+    notesAt: timestamp("notes_at", { withTimezone: true }),
     createdBy: uuid("created_by").references(() => users.id),
     ...timestamps,
   },

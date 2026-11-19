@@ -15,6 +15,7 @@ import { handleApiError } from "@/lib/api/error-handler";
 
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { isMeetingParticipantSql } from "@/lib/meetings/participants";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 
@@ -28,6 +29,7 @@ export async function GET() {
     const roles = session.roles ?? [];
     const seesAll = roles.some((r) => FIRM_WIDE.includes(r));
     const mine = seesAll ? sql`` : sql` AND rm_id = ${session.userId}`;
+    const meetingsMine = seesAll ? sql`` : sql` AND ${isMeetingParticipantSql("review_meetings", session.userId)}`;
     const mineOwner = seesAll ? sql`` : sql` AND owner_id = ${session.userId}`;
 
     const data = await withTenant(session.tenantId, async (tx) => {
@@ -49,7 +51,7 @@ export async function GET() {
         one(sql`SELECT count(*)::int AS v FROM tasks WHERE status IN ('open','in_progress','blocked') AND deleted_at IS NULL AND due_at >= date_trunc('day', now()) AND due_at < date_trunc('day', now()) + interval '1 day' AND (assignee_id = ${session.userId} OR ${seesAll})`),
         one(sql`SELECT count(*)::int AS v FROM investors WHERE status = 'active' AND deleted_at IS NULL AND next_review_at IS NOT NULL AND next_review_at <= now()${mine}`),
         one(sql`SELECT count(*)::int AS v FROM leads WHERE converted_at IS NULL AND next_follow_up_at IS NOT NULL AND next_follow_up_at <= now()${mineOwner}`),
-        one(sql`SELECT count(*)::int AS v FROM review_meetings WHERE status IN ('scheduled','confirmed') AND meeting_date >= date_trunc('day', now()) AND meeting_date < date_trunc('day', now()) + interval '1 day'${mine}`),
+        one(sql`SELECT count(*)::int AS v FROM review_meetings WHERE status IN ('scheduled','confirmed') AND meeting_date >= date_trunc('day', now()) AND meeting_date < date_trunc('day', now()) + interval '1 day'${meetingsMine}`),
       ]);
 
       return { clients, aum, sipBook, leadsOpen, tasksOverdue, tasksToday, reviewsDue, followupsDue, meetingsToday };

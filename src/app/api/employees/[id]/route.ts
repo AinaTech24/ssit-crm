@@ -20,6 +20,7 @@ import { require as requireCap, areAssignableRoles, areKnownCapabilities } from 
 import { wouldExceedFirmAdminCap, MAX_FIRM_ADMINS_MESSAGE } from "@/lib/auth/firm-admin-guard";
 import { areKnownNavKeys, ALL_NAV_KEYS } from "@/config/nav-access";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { isMeetingParticipantSql } from "@/lib/meetings/participants";
 import { offboardUser, type OffboardSummary } from "@/lib/offboarding";
 import { clearSessionRevocationCache, clearDeviceSessionCache } from "@/lib/auth/revocation";
 
@@ -126,7 +127,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         (SELECT COALESCE(SUM(active_sip_amount::numeric),0)::numeric FROM investors WHERE rm_id = ${id}::uuid AND status = 'active') AS my_sip,
         (SELECT COUNT(*)::int FROM tasks WHERE assignee_id = ${id}::uuid AND status IN ('open','in_progress')) AS open_tasks,
         (SELECT COUNT(*)::int FROM tasks WHERE assignee_id = ${id}::uuid AND status IN ('open','in_progress') AND due_at < now()) AS overdue_tasks,
-        (SELECT COUNT(*)::int FROM review_meetings WHERE rm_id = ${id}::uuid AND status IN ('scheduled','confirmed') AND meeting_date >= now()) AS upcoming_meetings
+        (SELECT COUNT(*)::int FROM review_meetings WHERE ${isMeetingParticipantSql("review_meetings", id)} AND status IN ('scheduled','confirmed') AND meeting_date >= now()) AS upcoming_meetings
     `);
     return { user: u, stats: stats.rows[0] };
   });

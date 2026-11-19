@@ -7,6 +7,7 @@
  */
 
 import { sql } from "drizzle-orm";
+import { meetingParticipantsLateral } from "@/lib/meetings/participants";
 
 type Rec = Record<string, any>;
 export type TargetMetric = {
@@ -64,7 +65,7 @@ export async function loadUserActuals(
 
   const [leads, meetings, newClients, tasks, business, sip, aum] = await Promise.all([
     q(sql`SELECT owner_id AS uid, count(*) AS v FROM leads WHERE tenant_id=${t}::uuid AND owner_id IS NOT NULL AND deleted_at IS NULL AND lost_reason IS DISTINCT FROM '__deleted__' AND created_at >= ${lo} AND created_at < ${hi} GROUP BY owner_id`),
-    q(sql`SELECT COALESCE(created_by_id, rm_id) AS uid, count(*) AS v FROM review_meetings WHERE tenant_id=${t}::uuid AND status IN ('completed','confirmed') AND meeting_date >= ${lo} AND meeting_date < ${hi} AND COALESCE(created_by_id, rm_id) IS NOT NULL GROUP BY 1`),
+    q(sql`SELECT mp.uid AS uid, count(*) AS v FROM review_meetings m ${meetingParticipantsLateral("m")} WHERE m.tenant_id=${t}::uuid AND m.status IN ('completed','confirmed') AND m.meeting_date >= ${lo} AND m.meeting_date < ${hi} GROUP BY mp.uid`),
     q(sql`SELECT rm_id AS uid, count(*) AS v FROM investors WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND merged_into_id IS NULL AND deleted_at IS NULL AND created_at >= ${lo} AND created_at < ${hi} GROUP BY rm_id`),
     q(sql`SELECT assignee_id AS uid, count(*) AS v FROM tasks WHERE tenant_id=${t}::uuid AND assignee_id IS NOT NULL AND status='completed' AND completed_at >= ${lo} AND completed_at < ${hi} GROUP BY assignee_id`),
     q(sql`SELECT rm_id AS uid, COALESCE(SUM(total_amount),0) AS v FROM business_entries WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND status <> 'cancelled' AND business_date BETWEEN ${from}::date AND ${to}::date GROUP BY rm_id`),

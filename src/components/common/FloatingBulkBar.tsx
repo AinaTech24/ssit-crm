@@ -15,8 +15,11 @@ import {
   MessageSquare,
   Sparkles,
   ArrowRightLeft,
+  Pencil,
 } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
+import { BulkUpdateFieldDialog } from "@/components/common/BulkUpdateFieldDialog";
+import type { BulkFieldGroup } from "@/lib/investors/bulk-fields";
 
 export type BulkActionType =
   | "assign"
@@ -45,6 +48,8 @@ export function FloatingBulkBar({
   showSegment = true,
   showReview = true,
   showStage = false,
+  fieldGroups,
+  fieldNoun = "clients",
 }: {
   selectedCount: number;
   totalMatching?: number;
@@ -52,7 +57,8 @@ export function FloatingBulkBar({
   allMatchingSelected?: boolean;
   onSelectAllMatching?: () => void;
   onClear: () => void;
-  onApplyAction: (action: string, payload: Record<string, any>) => Promise<void>;
+  /** Resolve `false` when the action failed, so a dialog stays open to show the error. */
+  onApplyAction: (action: string, payload: Record<string, any>) => Promise<void | boolean>;
   busy?: boolean;
   error?: string | null;
   customActions?: ReactNode;
@@ -61,7 +67,11 @@ export function FloatingBulkBar({
   showSegment?: boolean;
   showReview?: boolean;
   showStage?: boolean;
+  /** When given, an "Update a field" button opens the grouped single-field editor. */
+  fieldGroups?: BulkFieldGroup[];
+  fieldNoun?: string;
 }) {
+  const [fieldOpen, setFieldOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<BulkActionType | null>(null);
   const [assignRm, setAssignRm] = useState<string | null>(null);
   const [reviewDate, setReviewDate] = useState("");
@@ -161,6 +171,16 @@ export function FloatingBulkBar({
               className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-secondary/80 hover:bg-secondary text-foreground hover:text-brand-cyan transition-colors"
             >
               <ArrowRightLeft className="size-3.5" /> Stage
+            </button>
+          )}
+
+          {fieldGroups && fieldGroups.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFieldOpen(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-secondary/80 hover:bg-secondary text-foreground hover:text-brand-cyan transition-colors"
+            >
+              <Pencil className="size-3.5" /> Update a field
             </button>
           )}
 
@@ -432,5 +452,24 @@ export function FloatingBulkBar({
     </div>
   );
 
-  return typeof document !== "undefined" ? createPortal(barContent, document.body) : null;
+  return typeof document !== "undefined" ? (
+    <>
+      {createPortal(barContent, document.body)}
+      {fieldGroups && fieldGroups.length > 0 && (
+        <BulkUpdateFieldDialog
+          open={fieldOpen}
+          onOpenChange={setFieldOpen}
+          groups={fieldGroups}
+          count={selectedCount}
+          noun={fieldNoun}
+          busy={busy}
+          error={error}
+          onApply={async (field, value) => {
+            const ok = await onApplyAction("field", { field, value });
+            if (ok !== false) setFieldOpen(false);
+          }}
+        />
+      )}
+    </>
+  ) : null;
 }

@@ -12,6 +12,7 @@
  */
 
 import { sql } from "drizzle-orm";
+import { meetingParticipantsLateral } from "@/lib/meetings/participants";
 
 export type MonthAchievements = {
   businessByRm: Record<string, number>;
@@ -52,14 +53,14 @@ export async function getMonthAchievements(
 
   // Meeting counts this month per RM + category (exclude cancelled).
   const mtg = (await tx.execute(sql`
-    SELECT rm_id AS rm, category, COUNT(*)::int AS n
-    FROM review_meetings
-    WHERE tenant_id = ${tenantId}::uuid
-      AND meeting_date >= ${startISO}::date
-      AND meeting_date < ${endISO}::date
-      AND status <> 'cancelled'
-      AND rm_id IS NOT NULL
-    GROUP BY rm_id, category
+    SELECT mp.uid AS rm, m.category, COUNT(*)::int AS n
+    FROM review_meetings m
+    ${meetingParticipantsLateral("m")}
+    WHERE m.tenant_id = ${tenantId}::uuid
+      AND m.meeting_date >= ${startISO}::date
+      AND m.meeting_date < ${endISO}::date
+      AND m.status <> 'cancelled'
+    GROUP BY mp.uid, m.category
   `)).rows as Array<{ rm: string; category: string; n: number }>;
 
   const businessByRm: Record<string, number> = {};

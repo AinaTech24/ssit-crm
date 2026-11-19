@@ -335,6 +335,8 @@ export const investors = pgTable(
     mobileRelation: text("mobile_relation"), // whose mobile (self / spouse / …)
     emailRelation: text("email_relation"),
     referralClientName: text("referral_client_name"),
+    /** The existing client who referred this one (migration 0261). */
+    referredByInvestorId: uuid("referred_by_investor_id"),
     familyOwnerName: text("family_owner_name"),
     householdType: text("household_type"), // "Family or Individual"
     /** Second / joint holder details. */

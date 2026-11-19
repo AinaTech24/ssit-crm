@@ -41,6 +41,7 @@ import { ActivityTimeline } from "@/components/investors/ActivityTimeline";
 import { ClientNotes } from "@/components/investors/ClientNotes";
 import { NomineeSection } from "@/components/investors/NomineeSection";
 import { ReferralSection } from "@/components/investors/ReferralSection";
+import { referralLinksSql } from "@/lib/referrals/links";
 import { CustomFieldsCard } from "@/components/common/CustomFieldsCard";
 import { RiskProfilePdfButtons } from "@/components/risk-profile/RiskProfileName";
 import { SendRiskProfileLinkButton } from "@/components/risk-profile/SendRiskProfileLinkButton";
@@ -318,8 +319,27 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       ((await tx.execute(sql`SELECT count(*)::int AS c FROM insurance_policies WHERE investor_id = ${id}`)).rows[0] as any)?.c ?? 0
     );
     const referralCount = Number(
-      ((await tx.execute(sql`SELECT count(*)::int AS c FROM leads WHERE referred_by_investor_id = ${id}`)).rows[0] as any)?.c ?? 0
+      ((await tx.execute(sql`SELECT count(*)::int AS c FROM ${referralLinksSql} l WHERE l.referred_by_investor_id = ${id}`)).rows[0] as any)?.c ?? 0
     );
+    // Who referred this client, and who this client has referred (leads still in the
+    // pipeline plus clients already on the books). Names only - both link to the record.
+    const referredByRow = inv.referredByInvestorId
+      ? ((await tx.execute(sql`SELECT id, name FROM investors WHERE id = ${inv.referredByInvestorId}::uuid AND tenant_id = ${session.tenantId}::uuid AND deleted_at IS NULL`)).rows[0] as { id: string; name: string } | undefined) ?? null
+      : null;
+    const referredList = (
+      await tx.execute(sql`
+        SELECT n.id, n.name, COALESCE(n.status, 'active') AS status, 'client' AS kind
+          FROM investors n
+         WHERE n.referred_by_investor_id = ${id}::uuid AND n.tenant_id = ${session.tenantId}::uuid AND n.deleted_at IS NULL
+        UNION ALL
+        SELECT l.id, l.name, COALESCE(l.stage::text, 'new') AS status, 'lead' AS kind
+          FROM leads l
+         WHERE l.referred_by_investor_id = ${id}::uuid AND l.tenant_id = ${session.tenantId}::uuid
+           AND l.converted_investor_id IS NULL AND l.deleted_at IS NULL
+         ORDER BY 4, 2
+        LIMIT 100
+      `)
+    ).rows as Array<{ id: string; name: string; status: string; kind: "client" | "lead" }>;
 
     // PII access log (DPDP)
     await tx.insert(auditLog).values({
@@ -358,6 +378,8 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       riskHistory: riskHistoryRows,
       insuranceCount,
       referralCount,
+      referredByRow,
+      referredList,
       recentTransactions: recentTxRows,
       txCount: txCountRow,
       sipHealth,
@@ -657,7 +679,12 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
 
       {/* Referrals — dedicated, editable section (multi-referral) */}
       <RelatedListSection moduleKey="investors-detail" sectionKey="referrals">
-        <ReferralSection investorId={inv.id} referrals={((inv.referrals as any[]) ?? []) as any} />
+        <ReferralSection
+          investorId={inv.id}
+          referrals={((inv.referrals as any[]) ?? []) as any}
+          referredBy={data.referredByRow ?? null}
+          referredList={data.referredList ?? []}
+        />
       </RelatedListSection>
 
       {/* MFD-defined custom fields — KYC & Profile tab only (renders only if the

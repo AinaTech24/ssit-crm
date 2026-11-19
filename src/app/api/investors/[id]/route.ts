@@ -13,7 +13,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -104,6 +104,8 @@ const Patch = z.object({
   // in sync with the first array entry (mirrored in the handler).
   nominees: NomineesArray,
   referrals: ReferralsArray,
+  /** The existing client who referred this client (null clears it). */
+  referredByInvestorId: z.string().uuid().nullable().optional(),
   bankAccounts: z.array(z.object({
     bankName: z.string().max(120),
     accountMasked: z.string().max(60).optional(),
@@ -324,6 +326,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (!su) return "bad_rm" as const;
       }
 
+      // The referrer must be another, live client of THIS firm.
+      if (parse.data.referredByInvestorId) {
+        if (parse.data.referredByInvestorId === id) return "bad_referrer" as const;
+        const [ref] = await tx
+          .select({ id: investors.id })
+          .from(investors)
+          .where(and(eq(investors.id, parse.data.referredByInvestorId), eq(investors.tenantId, session.tenantId), isNull(investors.deletedAt)))
+          .limit(1);
+        if (!ref) return "bad_referrer" as const;
+      }
+
       // Stamp KYC audit fields when any KYC-related column is touched.
       const touchingKyc =
         parse.data.kycStatus !== undefined ||
@@ -497,6 +510,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return after[0];
     });
 
+    if (result === "bad_referrer") return NextResponse.json({ error: "the referring client must be another client of this firm" }, { status: 400 });
     if (result === "bad_rm") return NextResponse.json({ error: "selected RM is not a user in this firm" }, { status: 400 });
     if (result === "stale") return NextResponse.json({ error: "This client was changed by someone else since you opened it. Reload and re-apply your edits." }, { status: 409 });
     if (!result) return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -593,6 +607,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       await tx.delete(financialDiscoveries).where(and(eq(financialDiscoveries.tenantId, T), eq(financialDiscoveries.subjectType, "investor"), eq(financialDiscoveries.subjectId, id)));
       await tx.update(leads).set({ convertedInvestorId: null } as any).where(and(eq(leads.tenantId, T), eq(leads.convertedInvestorId, id)));
       await tx.update(leads).set({ referredByInvestorId: null } as any).where(and(eq(leads.tenantId, T), eq(leads.referredByInvestorId, id)));
+      await tx.update(investors).set({ referredByInvestorId: null }).where(and(eq(investors.tenantId, T), eq(investors.referredByInvestorId, id)));
       await tx.update(families).set({ primaryInvestorId: null } as any).where(and(eq(families.tenantId, T), eq(families.primaryInvestorId, id)));
       await tx.update(investors).set({ guardianInvestorId: null } as any).where(and(eq(investors.tenantId, T), eq(investors.guardianInvestorId, id)));
 

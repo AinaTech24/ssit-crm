@@ -8,6 +8,8 @@ import { handleApiError } from "@/lib/api/error-handler";
  *          = "tier"     value = "A" | "B" | "C"          → set service tier
  *          = "segment"  value = segment tag              → set segment
  *          = "category" value = "A" | "B" | "C" | "D"    → set client category
+ *          = "field"    field = a key of BULK_FIELD_GROUPS, value = its value
+ *                       → "Update a field": one catalogued field to the same value
  *
  * Tenant isolation is enforced by RLS (withTenant sets app.tenant_id) — we
  * scope by id only, exactly like the single-investor and leads/bulk routes.
@@ -15,7 +17,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -23,13 +25,16 @@ import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { investors, users } from "@/db/schema";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { findBulkField } from "@/lib/investors/bulk-fields";
 
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
   ids: z.array(z.string().uuid()).min(1).max(20000),
-  action: z.enum(["assign", "review", "tier", "segment", "category", "delete"]),
+  action: z.enum(["assign", "review", "tier", "segment", "category", "field", "delete"]),
   value: z.string().nullable().optional(),
+  /** For action "field": which catalogued field to set. */
+  field: z.string().max(40).optional(),
 });
 
 const TIERS = new Set(["A", "B", "C"]);
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: "invalid body", issues: parsed.error.issues }, { status: 400 });
     }
-    const { ids, action, value } = parsed.data;
+    const { ids, action, value, field } = parsed.data;
     // Permanent bulk erasure (up to 1000 clients + cascaded data) is far more
     // dangerous than a re-tag — gate it on the narrow delete capability, not the
     // broad edit.all this route otherwise runs on.
@@ -100,6 +105,45 @@ export async function POST(req: NextRequest) {
         }
         patch.clientCategory = value;
         break;
+      case "field": {
+        const def = field ? findBulkField(field) : undefined;
+        if (!def) return NextResponse.json({ error: "this field cannot be updated in bulk" }, { status: 400 });
+        const v = (value ?? "").trim();
+        if (def.kind === "select") {
+          if (!def.options?.some((o) => o.value === v)) {
+            return NextResponse.json({ error: `choose a valid ${def.label.toLowerCase()}` }, { status: 400 });
+          }
+          patch[def.column!] = v;
+        } else if (def.kind === "date") {
+          const d = new Date(v);
+          if (!v || Number.isNaN(d.getTime())) return NextResponse.json({ error: "pick a valid date" }, { status: 400 });
+          patch[def.column!] = d;
+        } else if (def.kind === "text") {
+          if (v.length > 120) return NextResponse.json({ error: "value is too long (max 120 characters)" }, { status: 400 });
+          if (def.target === "address") {
+            // Merge into the address object so the rest of the address is kept.
+            patch.address = sql`COALESCE(${investors.address}, '{}'::jsonb) || ${JSON.stringify({ [def.key]: v })}::jsonb`;
+          } else {
+            patch[def.column!] = v === "" ? null : v;
+          }
+        } else if (def.kind === "tag_add" || def.kind === "tag_remove") {
+          if (!v || v.length > 60) return NextResponse.json({ error: "enter a tag (up to 60 characters)" }, { status: 400 });
+          if (def.kind === "tag_add") {
+            // Case-insensitive de-dupe, capped at 25 like the single-client editor.
+            patch.tags = sql`CASE
+              WHEN EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(${investors.tags}, '[]'::jsonb)) t WHERE lower(t) = lower(${v}))
+                OR jsonb_array_length(COALESCE(${investors.tags}, '[]'::jsonb)) >= 25
+              THEN COALESCE(${investors.tags}, '[]'::jsonb)
+              ELSE COALESCE(${investors.tags}, '[]'::jsonb) || to_jsonb(${v}::text)
+            END`;
+          } else {
+            patch.tags = sql`COALESCE(
+              (SELECT jsonb_agg(t) FROM jsonb_array_elements_text(COALESCE(${investors.tags}, '[]'::jsonb)) t WHERE lower(t) <> lower(${v})),
+              '[]'::jsonb)`;
+          }
+        }
+        break;
+      }
       case "delete":
         // Soft delete → Trash bin (recoverable). Stamped in the tx below; the
         // owned-data subgraph is preserved until the retention window elapses,
@@ -128,7 +172,7 @@ export async function POST(req: NextRequest) {
         action: `investor.bulk_${action}`,
         entityType: "investor",
         entityId: session.tenantId,
-        after: { action, value: value ?? null, count: updated.length, ids } as any,
+        after: { action, field: field ?? null, value: value ?? null, count: updated.length, ids } as any,
         ...meta,
       });
       return updated.length;

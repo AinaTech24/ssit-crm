@@ -16,6 +16,7 @@ import { UccCodesField } from "@/components/investors/UccCodesField";
 import { cleanUccCodes } from "@/lib/investors/ucc";
 import { ClientTagsField } from "@/components/investors/ClientTagsField";
 import { CLIENT_CODE_FIELDS } from "@/lib/investors/client-tags";
+import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { CustomFieldsSection, missingRequired, type CustomFieldDef } from "@/components/common/CustomFieldInputs";
 import { SUBSCRIPTION_CATEGORIES, SUBSCRIPTION_FREQUENCIES, renewalFrom, todayISO } from "@/lib/subscriptions";
 
@@ -56,6 +57,7 @@ function NewInvestorPageInner() {
     householdType: "", // Family or Individual
     familyOwnerName: "",
     referralClientName: "",
+    referredByInvestorId: "" as string,
     modeOfHolding: "",
     bseUccCode: "", // UCC No
     uccCodes: [] as string[],
@@ -189,6 +191,7 @@ function NewInvestorPageInner() {
           householdType: u(form.householdType),
           familyOwnerName: u(form.familyOwnerName),
           referralClientName: u(form.referralClientName),
+          referredByInvestorId: form.referredByInvestorId || undefined,
           modeOfHolding: u(form.modeOfHolding),
           bseUccCode: u(form.bseUccCode),
           tags: form.tags.length ? form.tags : undefined,
@@ -342,7 +345,19 @@ function NewInvestorPageInner() {
           <SelectField label="Category" value={form.investorCategory} onChange={(v) => set("investorCategory", v)} options={["individual", "huf", "corporate", "trust", "nri", "minor", "other"]} />
           {full && <SelectField label="Segment" value={form.segmentTag} onChange={(v) => set("segmentTag", v)} options={["HNI", "Affluent", "Retail", "NRI", "Corporate"]} />}
           {full && <SelectField label="Client category" value={form.clientCategory} onChange={(v) => set("clientCategory", v)} options={[{ value: "", label: "Select" }, { value: "A", label: "A" }, { value: "B", label: "B" }, { value: "C", label: "C" }, { value: "D", label: "D" }]} />}
-          <Field label="Referral client name" value={form.referralClientName} onChange={(v) => set("referralClientName", v)} />
+          <div className="sm:col-span-2">
+            <div className="text-xs font-medium mb-1">Referred by (existing client)</div>
+            <InvestorLookup
+              value={form.referredByInvestorId || null}
+              displayName={form.referralClientName || null}
+              onSelect={(id, name) => setForm((p) => ({ ...p, referredByInvestorId: id, referralClientName: name }))}
+              onClear={() => setForm((p) => ({ ...p, referredByInvestorId: "", referralClientName: "" }))}
+              placeholder="Type the referring client's name, PAN or mobile…"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Linked, so this client shows under the referrer&apos;s Referrals and in Referral Tracking.
+            </p>
+          </div>
           {full && <SelectField label="Mode of holding" value={form.modeOfHolding} onChange={(v) => set("modeOfHolding", v)} options={["", "Single", "Joint", "Anyone or Survivor"]} />}
           {full && <Field label="UCC no" value={form.bseUccCode} onChange={(v) => set("bseUccCode", v)} />}
           {full && (

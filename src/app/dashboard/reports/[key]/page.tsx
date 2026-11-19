@@ -1022,7 +1022,7 @@ const REPORTS: Record<
             AND (i.next_review_at IS NULL OR i.next_review_at < current_date)
         ) AS clients_no_recent_review
       FROM users u
-      LEFT JOIN review_meetings m ON m.rm_id = u.id
+      LEFT JOIN review_meetings m ON (m.created_by_id = u.id OR m.rm_id = u.id OR jsonb_exists(COALESCE(m.collaborator_ids, '[]'::jsonb), u.id::text))
       WHERE 'rm' = ANY(u.roles) AND u.status = 'active'
       GROUP BY u.id, u.name
       ORDER BY clients_no_recent_review DESC, upcoming DESC
@@ -1318,7 +1318,8 @@ const REPORTS: Record<
         COUNT(t.id) FILTER (WHERE t.status IN ('open','in_progress'))::int AS open_tasks,
         COUNT(t.id) FILTER (WHERE t.status = 'completed' AND t.completed_at >= now() - interval '30 days')::int AS completed_30d,
         (SELECT COUNT(*)::int FROM review_meetings m
-           WHERE m.rm_id = u.id AND m.status = 'completed' AND m.meeting_date >= now() - interval '30 days') AS meetings_30d,
+           WHERE (m.created_by_id = u.id OR m.rm_id = u.id OR jsonb_exists(COALESCE(m.collaborator_ids, '[]'::jsonb), u.id::text))
+             AND m.status = 'completed' AND m.meeting_date >= now() - interval '30 days') AS meetings_30d,
         (SELECT COUNT(*)::int FROM leads l WHERE l.owner_id = u.id) AS leads_owned
       FROM users u
       LEFT JOIN tasks t ON t.assignee_id = u.id

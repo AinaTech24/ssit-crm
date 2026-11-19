@@ -9,6 +9,7 @@
 import { handleApiError } from "@/lib/api/error-handler";
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
+import { referralLinksSql } from "@/lib/referrals/links";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
           COUNT(l.id) FILTER (WHERE l.stage IN ('lost','not_interested'))::int AS lost,
           COALESCE(SUM(inv.aum::numeric), 0)::numeric AS converted_aum
         FROM investors i
-        JOIN leads l ON l.referred_by_investor_id = i.id
+        JOIN ${referralLinksSql} l ON l.referred_by_investor_id = i.id
         LEFT JOIN investors inv ON inv.id = l.converted_investor_id
         WHERE i.deleted_at IS NULL AND ${scope}${nameFilter}
         GROUP BY i.id, i.name, i.phone, i.email, i.segment_tag, i.service_tier
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
             / NULLIF(COUNT(l.id), 0), 1) AS conversion_pct,
           COALESCE(SUM(inv.aum::numeric), 0)::numeric AS converted_aum
         FROM investors i
-        JOIN leads l ON l.referred_by_investor_id = i.id
+        JOIN ${referralLinksSql} l ON l.referred_by_investor_id = i.id
         LEFT JOIN investors inv ON inv.id = l.converted_investor_id
         WHERE i.deleted_at IS NULL AND ${scope}
       `);
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
       const advocates = await tx.execute(sql`
         SELECT i.id, i.name, i.phone, COALESCE(i.aum, 0)::numeric AS aum, i.service_tier, i.last_contact_at
         FROM investors i
-        LEFT JOIN leads l ON l.referred_by_investor_id = i.id
+        LEFT JOIN ${referralLinksSql} l ON l.referred_by_investor_id = i.id
         WHERE i.status = 'active'
           AND i.deleted_at IS NULL
           AND i.redemption_risk_flagged_at IS NULL

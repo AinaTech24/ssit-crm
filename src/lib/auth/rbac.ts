@@ -185,6 +185,7 @@ export type Capability =
   | "social_tracker.view"
   | "social_tracker.manage"
   | "dhandho.manage"
+  | "dhandho.notes"
   | "induction.view"
   | "induction.manage"
   | "compliance.edit"
@@ -448,6 +449,9 @@ const MATRIX: Record<Capability, Role[]> = {
     "accounts", "sub_broker", "ra_research", "ra_sales", "ria", "insurance",
   ],
   "dhandho.manage": [],
+  // Write the notes of a day's session (what was shared). Owner always; the day's own
+  // speaker may also write that day's notes without holding this.
+  "dhandho.notes": [],
   "compliance.edit": ["compliance"],
   "compliance.approve": ["compliance"],
   "risk_profile.manage": ["compliance", "back_office", "ops", "rm", "ra_sales", "ria"],

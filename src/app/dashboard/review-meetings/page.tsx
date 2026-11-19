@@ -19,6 +19,8 @@ import { MeetingsBulkTable } from "@/components/review-meetings/MeetingsBulkTabl
 import { MeetingsKanban } from "@/components/review-meetings/MeetingsKanban";
 import { LayoutList, KanbanSquare, CalendarClock, BarChart3 } from "lucide-react";
 import { can } from "@/lib/auth/rbac";
+import { isMeetingParticipantSql } from "@/lib/meetings/participants";
+import { loadMeetingRmOptions } from "@/lib/meetings/export-options";
 
 const MEETINGS_COLUMNS = [
   { key: "date", label: "Date", required: true },
@@ -134,7 +136,8 @@ export default async function ReviewMeetingsPage({
     }
     if (rmFilter.length) {
       filters.push(
-        sql`COALESCE(m.rm_id, m.created_by_id) IN (${sql.join(rmFilter.map((v) => sql`${v}::uuid`), sql`, `)})`
+        // A person's meetings are the ones they booked AND the ones they were invited to.
+        sql`(${sql.join(rmFilter.map((v) => isMeetingParticipantSql("m", v)), sql` OR `)})`
       );
     }
     const dr = dateRangeCond(sp, "meeting", "m.meeting_date");
@@ -195,46 +198,8 @@ export default async function ReviewMeetingsPage({
         AND ${meetingScopeSql(meetingScope, "rm_id")}
     `);
     const s = stats.rows[0] as any;
-    // RM roster for the "RM" filter dropdown (so the MFD/branch head can see
-    // meetings by RM). Pointless for an own-records-only viewer — every row is
-    // already theirs.
-    // A delegate is "own-records" for everything else but still needs the
-    // colleague whose diary they run in this dropdown, so they can filter to it.
-    const delegatedSql = meetingScope.delegatedIds.length
-      ? sql`id IN (${sql.join(meetingScope.delegatedIds.map((u) => sql`${u}::uuid`), sql`, `)})`
-      : null;
-    const rmFilterSql =
-      meetingScope.scope.kind === "all"
-        ? sql`TRUE`
-        : meetingScope.scope.kind === "branches"
-          ? (() => {
-              const branches = sql`branch_id IN (${sql.join(
-                meetingScope.scope.branchIds.map((b) => sql`${b}::uuid`),
-                sql`, `
-              )})`;
-              return delegatedSql ? sql`(${branches} OR ${delegatedSql})` : branches;
-            })()
-          : meetingScope.scope.kind === "desks"
-            ? (() => {
-                // A sub-branch head's RM filter is their own desk's people — without
-                // this case it fell through to "delegates only" and was empty.
-                const desk = sql`desk_id IN (${sql.join(
-                  meetingScope.scope.deskIds.map((d) => sql`${d}::uuid`),
-                  sql`, `
-                )})`;
-                return delegatedSql ? sql`(${desk} OR ${delegatedSql})` : desk;
-              })()
-            : delegatedSql;
-    const rmRows =
-      rmFilterSql === null
-        ? { rows: [] }
-        : await tx.execute(sql`
-          SELECT id, name FROM users
-          WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active'
-            AND ${rmFilterSql}
-            AND (${session.roles.includes("owner") ? sql`TRUE` : sql`roles && ARRAY['rm','sub_broker','ra_sales','ria','insurance','branch_head','ra_research']::text[]`})
-          ORDER BY name ASC
-        `);
+    // RM roster for the "RM" filter dropdown (empty for an own-records-only viewer).
+    const rmRows = { rows: await loadMeetingRmOptions(tx, session, meetingScope) };
     const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
     const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
     // Meetings per sub-branch and per person, under the same wall + filters as the list.

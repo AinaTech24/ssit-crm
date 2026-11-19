@@ -6,6 +6,7 @@ import { withTenant } from "@/db/client";
 import { users, complianceDocuments, tasks, reviewMeetings } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
+import { isMeetingParticipantSql } from "@/lib/meetings/participants";
 import { loadTenantLicense } from "@/lib/auth/license";
 import { tenantAccessibleNavKeys } from "@/config/nav-access";
 import { formatINR, formatDate } from "@/lib/utils";
@@ -49,7 +50,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
         (SELECT COALESCE(SUM(active_sip_amount::numeric),0)::numeric FROM investors WHERE rm_id = ${id}::uuid AND status = 'active') AS my_sip,
         (SELECT COUNT(*)::int FROM tasks WHERE assignee_id = ${id}::uuid AND status IN ('open','in_progress')) AS open_tasks,
         (SELECT COUNT(*)::int FROM tasks WHERE assignee_id = ${id}::uuid AND status IN ('open','in_progress') AND due_at < now()) AS overdue_tasks,
-        (SELECT COUNT(*)::int FROM review_meetings WHERE rm_id = ${id}::uuid AND status IN ('scheduled','confirmed') AND meeting_date >= now()) AS upcoming_meetings
+        (SELECT COUNT(*)::int FROM review_meetings WHERE ${isMeetingParticipantSql("review_meetings", id)} AND status IN ('scheduled','confirmed') AND meeting_date >= now()) AS upcoming_meetings
     `);
 
     // ── Attendance (month-to-date) + leave (current FY) summary ──
@@ -130,7 +131,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
       .where(
         and(
           eq(reviewMeetings.tenantId, session.tenantId),
-          eq(reviewMeetings.rmId, id),
+          sql`(${reviewMeetings.createdById} = ${id}::uuid OR ${reviewMeetings.rmId} = ${id}::uuid OR jsonb_exists(COALESCE(${reviewMeetings.collaboratorIds}, '[]'::jsonb), ${id}))`,
           inArray(reviewMeetings.status, ["scheduled", "confirmed", "in_progress"])
         )
       )

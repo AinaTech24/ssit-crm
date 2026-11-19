@@ -112,6 +112,9 @@ export default async function LeadsPage({
   // The event a lead came from. Stored in source_campaign — the same field the
   // {{lead.event_name}} merge field reads, so the filter and the template agree.
   const eventFilter = (sp.event ?? "").split(",").filter(Boolean);
+  // "Event leads" (came from an event) vs "Other leads" (everything else). A lead is an
+  // event lead when it carries an event name - the same field the By event strip reads.
+  const originFilter = sp.origin === "event" || sp.origin === "other" ? sp.origin : "";
   const ownerFilter = (sp.owner ?? "").split(",").filter(Boolean);
   // The RM / branch of the REFERRING CLIENT — not the lead owner. The referrals
   // module credits a referral to the relationship it came out of, so its
@@ -195,6 +198,10 @@ export default async function LeadsPage({
         sql`lower(btrim(leads.source_campaign)) IN (${sql.join(eventFilter.map((v) => sql`${v.trim().toLowerCase()}`), sql`, `)})`
       : null;
     if (eventCond) conds.push(eventCond);
+    const hasEventSql = sql`(leads.source_campaign IS NOT NULL AND btrim(leads.source_campaign) <> '')`;
+    const originCond =
+      originFilter === "event" ? hasEventSql : originFilter === "other" ? sql`NOT ${hasEventSql}` : null;
+    if (originCond) conds.push(originCond);
     if (ownerFilter.length)
       conds.push(sql`leads.owner_id IN (${sql.join(ownerFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
 
@@ -326,7 +333,9 @@ export default async function LeadsPage({
     // disagree about the total.
     const breakdownWhere = sql`${sql.join(conds, sql` AND `)}`;
     const breakdownNoEvent = sql`${sql.join(conds.filter((c) => c !== eventCond), sql` AND `)}`;
-    const [byDeskRes, byRmRes, byEventRes] = await Promise.all([
+    // For the Event / Other toggle counts: every other filter applies, the toggle itself does not.
+    const breakdownNoOrigin = sql`${sql.join(conds.filter((c) => c !== eventCond && c !== originCond), sql` AND `)}`;
+    const [byDeskRes, byRmRes, byEventRes, originRes] = await Promise.all([
       tx.execute(sql`
         SELECT COALESCE(d.name, 'No sub-branch') AS label, d.id AS desk_id, COUNT(*)::int AS n
         FROM leads
@@ -358,6 +367,13 @@ export default async function LeadsPage({
         ORDER BY n DESC, label ASC
         LIMIT 40
       `),
+      tx.execute(sql`
+        SELECT COUNT(*) FILTER (WHERE ${hasEventSql})::int AS event_n,
+               COUNT(*) FILTER (WHERE NOT ${hasEventSql})::int AS other_n
+        FROM leads
+        LEFT JOIN users ON users.id = leads.owner_id
+        WHERE ${breakdownNoOrigin}
+      `),
     ]);
 
     const { units: scopeUnits } = showScopePicker
@@ -374,6 +390,10 @@ export default async function LeadsPage({
       byDesk: byDeskRes.rows as unknown as { label: string; desk_id: string | null; n: number }[],
       byRm: byRmRes.rows as unknown as { label: string; rm_id: string | null; n: number }[],
       byEvent: byEventRes.rows as unknown as { label: string; n: number }[],
+      originCounts: {
+        event: Number((originRes.rows[0] as { event_n?: number } | undefined)?.event_n ?? 0),
+        other: Number((originRes.rows[0] as { other_n?: number } | undefined)?.other_n ?? 0),
+      },
       scopeUnits,
       scopeMembers,
     };
@@ -490,6 +510,8 @@ export default async function LeadsPage({
       <EventBreakdownCard
         basePath="/dashboard/leads"
         rows={(data.byEvent ?? []).map((e) => ({ label: String(e.label), count: Number(e.n) }))}
+        origin={originFilter}
+        originCounts={data.originCounts}
       />
 
       {showScopePicker && (

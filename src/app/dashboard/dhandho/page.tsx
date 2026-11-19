@@ -6,6 +6,7 @@ import { dhandhoSessions } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { DhandhoAdmin } from "@/components/dhandho/DhandhoAdmin";
+import { DhandhoNotes } from "@/components/dhandho/DhandhoNotes";
 import { DhandhoCalendar } from "./DhandhoCalendar";
 import { dayName, isMonthKey, istDate, meetingTimeLabel, monthGrid } from "@/lib/dhandho/schedule";
 
@@ -20,7 +21,8 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
   const session = await requireSession();
   const canManage = can(session.roles, "dhandho.manage", session.permissions);
   // Someone who may edit the schedule can always see it.
-  const canView = canManage || can(session.roles, "dhandho.view", session.permissions);
+  const canNotes = can(session.roles, "dhandho.notes", session.permissions);
+  const canView = canManage || canNotes || can(session.roles, "dhandho.view", session.permissions);
   if (!canView) {
     return (
       <div className="max-w-xl border rounded-lg bg-card p-8 text-sm text-muted-foreground">
@@ -86,6 +88,24 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
   const time = meetingTimeLabel(today);
   const iAmSpeaker = !!todays && todays.speakerUserId === session.userId;
 
+  // Who wrote each day's notes, shown beside them.
+  const authorIds = [...new Set([...sessions, ...(todays ? [todays] : [])].map((s) => s.notesBy).filter(Boolean))] as string[];
+  const authors = new Map<string, string>();
+  if (authorIds.length) {
+    const rows = await withTenant(session.tenantId, (tx) =>
+      tx.execute(sql`SELECT id, name FROM users WHERE tenant_id = ${session.tenantId}::uuid AND id IN (${sql.join(authorIds.map((a) => sql`${a}::uuid`), sql`, `)})`)
+    );
+    for (const r of rows.rows as Array<{ id: string; name: string | null }>) authors.set(String(r.id), r.name ?? "");
+  }
+  const when = (d: Date | null) =>
+    d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }) : null;
+  const mayWriteNotes = (s: { speakerUserId: string | null }) => canNotes || (!!s.speakerUserId && s.speakerUserId === session.userId);
+  // Days of the month on view that can carry notes: already held, not a holiday.
+  const noteDays = sessions
+    .filter((s) => s.sessionDate.startsWith(month) && s.sessionDate <= today && !s.offReason && s.sessionDate !== todays?.sessionDate)
+    .filter((s) => !!s.notes || mayWriteNotes(s))
+    .sort((a, b) => (a.sessionDate < b.sessionDate ? 1 : -1));
+
   // Month chips: every month that has data, plus the one being viewed and this one.
   const loaded = new Map(monthCounts.map((r) => [r.m, r.n]));
   const chipKeys = [...new Set([...loaded.keys(), month, thisMonth])].sort();
@@ -120,6 +140,13 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
               {time}
               {todays.topic ? ` · ${todays.topic}` : ""}
             </div>
+            <DhandhoNotes
+              sessionId={todays.id}
+              initialNotes={todays.notes ?? null}
+              canEdit={mayWriteNotes(todays)}
+              writtenBy={todays.notesBy ? authors.get(todays.notesBy) ?? null : null}
+              writtenAt={when(todays.notesAt ?? null)}
+            />
           </>
         ) : (
           <p className="mt-1 text-sm">No speaker has been added for today yet.</p>
@@ -165,6 +192,30 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
         canManage={canManage}
         thisMonth={thisMonth}
       />
+
+      {noteDays.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="section-title">Session notes</h2>
+          <div className="space-y-3">
+            {noteDays.map((s) => (
+              <div key={s.id} className="rounded-lg border bg-card p-4">
+                <div className="text-sm font-semibold">
+                  {dayName(s.sessionDate)}, {fmt(s.sessionDate)} · {s.speakerUserId === session.userId ? "You" : s.speakerName}
+                  {s.topic ? <span className="font-normal text-muted-foreground"> · {s.topic}</span> : null}
+                </div>
+                <DhandhoNotes
+                  sessionId={s.id}
+                  initialNotes={s.notes ?? null}
+                  canEdit={mayWriteNotes(s)}
+                  writtenBy={s.notesBy ? authors.get(s.notesBy) ?? null : null}
+                  writtenAt={when(s.notesAt ?? null)}
+                  compact
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {canManage && (
         <details className="group" open={sessions.every((s) => !s.sessionDate.startsWith(month))}>

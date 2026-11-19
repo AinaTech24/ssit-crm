@@ -4,6 +4,9 @@ import { Phone, MapPin, StickyNote, Activity as ActivityIcon, MessageCircle } fr
 import { withTenant } from "@/db/client";
 import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { requireSession } from "@/lib/auth/session";
+import { resolveMeetingScope } from "@/lib/auth/data-scope";
+import { loadMeetingRmOptions } from "@/lib/meetings/export-options";
+import { ExportMeetingsButton } from "@/components/review-meetings/ExportMeetingsButton";
 import { can } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
@@ -92,7 +95,12 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
             where: sql`${sql.join(conds, sql` AND `)}`,
           })
         : { byDesk: [], byRm: [] };
-      return { rows: rows.rows as any[], stats: stats.rows[0] as any, scopeUnits, scopeMembers, breakdown };
+      // Meeting export: the same dialog as on Meetings. Units and RMs follow the meetings
+      // wall; the file itself is cut by that wall on the server, whatever is picked here.
+      const meetingWall = await resolveMeetingScope(tx, session);
+      const exportRms = await loadMeetingRmOptions(tx, session, meetingWall);
+      const exportUnits = showScopePicker ? scopeUnits : (await loadScopeUnits(tx, session)).units;
+      return { rows: rows.rows as any[], stats: stats.rows[0] as any, scopeUnits, scopeMembers, breakdown, exportRms, exportUnits };
     },
     { userId: session.userId, branchId: session.branchId, roles: session.roles }
   );
@@ -106,7 +114,13 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><ActivityIcon className="size-6 text-brand-cyan" /> Activity Log</h1>
         </div>
-        <LogActivityButton />
+        <div className="flex items-center gap-2 flex-wrap">
+          <ExportMeetingsButton
+            units={data.exportUnits ?? []}
+            rms={(data.exportRms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }))}
+          />
+          <LogActivityButton />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

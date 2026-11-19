@@ -110,6 +110,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           // now, and until this fix it silently dropped who referred them
           // (the lead recorded it, the new investor row never did).
           referralClientName: lead.referredByName ?? null,
+          referredByInvestorId: lead.referredByInvestorId ?? null,
           rmId: body.rmId ?? lead.ownerId ?? session.userId,
           // The lead's service RM carries over; null falls back to the RM (trigger 0244).
           serviceRmId: lead.serviceRmId ?? null,

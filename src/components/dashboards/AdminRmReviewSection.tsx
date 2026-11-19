@@ -22,6 +22,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { investorScopeSql } from "@/lib/investors/access";
 import { can } from "@/lib/auth/rbac";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
+import { meetingParticipantsLateral } from "@/lib/meetings/participants";
 import { ResearchRmFilter } from "./ResearchRmFilter";
 import { MeetingTypeFilter } from "./MeetingTypeFilter";
 
@@ -99,7 +100,7 @@ export async function AdminRmReviewSection({
            GROUP BY investors.rm_id
         ),
         per_meeting AS (
-          SELECT COALESCE(m.created_by_id, m.rm_id) AS uid,
+          SELECT mp.uid AS uid,
                  COUNT(*) FILTER (
                    WHERE m.status = 'completed'
                      AND m.meeting_date >= now() - (${WINDOW_DAYS} || ' days')::interval
@@ -110,11 +111,11 @@ export async function AdminRmReviewSection({
                      AND m.meeting_date >= now()
                  )::int AS upcoming
             FROM review_meetings m
+            ${meetingParticipantsLateral("m")}
            WHERE m.tenant_id = ${session.tenantId}::uuid
-             AND COALESCE(m.created_by_id, m.rm_id) IS NOT NULL
              AND ${mtype ? sql`m.category = ${mtype}` : sql`TRUE`}
              AND ${meetingScope}
-           GROUP BY COALESCE(m.created_by_id, m.rm_id)
+           GROUP BY mp.uid
         ),
         roster AS (
           SELECT u.id, u.name,

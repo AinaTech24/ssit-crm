@@ -101,6 +101,8 @@ const CreateBody = z.object({
   mobileRelation: z.string().optional(),
   emailRelation: z.string().optional(),
   referralClientName: z.string().optional(),
+  /** The existing client who referred this one (picked from the Clients list). */
+  referredByInvestorId: z.string().uuid().optional(),
   familyOwnerName: z.string().optional(),
   householdType: z.string().optional(), // "Family or Individual"
   onboardedAt: z.string().optional(), // Date of Onboarding
@@ -234,6 +236,18 @@ export async function POST(req: NextRequest) {
       ).rows[0] as { branch_id: string | null } | undefined;
       const resolvedBranchId = rmRow?.branch_id ?? session.branchId ?? null;
 
+      // The referrer must be a live client of THIS firm; its name fills the free-text field too.
+      let referrer: { id: string; name: string } | null = null;
+      if (body.referredByInvestorId) {
+        const [ref] = await tx
+          .select({ id: investors.id, name: investors.name })
+          .from(investors)
+          .where(and(eq(investors.id, body.referredByInvestorId), eq(investors.tenantId, session.tenantId), isNull(investors.deletedAt)))
+          .limit(1);
+        if (!ref) throw Object.assign(new Error("the referring client was not found in this firm"), { status: 400 });
+        referrer = ref;
+      }
+
       const inserted = await tx
         .insert(investors)
         .values({
@@ -299,7 +313,8 @@ export async function POST(req: NextRequest) {
           motherName: body.motherName || null,
           mobileRelation: body.mobileRelation || null,
           emailRelation: body.emailRelation || null,
-          referralClientName: body.referralClientName || null,
+          referralClientName: body.referralClientName || referrer?.name || null,
+          referredByInvestorId: referrer?.id ?? null,
           familyOwnerName: body.familyOwnerName || null,
           householdType: body.householdType || null,
           // Second / joint holder

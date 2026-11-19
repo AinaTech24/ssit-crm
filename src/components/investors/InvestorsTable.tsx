@@ -28,6 +28,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Avatar } from "@/components/ui/Avatar";
 import { TableDensityToggle, useTableDensity } from "@/components/common/TableDensityToggle";
 import { FloatingBulkBar } from "@/components/common/FloatingBulkBar";
+import { BULK_FIELD_GROUPS } from "@/lib/investors/bulk-fields";
 import { InvestorSidePeek, type SidePeekInvestor } from "@/components/investors/InvestorSidePeek";
 
 export type InvestorTableRow = {
@@ -152,21 +153,24 @@ export function InvestorsTable({
       if (action === "tier") value = payload.serviceTier ?? null;
       if (action === "segment") value = payload.segmentTag ?? null;
       if (action === "category") value = payload.clientCategory ?? null;
+      if (action === "field") value = payload.value ?? "";
 
       const res = await fetch("/api/investors/bulk", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ids, action, value }),
+        body: JSON.stringify({ ids, action, value, ...(action === "field" ? { field: payload.field } : {}) }),
       });
       const j = await res.json();
       if (!res.ok) {
         setErr(j.error ?? `Failed (${res.status})`);
-        return;
+        return false;
       }
       setSelected(new Set());
       router.refresh();
+      return true;
     } catch (e: any) {
       setErr(e?.message ?? "Bulk action failed");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -450,6 +454,8 @@ export function InvestorsTable({
         onApplyAction={handleBulkApply}
         busy={busy}
         error={err}
+        fieldGroups={BULK_FIELD_GROUPS}
+        fieldNoun="clients"
       />
 
       {/* Split-Screen Side-Peek Drawer */}

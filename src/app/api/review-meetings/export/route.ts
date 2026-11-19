@@ -113,6 +113,8 @@ export async function GET(req: NextRequest) {
                  m.meeting_mode, m.location_or_link, m.status, m.discussion_points, m.meeting_notes,
                  m.outcome, m.outcome_notes, m.next_review_date, m.action_items, m.attendees,
                  m.created_at, m.other_party_name,
+                 m.reschedule_count, m.reschedule_reason, m.actual_end_at,
+                 pm.subject AS parent_subject, pm.meeting_date AS parent_date,
                  -- who the meeting is with
                  CASE WHEN i.id IS NOT NULL THEN 'Client'
                       WHEN l.id IS NOT NULL THEN 'Lead'
@@ -140,6 +142,7 @@ export async function GET(req: NextRequest) {
           LEFT JOIN leads l ON l.id = m.lead_id
           LEFT JOIN users ru ON ru.id = COALESCE(m.rm_id, m.created_by_id)
           LEFT JOIN users cu ON cu.id = m.created_by_id
+          LEFT JOIN review_meetings pm ON pm.id = m.parent_meeting_id
           LEFT JOIN desks d ON d.id = ru.desk_id
           LEFT JOIN branches b ON b.id = ru.branch_id
           WHERE ${sql.join(filters, sql` AND `)}
@@ -221,6 +224,10 @@ export async function GET(req: NextRequest) {
         .map((a) => `${a?.name ?? ""}${a?.role ? ` (${titleCase(a.role)})` : ""}${a?.notes ? ` - ${a.notes}` : ""}`)
         .join("; ");
       row["Next review date"] = dOnly(m.next_review_date);
+      row["Follow-up of"] = m.parent_subject || m.parent_date ? `${m.parent_subject ?? "Earlier meeting"} (${istDate(m.parent_date)})` : "";
+      row["Times rescheduled"] = Number(m.reschedule_count ?? 0);
+      row["Reschedule reason"] = m.reschedule_reason ?? "";
+      row["Ended at (IST)"] = m.actual_end_at ? `${istDate(m.actual_end_at)} ${istTime(m.actual_end_at)}` : "";
       row["Created on"] = istDate(m.created_at);
       return row;
     });

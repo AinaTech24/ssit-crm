@@ -16,6 +16,7 @@
  */
 
 import { sql } from "drizzle-orm";
+import { isMeetingParticipantSql } from "@/lib/meetings/participants";
 
 type Tx = { execute: (q: any) => Promise<{ rows: any[] }> };
 
@@ -89,7 +90,7 @@ export async function getTeamDashboard(
   const member = opts.memberId?.trim() || null;
   const taskWho = member ? sql` AND assignee_id = ${member}::uuid` : sql``;
   const leadWho = member ? sql` AND owner_id = ${member}::uuid` : sql``;
-  const meetWho = member ? sql` AND rm_id = ${member}::uuid` : sql``;
+  const meetWho = member ? sql` AND ${isMeetingParticipantSql("review_meetings", member)}` : sql``;
   const srWho = member ? sql` AND assigned_to_user_id = ${member}::uuid` : sql``;
   const invWho = member ? sql` AND rm_id = ${member}::uuid` : sql``;
   const investorOf = member

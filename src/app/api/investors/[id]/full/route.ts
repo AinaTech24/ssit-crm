@@ -9,6 +9,7 @@
 import { handleApiError } from "@/lib/api/error-handler";
 import { NextResponse } from "next/server";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { referralLinksSql } from "@/lib/referrals/links";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
@@ -94,7 +95,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         const sipHealth = { activeSips, bounces6mo: sipBouncesRow, maxConsecutiveFailures, monthlyCommitted };
 
         const insuranceCount = Number(((await tx.execute(sql`SELECT count(*)::int AS c FROM insurance_policies WHERE investor_id = ${id}`)).rows[0] as any)?.c ?? 0);
-        const referralCount = Number(((await tx.execute(sql`SELECT count(*)::int AS c FROM leads WHERE referred_by_investor_id = ${id}`)).rows[0] as any)?.c ?? 0);
+        const referralCount = Number(((await tx.execute(sql`SELECT count(*)::int AS c FROM ${referralLinksSql} l WHERE l.referred_by_investor_id = ${id}`)).rows[0] as any)?.c ?? 0);
 
         // DPDP PII access log — parity with the web 360 view.
         await tx.insert(auditLog).values({
