@@ -14,6 +14,7 @@ import { CustomViews } from "@/components/common/CustomViews";
 import { ColumnManager } from "@/components/common/ColumnManager";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { AddMeetingButton } from "@/components/review-meetings/AddMeetingButton";
+import { ExportMeetingsButton } from "@/components/review-meetings/ExportMeetingsButton";
 import { MeetingsBulkTable } from "@/components/review-meetings/MeetingsBulkTable";
 import { MeetingsKanban } from "@/components/review-meetings/MeetingsKanban";
 import { LayoutList, KanbanSquare, CalendarClock, BarChart3 } from "lucide-react";
@@ -307,6 +308,9 @@ export default async function ReviewMeetingsPage({
               <BarChart3 className="size-3.5" /> Meeting details
             </Link>
           )}
+          {/* Everyone who can open this list can export it - the file is cut by the same
+              wall as the list (own / team / whole firm), the dialog only narrows it. */}
+          <ExportMeetingsButton units={data.scopeUnits ?? []} rms={rmOptions} />
           <AddMeetingButton />
         </div>
       </div>

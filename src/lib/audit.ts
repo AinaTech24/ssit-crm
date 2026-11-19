@@ -31,6 +31,7 @@ export type AuditAction =
   | "investor.update"
   | "investor.bulk_import"
   | "investor.bulk_export"
+  | "review_meeting.export"
   | "investor.tier.recompute"
   | "lead.create"
   | "lead.update"

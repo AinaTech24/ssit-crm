@@ -25,6 +25,7 @@ const PIPELINE_VIEWS = [
   { value: "/dashboard/lifecycle", label: "Lifecycle" },
 ];
 import { LeadsKanban } from "@/components/leads/LeadsKanban";
+import { EventBreakdownCard } from "@/components/leads/EventBreakdownCard";
 import { LeadsTable } from "@/components/leads/LeadsTable";
 import { LeadsViewPersist } from "@/components/leads/LeadsViewPersist";
 // import { LeadQuickFilters } from "@/components/leads/LeadQuickFilters";
@@ -186,10 +187,14 @@ export default async function LeadsPage({
     }
     if (sourceFilter.length)
       conds.push(sql`leads.source IN (${sql.join(sourceFilter.map((v) => sql`${v}`), sql`, `)})`);
-    if (eventFilter.length)
-      // Compared trimmed and case-folded, so the same event typed two ways
-      // ("IMA Surat" / "ima surat ") is one choice and one result set.
-      conds.push(sql`lower(btrim(leads.source_campaign)) IN (${sql.join(eventFilter.map((v) => sql`${v.trim().toLowerCase()}`), sql`, `)})`);
+    // Kept in a variable so the "By event" counts can leave it out: picking one event
+    // must not make the other events disappear from the strip.
+    const eventCond = eventFilter.length
+      ? // Compared trimmed and case-folded, so the same event typed two ways
+        // ("IMA Surat" / "ima surat ") is one choice and one result set.
+        sql`lower(btrim(leads.source_campaign)) IN (${sql.join(eventFilter.map((v) => sql`${v.trim().toLowerCase()}`), sql`, `)})`
+      : null;
+    if (eventCond) conds.push(eventCond);
     if (ownerFilter.length)
       conds.push(sql`leads.owner_id IN (${sql.join(ownerFilter.map((v) => sql`${v}::uuid`), sql`, `)})`);
 
@@ -320,7 +325,8 @@ export default async function LeadsPage({
     // SAME wall + filters as the list, so the cards and the list can never
     // disagree about the total.
     const breakdownWhere = sql`${sql.join(conds, sql` AND `)}`;
-    const [byDeskRes, byRmRes] = await Promise.all([
+    const breakdownNoEvent = sql`${sql.join(conds.filter((c) => c !== eventCond), sql` AND `)}`;
+    const [byDeskRes, byRmRes, byEventRes] = await Promise.all([
       tx.execute(sql`
         SELECT COALESCE(d.name, 'No sub-branch') AS label, d.id AS desk_id, COUNT(*)::int AS n
         FROM leads
@@ -340,6 +346,18 @@ export default async function LeadsPage({
         ORDER BY n DESC
         LIMIT 12
       `),
+      // Leads per event, under the same wall and filters as the list (an RM sees the
+      // events of their own leads, a head their team's, the owner everyone's).
+      tx.execute(sql`
+        SELECT MIN(btrim(leads.source_campaign)) AS label, COUNT(*)::int AS n
+        FROM leads
+        LEFT JOIN users ON users.id = leads.owner_id
+        WHERE ${breakdownNoEvent}
+          AND leads.source_campaign IS NOT NULL AND btrim(leads.source_campaign) <> ''
+        GROUP BY lower(btrim(leads.source_campaign))
+        ORDER BY n DESC, label ASC
+        LIMIT 40
+      `),
     ]);
 
     const { units: scopeUnits } = showScopePicker
@@ -355,6 +373,7 @@ export default async function LeadsPage({
       events: eventRes.rows as unknown as { name: string }[],
       byDesk: byDeskRes.rows as unknown as { label: string; desk_id: string | null; n: number }[],
       byRm: byRmRes.rows as unknown as { label: string; rm_id: string | null; n: number }[],
+      byEvent: byEventRes.rows as unknown as { label: string; n: number }[],
       scopeUnits,
       scopeMembers,
     };
@@ -465,6 +484,13 @@ export default async function LeadsPage({
       {/* <div className="card-surface p-3">
         <LeadQuickFilters session={session} active={sp as Record<string, string | undefined>} />
       </div> */}
+
+      {/* First line: where the leads came from. Everyone sees it - the counts follow the
+          data wall, so an RM sees their own events, a head their team's, the owner all. */}
+      <EventBreakdownCard
+        basePath="/dashboard/leads"
+        rows={(data.byEvent ?? []).map((e) => ({ label: String(e.label), count: Number(e.n) }))}
+      />
 
       {showScopePicker && (
         <>
