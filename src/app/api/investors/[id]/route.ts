@@ -13,7 +13,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -104,8 +104,8 @@ const Patch = z.object({
   // in sync with the first array entry (mirrored in the handler).
   nominees: NomineesArray,
   referrals: ReferralsArray,
-  /** The existing client who referred this client (null clears it). */
-  referredByInvestorId: z.string().uuid().nullable().optional(),
+  /** The existing clients who referred this client - send the whole list (empty clears it). */
+  referredByInvestorIds: z.array(z.string().uuid()).max(10).optional(),
   bankAccounts: z.array(z.object({
     bankName: z.string().max(120),
     accountMasked: z.string().max(60).optional(),
@@ -326,15 +326,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (!su) return "bad_rm" as const;
       }
 
-      // The referrer must be another, live client of THIS firm.
-      if (parse.data.referredByInvestorId) {
-        if (parse.data.referredByInvestorId === id) return "bad_referrer" as const;
-        const [ref] = await tx
-          .select({ id: investors.id })
-          .from(investors)
-          .where(and(eq(investors.id, parse.data.referredByInvestorId), eq(investors.tenantId, session.tenantId), isNull(investors.deletedAt)))
-          .limit(1);
-        if (!ref) return "bad_referrer" as const;
+      // Every referrer must be another, live client of THIS firm. The list replaces the old
+      // one; the single column mirrors its first entry for older readers.
+      let referredPatch: { referredByInvestorIds?: string[]; referredByInvestorId?: string | null } = {};
+      if (parse.data.referredByInvestorIds !== undefined) {
+        const ids = [...new Set(parse.data.referredByInvestorIds)];
+        if (ids.includes(id)) return "bad_referrer" as const;
+        if (ids.length) {
+          const found = await tx
+            .select({ id: investors.id })
+            .from(investors)
+            .where(and(inArray(investors.id, ids), eq(investors.tenantId, session.tenantId), isNull(investors.deletedAt)));
+          if (found.length !== ids.length) return "bad_referrer" as const;
+        }
+        referredPatch = { referredByInvestorIds: ids, referredByInvestorId: ids[0] ?? null };
       }
 
       // Stamp KYC audit fields when any KYC-related column is touched.
@@ -415,6 +420,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...datePatch,
           ...mirror,
           ...rmBranchPatch,
+          ...referredPatch,
           ...(parse.data.uccCodes !== undefined ? { uccCodes: cleanUccCodes(parse.data.uccCodes) } : {}),
           // De-duplicate rather than trusting the client: the tag chips and the
           // free-text box can both produce "Motilal Oswal".
@@ -608,6 +614,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       await tx.update(leads).set({ convertedInvestorId: null } as any).where(and(eq(leads.tenantId, T), eq(leads.convertedInvestorId, id)));
       await tx.update(leads).set({ referredByInvestorId: null } as any).where(and(eq(leads.tenantId, T), eq(leads.referredByInvestorId, id)));
       await tx.update(investors).set({ referredByInvestorId: null }).where(and(eq(investors.tenantId, T), eq(investors.referredByInvestorId, id)));
+      await tx.execute(sql`UPDATE investors SET referred_by_investor_ids = referred_by_investor_ids - ${id}::text WHERE tenant_id = ${T}::uuid AND jsonb_exists(referred_by_investor_ids, ${id})`);
       await tx.update(families).set({ primaryInvestorId: null } as any).where(and(eq(families.tenantId, T), eq(families.primaryInvestorId, id)));
       await tx.update(investors).set({ guardianInvestorId: null } as any).where(and(eq(investors.tenantId, T), eq(investors.guardianInvestorId, id)));
 

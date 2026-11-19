@@ -323,9 +323,10 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
     );
     // Who referred this client, and who this client has referred (leads still in the
     // pipeline plus clients already on the books). Names only - both link to the record.
-    const referredByRow = inv.referredByInvestorId
-      ? ((await tx.execute(sql`SELECT id, name FROM investors WHERE id = ${inv.referredByInvestorId}::uuid AND tenant_id = ${session.tenantId}::uuid AND deleted_at IS NULL`)).rows[0] as { id: string; name: string } | undefined) ?? null
-      : null;
+    const referrerIds = (Array.isArray(inv.referredByInvestorIds) ? inv.referredByInvestorIds : []).filter((x): x is string => typeof x === "string");
+    const referredByRows = referrerIds.length
+      ? ((await tx.execute(sql`SELECT id, name FROM investors WHERE tenant_id = ${session.tenantId}::uuid AND deleted_at IS NULL AND id IN (${sql.join(referrerIds.map((r) => sql`${r}::uuid`), sql`, `)})`)).rows as Array<{ id: string; name: string }>)
+      : [];
     const referredList = (
       await tx.execute(sql`
         SELECT n.id, n.name, COALESCE(n.status, 'active') AS status, 'client' AS kind
@@ -378,7 +379,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       riskHistory: riskHistoryRows,
       insuranceCount,
       referralCount,
-      referredByRow,
+      referredByRows,
       referredList,
       recentTransactions: recentTxRows,
       txCount: txCountRow,
@@ -682,7 +683,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
         <ReferralSection
           investorId={inv.id}
           referrals={((inv.referrals as any[]) ?? []) as any}
-          referredBy={data.referredByRow ?? null}
+          referredBy={data.referredByRows ?? []}
           referredList={data.referredList ?? []}
         />
       </RelatedListSection>

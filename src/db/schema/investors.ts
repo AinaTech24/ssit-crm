@@ -337,6 +337,9 @@ export const investors = pgTable(
     referralClientName: text("referral_client_name"),
     /** The existing client who referred this one (migration 0261). */
     referredByInvestorId: uuid("referred_by_investor_id"),
+    /** Every client that referred this one (migration 0264) - the source of truth; the
+     *  single column above mirrors the first entry. */
+    referredByInvestorIds: jsonb("referred_by_investor_ids").$type<string[]>().notNull().default([]),
     familyOwnerName: text("family_owner_name"),
     householdType: text("household_type"), // "Family or Individual"
     /** Second / joint holder details. */

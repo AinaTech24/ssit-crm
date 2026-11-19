@@ -315,6 +315,7 @@ export async function POST(req: NextRequest) {
           emailRelation: body.emailRelation || null,
           referralClientName: body.referralClientName || referrer?.name || null,
           referredByInvestorId: referrer?.id ?? null,
+          referredByInvestorIds: referrer ? [referrer.id] : [],
           familyOwnerName: body.familyOwnerName || null,
           householdType: body.householdType || null,
           // Second / joint holder

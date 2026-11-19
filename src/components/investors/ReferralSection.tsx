@@ -25,14 +25,14 @@ type ReferredPerson = { id: string; name: string; status: string; kind: "client"
 export function ReferralSection({
   investorId,
   referrals,
-  referredBy = null,
+  referredBy = [],
   referredList = [],
   canEdit = true,
 }: {
   investorId: string;
   referrals: Referral[];
-  /** The existing client who referred THIS client (migration 0261). */
-  referredBy?: { id: string; name: string } | null;
+  /** The existing clients who referred THIS client (migrations 0261 / 0264). */
+  referredBy?: Array<{ id: string; name: string }>;
   /** Clients and still-open leads that came in through this client - shown automatically. */
   referredList?: ReferredPerson[];
   canEdit?: boolean;
@@ -44,24 +44,24 @@ export function ReferralSection({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState<Referral[]>(seed);
-  // "Referred by" is its own small editor: pick the referring client, save at once.
+  // "Referred by" is its own list: add a referring client, or remove any - each change saves at once.
   const [pickingReferrer, setPickingReferrer] = useState(false);
   const [refBusy, setRefBusy] = useState(false);
 
-  async function saveReferrer(referrerId: string | null) {
+  async function saveReferrers(ids: string[], message: string) {
     setRefBusy(true);
     try {
       const res = await fetch(`/api/investors/${investorId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ referredByInvestorId: referrerId }),
+        body: JSON.stringify({ referredByInvestorIds: ids }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast.error(j.error ?? `Save failed (${res.status})`, "Referred by");
         return;
       }
-      toast.success(referrerId ? "Referred by saved" : "Referred by cleared");
+      toast.success(message);
       setPickingReferrer(false);
       router.refresh();
     } catch (e: any) {
@@ -126,46 +126,6 @@ export function ReferralSection({
         )}
       </div>
 
-      {/* Who referred this client */}
-      <div className="mb-4 rounded-lg border border-border bg-secondary/20 p-3.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <UserCheck className="size-3.5" /> Referred by
-          </div>
-          {canEdit && !pickingReferrer && (
-            <button
-              type="button"
-              onClick={() => setPickingReferrer(true)}
-              className="text-xs font-medium text-brand-cyan hover:underline"
-            >
-              {referredBy ? "Change" : "Add referrer"}
-            </button>
-          )}
-        </div>
-        {pickingReferrer ? (
-          <div className="mt-2 space-y-2">
-            <InvestorLookup
-              value={referredBy?.id ?? null}
-              displayName={referredBy?.name ?? null}
-              onSelect={(id) => saveReferrer(id)}
-              onClear={() => saveReferrer(null)}
-              placeholder="Type the referring client's name, PAN or mobile…"
-            />
-            <div className="flex justify-end">
-              <button type="button" disabled={refBusy} onClick={() => setPickingReferrer(false)} className="text-xs text-muted-foreground hover:underline">
-                {refBusy ? "Saving…" : "Cancel"}
-              </button>
-            </div>
-          </div>
-        ) : referredBy ? (
-          <Link href={`/dashboard/investors/${referredBy.id}`} className="mt-1.5 inline-block text-sm font-semibold hover:underline">
-            {referredBy.name}
-          </Link>
-        ) : (
-          <div className="mt-1.5 text-xs text-muted-foreground">Nobody recorded - add the client who referred this one.</div>
-        )}
-      </div>
-
       {/* Who this client has referred - filled in automatically from "Referred by" on the other record */}
       {referredList.length > 0 && (
         <div className="mb-4 rounded-lg border border-border bg-secondary/20 p-3.5">
@@ -221,6 +181,77 @@ export function ReferralSection({
           ))}
         </div>
       )}
+
+      {/* Who referred this client - its own section, like Referrals: add several, remove any */}
+      <div className="mt-5 border-t pt-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold flex items-center gap-2 text-sm">
+            <UserCheck className="size-4 text-brand-cyan" /> Referred by
+            {referredBy.length > 0 && <span className="text-xs font-normal text-muted-foreground">({referredBy.length})</span>}
+          </h3>
+          {canEdit && !pickingReferrer && (
+            <button
+              type="button"
+              onClick={() => setPickingReferrer(true)}
+              className="rounded-md border border-border bg-secondary/40 px-2.5 py-1 text-xs font-medium hover:bg-secondary inline-flex items-center gap-1.5"
+            >
+              <UserPlus className="size-3.5" /> Add referred by
+            </button>
+          )}
+        </div>
+
+        {pickingReferrer && (
+          <div className="mb-3 space-y-2">
+            <InvestorLookup
+              value={null}
+              displayName={null}
+              onSelect={(id) => {
+                if (id === investorId) {
+                  toast.error("A client cannot be referred by themselves", "Referred by");
+                  return;
+                }
+                if (referredBy.some((r) => r.id === id)) {
+                  toast.error("Already in the list", "Referred by");
+                  return;
+                }
+                saveReferrers([...referredBy.map((r) => r.id), id], "Referred by added");
+              }}
+              placeholder="Type the referring client's name, PAN or mobile…"
+            />
+            <div className="flex justify-end">
+              <button type="button" disabled={refBusy} onClick={() => setPickingReferrer(false)} className="text-xs text-muted-foreground hover:underline">
+                {refBusy ? "Saving…" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {referredBy.length === 0 ? (
+          !pickingReferrer && <div className="text-xs text-muted-foreground">Nobody recorded - add the client who referred this one.</div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {referredBy.map((r) => (
+              <div key={r.id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-secondary/20 px-3.5 py-2.5">
+                <Link href={`/dashboard/investors/${r.id}`} className="text-sm font-semibold hover:underline truncate">
+                  {r.name}
+                </Link>
+                {canEdit && (
+                  <button
+                    type="button"
+                    disabled={refBusy}
+                    onClick={() => saveReferrers(referredBy.filter((x) => x.id !== r.id).map((x) => x.id), "Referred by removed")}
+                    className="btn-icon h-7 w-7 text-muted-foreground hover:text-destructive"
+                    title="Remove"
+                    aria-label={`Remove ${r.name}`}
+                  >
+                    <X className="size-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {open && typeof document !== "undefined" && createPortal(
         <>
