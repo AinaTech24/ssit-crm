@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, asc, eq, gt, gte, isNull, lte, sql } from "drizzle-orm";
-import { Mic } from "lucide-react";
+import { Mic, NotebookPen } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { dhandhoSessions } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
@@ -112,7 +112,8 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <div>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+       <div>
         <h1 className="page-title flex items-center gap-2">
           <Mic className="size-6 text-brand-cyan" /> Dhandho
         </h1>
@@ -120,6 +121,13 @@ export default async function DhandhoPage({ searchParams }: { searchParams: Prom
           The whole team meets every day — Monday to Friday at 10:00 am and Saturday at 10:30 am — and one person shares
           what they have learned.
         </p>
+       </div>
+       <Link
+         href="/dashboard/dhandho/notes"
+         className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary"
+       >
+         <NotebookPen className="size-3.5" /> All notes
+       </Link>
       </div>
 
       {/* Today's speaker, first thing on the page */}

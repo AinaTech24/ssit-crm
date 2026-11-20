@@ -41,6 +41,7 @@ import { ActivityTimeline } from "@/components/investors/ActivityTimeline";
 import { ClientNotes } from "@/components/investors/ClientNotes";
 import { NomineeSection } from "@/components/investors/NomineeSection";
 import { ReferralSection } from "@/components/investors/ReferralSection";
+import { ReferredBySection } from "@/components/investors/ReferredBySection";
 import { referralLinksSql } from "@/lib/referrals/links";
 import { CustomFieldsCard } from "@/components/common/CustomFieldsCard";
 import { RiskProfilePdfButtons } from "@/components/risk-profile/RiskProfileName";
@@ -97,6 +98,7 @@ const INVESTOR_DETAIL_SECTIONS: RelatedListDef[] = [
   { key: "summary", label: "Risk / nominee / KYC / review summary" },
   { key: "nominees", label: "Nominees" },
   { key: "referrals", label: "Referrals" },
+  { key: "referred_by", label: "Referred by" },
   { key: "family", label: "Family snapshot" },
   { key: "valuation", label: "Portfolio valuation" },
   { key: "holdings", label: "Holdings" },
@@ -128,7 +130,7 @@ const INVESTOR_DETAIL_SECTIONS: RelatedListDef[] = [
 const INVESTOR_DETAIL_TABS = [
   { key: "overview", label: "Overview", sections: ["health", "recommended", "summary"] },
   { key: "portfolio", label: "Portfolio", sections: ["valuation", "holdings", "churn", "allocation", "sip_health", "transactions", "expected_inflows", "cross_sell"] },
-  { key: "profile", label: "KYC & Profile", sections: ["nominees", "referrals", "custom_fields", "master"] },
+  { key: "profile", label: "KYC & Profile", sections: ["nominees", "referrals", "referred_by", "custom_fields", "master"] },
   { key: "engagement", label: "Engagement", sections: ["family", "notes", "calls", "meeting_notes", "emails", "whatsapp", "gifts", "blueprint", "related"] },
   { key: "documents", label: "Documents", sections: ["documents"] },
   // Rarely-opened detail — tucked behind "More" so the core tabs stay uncluttered.
@@ -331,7 +333,7 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
       await tx.execute(sql`
         SELECT n.id, n.name, COALESCE(n.status, 'active') AS status, 'client' AS kind
           FROM investors n
-         WHERE n.referred_by_investor_id = ${id}::uuid AND n.tenant_id = ${session.tenantId}::uuid AND n.deleted_at IS NULL
+         WHERE jsonb_exists(COALESCE(n.referred_by_investor_ids, '[]'::jsonb), ${id}) AND n.tenant_id = ${session.tenantId}::uuid AND n.deleted_at IS NULL
         UNION ALL
         SELECT l.id, l.name, COALESCE(l.stage::text, 'new') AS status, 'lead' AS kind
           FROM leads l
@@ -683,9 +685,13 @@ export default async function InvestorDetailPage({ params }: { params: Promise<{
         <ReferralSection
           investorId={inv.id}
           referrals={((inv.referrals as any[]) ?? []) as any}
-          referredBy={data.referredByRows ?? []}
           referredList={data.referredList ?? []}
         />
+      </RelatedListSection>
+
+      {/* Referred by - its own box below Referrals: where the referring clients are recorded */}
+      <RelatedListSection moduleKey="investors-detail" sectionKey="referred_by">
+        <ReferredBySection investorId={inv.id} referredBy={data.referredByRows ?? []} />
       </RelatedListSection>
 
       {/* MFD-defined custom fields — KYC & Profile tab only (renders only if the

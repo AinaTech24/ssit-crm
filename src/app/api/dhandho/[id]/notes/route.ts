@@ -4,9 +4,9 @@ import { handleApiError } from "@/lib/api/error-handler";
  *
  * Body: { notes: string, notify?: boolean }
  *
- * Who: someone holding dhandho.notes, or the speaker of THAT session. Only for a
- * session that has happened or is today (nothing to note about a future day), and not
- * on a holiday. When `notify` is true and the notes are not empty, every active member
+ * Who: someone holding dhandho.notes, or the speaker of THAT session. For any day on the
+ * schedule - earlier, today or upcoming (a speaker may leave their preparation notes
+ * ahead of the day) - but not a holiday. When `notify` is true and the notes are not empty, every active member
  * gets an in-app notification carrying the day's topic and the notes.
  */
 
@@ -55,7 +55,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const isSpeaker = !!row.speakerUserId && row.speakerUserId === session.userId;
       if (!holdsCap && !isSpeaker) return { error: "you cannot add notes to this session", status: 403 } as const;
       if (row.offReason) return { error: "there was no session on this day", status: 400 } as const;
-      if (row.sessionDate > today) return { error: "this session has not happened yet", status: 400 } as const;
 
       await tx
         .update(dhandhoSessions)
