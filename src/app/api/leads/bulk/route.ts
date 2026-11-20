@@ -7,6 +7,9 @@ import { handleApiError } from "@/lib/api/error-handler";
  *          = "follow_up"  value = ISO date string         → set next follow-up
  *          = "stage"      value = stage key               → move stage (override)
  *          = "lost"       value = lost reason (optional)  → mark not_qualified
+ *          = "field"      field = a key of LEAD_BULK_FIELD_GROUPS, value = its value
+ *                         → "Update a field": source / event / campaign / city / amount /
+ *                           follow-up date / tags, set to the same value on every lead
  *          = "delete"     (no value)                      → soft-delete (hidden)
  *
  * Tenant-scoped via withTenant + RLS; only leads in the caller's tenant are
@@ -14,15 +17,16 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
-import { leads, users, eventsOutbox } from "@/db/schema";
+import { leads, users, eventsOutbox, masterValues } from "@/db/schema";
 import { scoreFields } from "@/lib/leads/score";
-import { CANONICAL_LEAD_STAGES } from "@/lib/leads/normalize";
+import { CANONICAL_LEAD_STAGES, LEAD_SOURCE_VALUES } from "@/lib/leads/normalize";
+import { findLeadBulkField } from "@/lib/leads/bulk-fields";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,8 +35,10 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
-  action: z.enum(["assign", "follow_up", "stage", "lost", "delete"]),
+  action: z.enum(["assign", "follow_up", "stage", "lost", "field", "delete"]),
   value: z.string().nullable().optional(),
+  /** For action "field": which catalogued field to set. */
+  field: z.string().max(40).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -48,7 +54,7 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: "invalid body", issues: parsed.error.issues }, { status: 400 });
     }
-    const { ids, action, value } = parsed.data;
+    const { ids, action, value, field } = parsed.data;
     const meta = clientMetaFromHeaders(req.headers);
 
     const patch: Record<string, any> = { updatedAt: new Date() };
@@ -93,6 +99,70 @@ export async function POST(req: NextRequest) {
         patch.lostAt = new Date();
         patch.lostReason = value || "Bulk-marked not qualified";
         break;
+      case "field": {
+        const def = field ? findLeadBulkField(field) : undefined;
+        if (!def) return NextResponse.json({ error: "this field cannot be updated in bulk" }, { status: 400 });
+        const v = (value ?? "").trim();
+        if (def.key === "event") {
+          // The name must be one of the firm's own events; the stored spelling is the list's.
+          if (!v) return NextResponse.json({ error: "choose an event" }, { status: 400 });
+          const label = await withTenant(session.tenantId, async (tx) => {
+            const rows = await tx
+              .select({ label: masterValues.label })
+              .from(masterValues)
+              .where(
+                and(
+                  eq(masterValues.tenantId, session.tenantId),
+                  eq(masterValues.masterType, "lead_event"),
+                  eq(masterValues.isActive, true)
+                )
+              );
+            return rows.find((r) => r.label.trim().toLowerCase() === v.toLowerCase())?.label ?? null;
+          });
+          if (!label) return NextResponse.json({ error: "that event is not in your event list" }, { status: 400 });
+          patch.source = "event";
+          patch.sourceCampaign = label;
+        } else if (def.key === "source") {
+          if (!(LEAD_SOURCE_VALUES as readonly string[]).includes(v) || v === "event") {
+            return NextResponse.json({ error: "choose a valid lead source" }, { status: 400 });
+          }
+          // Leaving "Event" also drops the event name, so these leads stop counting as event leads.
+          patch.source = v;
+          patch.sourceCampaign = sql`CASE WHEN ${leads.source} = 'event' THEN NULL ELSE ${leads.sourceCampaign} END`;
+        } else if (def.key === "sourceCampaign") {
+          if (v.length > 120) return NextResponse.json({ error: "value is too long (max 120 characters)" }, { status: 400 });
+          patch.sourceCampaign = v === "" ? null : v;
+        } else if (def.key === "city") {
+          if (v.length > 120) return NextResponse.json({ error: "value is too long (max 120 characters)" }, { status: 400 });
+          patch.city = v === "" ? null : v;
+        } else if (def.key === "intendedAmount") {
+          if (v !== "" && !/^d{1,12}$/.test(v)) {
+            return NextResponse.json({ error: "enter the amount in digits only" }, { status: 400 });
+          }
+          patch.intendedAmount = v === "" ? null : v;
+        } else if (def.key === "nextFollowUpAt") {
+          const d = new Date(v);
+          if (!v || Number.isNaN(d.getTime())) return NextResponse.json({ error: "pick a valid date" }, { status: 400 });
+          patch.nextFollowUpAt = d;
+        } else if (def.kind === "tag_add" || def.kind === "tag_remove") {
+          if (!v || v.length > 60) return NextResponse.json({ error: "enter a tag (up to 60 characters)" }, { status: 400 });
+          if (def.kind === "tag_add") {
+            patch.tags = sql`CASE
+              WHEN EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(${leads.tags}, '[]'::jsonb)) t WHERE lower(t) = lower(${v}))
+                OR jsonb_array_length(COALESCE(${leads.tags}, '[]'::jsonb)) >= 25
+              THEN COALESCE(${leads.tags}, '[]'::jsonb)
+              ELSE COALESCE(${leads.tags}, '[]'::jsonb) || to_jsonb(${v}::text)
+            END`;
+          } else {
+            patch.tags = sql`COALESCE(
+              (SELECT jsonb_agg(t) FROM jsonb_array_elements_text(COALESCE(${leads.tags}, '[]'::jsonb)) t WHERE lower(t) <> lower(${v})),
+              '[]'::jsonb)`;
+          }
+        } else {
+          return NextResponse.json({ error: "this field cannot be updated in bulk" }, { status: 400 });
+        }
+        break;
+      }
       case "delete":
         // Mirror the single-lead DELETE: soft-delete with the __deleted__
         // sentinel so these leads are HIDDEN from every list / kanban / KPI
@@ -120,7 +190,8 @@ export async function POST(req: NextRequest) {
       // Re-score affected leads when the action changed a scoring input (stage,
       // follow-up momentum, or marking lost). Owner reassignment doesn't move
       // the score, so we skip the recompute there.
-      if (action === "stage" || action === "lost" || action === "follow_up") {
+      const rescoreFields = ["event", "source", "intendedAmount", "nextFollowUpAt"];
+      if (action === "stage" || action === "lost" || action === "follow_up" || (action === "field" && !!field && rescoreFields.includes(field))) {
         const touchedIds = updated.map((u) => u.id);
         if (touchedIds.length) {
           const rows = await tx.select().from(leads).where(inArray(leads.id, touchedIds));
@@ -167,7 +238,7 @@ export async function POST(req: NextRequest) {
         action: `lead.bulk_${action}`,
         entityType: "lead",
         entityId: session.tenantId,
-        after: { action, value: value ?? null, count: updated.length, ids } as any,
+        after: { action, field: field ?? null, value: value ?? null, count: updated.length, ids } as any,
         ...meta,
       });
       return updated.length;

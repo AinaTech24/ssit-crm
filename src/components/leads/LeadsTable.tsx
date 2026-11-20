@@ -6,7 +6,7 @@
  * side-peek drawer for rapid lead inspections.
  */
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import { leadScoreBand } from "@/lib/leads/scoring";
 import { Avatar } from "@/components/ui/Avatar";
 import { TableDensityToggle, useTableDensity } from "@/components/common/TableDensityToggle";
 import { FloatingBulkBar } from "@/components/common/FloatingBulkBar";
+import { leadBulkGroups } from "@/lib/leads/bulk-fields";
 import { LeadSidePeek, type SidePeekLead } from "@/components/leads/LeadSidePeek";
 
 type Row = {
@@ -101,7 +102,19 @@ export function LeadsTable({ rows, sort, dir = "desc" }: { rows: Row[]; sort: st
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  async function handleBulkApply(action: string, payload: Record<string, any>) {
+  // The firm's event list, for the "Event" choice in "Update a field".
+  const [events, setEvents] = useState<Array<{ label: string }>>([]);
+  useEffect(() => {
+    let live = true;
+    fetch("/api/lead-events")
+      .then((r) => r.json())
+      .then((j) => { if (live && Array.isArray(j.events)) setEvents(j.events); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const fieldGroups = useMemo(() => leadBulkGroups(events), [events]);
+
+  async function handleBulkApply(action: string, payload: Record<string, any>): Promise<boolean | void> {
     const ids = [...selected];
     if (ids.length === 0) return;
     setBusy(true);
@@ -114,17 +127,21 @@ export function LeadsTable({ rows, sort, dir = "desc" }: { rows: Row[]; sort: st
       const res = await fetch("/api/leads/bulk", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ids, action, value }),
+        body: JSON.stringify(
+          action === "field" ? { ids, action, field: payload.field, value: payload.value } : { ids, action, value }
+        ),
       });
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
       if (!res.ok) {
         setErr(j.error ?? `Failed (${res.status})`);
-        return;
+        return false;
       }
       setSelected(new Set());
       router.refresh();
+      return true;
     } catch (e: any) {
       setErr(e?.message ?? "Bulk action failed");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -263,6 +280,8 @@ export function LeadsTable({ rows, sort, dir = "desc" }: { rows: Row[]; sort: st
         showTier={false}
         showSegment={false}
         showCategory={false}
+        fieldGroups={fieldGroups}
+        fieldNoun="leads"
       />
 
       {/* Split-Screen Side-Peek Drawer */}

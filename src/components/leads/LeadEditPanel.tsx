@@ -15,6 +15,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Save, X, Loader2 } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
+import { LeadEventPicker } from "@/components/leads/LeadEventPicker";
 
 const SOURCES = [
   ["referral", "Referral"],
@@ -73,9 +74,24 @@ export function LeadEditPanel({
     setForm((s) => ({ ...s, [k]: v }));
   }
 
+  /** Changing the source: choosing Event starts with no event picked; leaving Event drops the event name. */
+  function changeSource(next: string) {
+    setForm((s) => {
+      let campaign = s.sourceCampaign;
+      if (next === "event" && s.source !== "event") campaign = "";
+      if (next !== "event" && s.source === "event") campaign = "";
+      return { ...s, source: next, sourceCampaign: campaign };
+    });
+  }
+
   async function save() {
-    setBusy(true);
     setErr(null);
+    // A lead whose source is being set to Event must say WHICH event - that is what files it under Event leads.
+    if (form.source === "event" && lead.source !== "event" && !form.sourceCampaign.trim()) {
+      setErr("Choose the event this lead came from.");
+      return;
+    }
+    setBusy(true);
     try {
       const payload: any = {
         name: form.name,
@@ -83,7 +99,8 @@ export function LeadEditPanel({
         phone: form.phone || undefined,
         city: form.city || undefined,
         source: form.source,
-        sourceCampaign: form.sourceCampaign || undefined,
+        // Always sent (an empty string clears it), so leaving "Event" removes the event name.
+        sourceCampaign: form.sourceCampaign.trim(),
         intendedAmount: form.intendedAmount || undefined,
         followUpNotes: form.followUpNotes || undefined,
         notes: form.notes || undefined,
@@ -316,7 +333,7 @@ export function LeadEditPanel({
             {editing ? (
               <select
                 value={form.source}
-                onChange={(e) => set("source", e.target.value)}
+                onChange={(e) => changeSource(e.target.value)}
                 className="w-full border rounded-md px-2 py-1 text-sm bg-background"
               >
                 {SOURCES.map(([key, label]) => (
@@ -330,18 +347,28 @@ export function LeadEditPanel({
             )}
           </Row>
 
-          <Row label="Campaign">
-            {editing ? (
-              <input
-                value={form.sourceCampaign}
-                onChange={(e) => set("sourceCampaign", e.target.value)}
-                placeholder="e.g. Diwali-2026"
-                className="w-full border rounded-md px-2 py-1 text-sm bg-background"
-              />
-            ) : (
-              <span>{lead.sourceCampaign ?? "—"}</span>
-            )}
-          </Row>
+          {form.source === "event" ? (
+            <Row label="Event">
+              {editing ? (
+                <LeadEventPicker value={form.sourceCampaign} onChange={(label) => set("sourceCampaign", label)} />
+              ) : (
+                <span>{lead.sourceCampaign || "—"}</span>
+              )}
+            </Row>
+          ) : (
+            <Row label="Campaign">
+              {editing ? (
+                <input
+                  value={form.sourceCampaign}
+                  onChange={(e) => set("sourceCampaign", e.target.value)}
+                  placeholder="e.g. Diwali-2026"
+                  className="w-full border rounded-md px-2 py-1 text-sm bg-background"
+                />
+              ) : (
+                <span>{lead.sourceCampaign ?? "—"}</span>
+              )}
+            </Row>
+          )}
 
           {lead.utmParams && (
             <>

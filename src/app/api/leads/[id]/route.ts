@@ -113,6 +113,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (Object.prototype.hasOwnProperty.call(patch, "source")) {
         patch.source = normalizeLeadSource(patch.source);
       }
+      if (Object.prototype.hasOwnProperty.call(patch, "sourceCampaign")) {
+        // "" clears it (a lead whose source moved away from Event no longer carries an event name).
+        patch.sourceCampaign = (patch.sourceCampaign ?? "").trim() || null;
+      }
       if (Object.prototype.hasOwnProperty.call(patch, "stage")) {
         patch.stage = normalizeLeadStage(patch.stage);
         patch.stageChangedAt = new Date();
