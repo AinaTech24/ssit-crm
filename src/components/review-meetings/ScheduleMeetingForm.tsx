@@ -46,7 +46,6 @@ const MODES = [
   ["office", "Office"],
   ["client_place", "Client Place"],
   ["online", "Online"],
-  ["phone", "Phone"],
 ] as const;
 
 /** Rooms available for an in-office meeting. */

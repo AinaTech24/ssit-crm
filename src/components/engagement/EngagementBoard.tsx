@@ -31,6 +31,7 @@ type GiftRow = {
   clientName: string | null;
   rmName: string | null;
   category: string | null;
+  categoryOther?: string | null;
   grade: string | null;
   label: string;
   amount: number;
@@ -80,6 +81,8 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
   const [rmLoading, setRmLoading] = useState(false);
   const [category, setCategory] = useState<GiftCategory>("hamper");
   const [grade, setGrade] = useState<string>("A");
+  // What the gift is, when the category is "Other".
+  const [categoryOther, setCategoryOther] = useState("");
   const [givenOn, setGivenOn] = useState(todayIso);
   const [deliveredOn, setDeliveredOn] = useState("");
   const [amount, setAmount] = useState("");
@@ -95,6 +98,7 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [eCategory, setECategory] = useState<GiftCategory>("hamper");
   const [eGrade, setEGrade] = useState("A");
+  const [eCategoryOther, setECategoryOther] = useState("");
   const [eGivenOn, setEGivenOn] = useState("");
   const [eDeliveredOn, setEDeliveredOn] = useState("");
   const [eAmount, setEAmount] = useState("");
@@ -104,6 +108,7 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
     setEditId(g.id);
     setECategory((g.category as GiftCategory) ?? "hamper");
     setEGrade(g.grade ?? "A");
+    setECategoryOther(g.categoryOther ?? "");
     setEGivenOn((g.givenOn ?? "").slice(0, 10));
     setEDeliveredOn((g.deliveredOn ?? "").slice(0, 10));
     setEAmount(g.amount ? String(g.amount) : "");
@@ -112,6 +117,10 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
   }
 
   async function saveRow(g: GiftRow) {
+    if (eCategory === "other" && !eCategoryOther.trim()) {
+      setError("Type what the gift is (for Other).");
+      return;
+    }
     setRowBusy(g.id);
     setError(null);
     try {
@@ -120,6 +129,7 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           category: eCategory,
+          categoryOther: eCategory === "other" ? eCategoryOther.trim() : null,
           grade: eGrade,
           givenOn: eGivenOn,
           // Sent explicitly so clearing the box undoes delivery, exactly as it
@@ -208,6 +218,10 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!investorId) return;
+    if (category === "other" && !categoryOther.trim()) {
+      setError("Type what the gift is (for Other).");
+      return;
+    }
     setSaving(true);
     setError(null);
     setSaved(null);
@@ -218,6 +232,7 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
         body: JSON.stringify({
           investorId,
           category,
+          categoryOther: category === "other" ? categoryOther.trim() : null,
           grade,
           givenOn,
           deliveredOn: deliveredOn || null,
@@ -234,6 +249,7 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
       setAmount("");
       setNotes("");
       setDeliveredOn("");
+      setCategoryOther("");
       // A gift dated in the month on screen should appear without a manual
       // refresh; one dated elsewhere still updates the firm-wide counters.
       await load(month);
@@ -350,6 +366,21 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
                 </select>
               </div>
             </div>
+
+            {category === "other" && (
+              <div>
+                <label className="text-xs font-medium block mb-1">
+                  What is the gift?<span className="text-destructive ml-0.5">*</span>
+                </label>
+                <input
+                  value={categoryOther}
+                  onChange={(e) => setCategoryOther(e.target.value)}
+                  maxLength={60}
+                  placeholder="e.g. Pen set, Diary, Dry fruits box"
+                  className="w-full border rounded-md px-2 py-1.5 text-sm bg-background"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -567,6 +598,20 @@ export function EngagementBoard({ canLog }: { canLog: boolean }) {
                               ))}
                             </select>
                           </div>
+                          {eCategory === "other" && (
+                            <div className="sm:col-span-3">
+                              <label className="text-xs font-medium block mb-1">
+                                What is the gift?<span className="text-destructive ml-0.5">*</span>
+                              </label>
+                              <input
+                                value={eCategoryOther}
+                                onChange={(e) => setECategoryOther(e.target.value)}
+                                maxLength={60}
+                                placeholder="e.g. Pen set, Diary, Dry fruits box"
+                                className="input-base w-full"
+                              />
+                            </div>
+                          )}
                           <div>
                             <label className="text-xs font-medium block mb-1">Cost (₹)</label>
                             <input

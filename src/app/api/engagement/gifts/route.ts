@@ -40,6 +40,7 @@ type GiftRowSql = {
   id: string;
   investor_id: string;
   category: string | null;
+  category_other: string | null;
   grade: string | null;
   occasion: string;
   title: string;
@@ -63,6 +64,7 @@ type ByCategorySql = { category: string; grade: string; n: number };
 type InsertedGiftSql = {
   id: string;
   category: string | null;
+  category_other: string | null;
   grade: string | null;
   title: string;
   amount: number | string;
@@ -76,6 +78,8 @@ const MonthStr = z.string().regex(/^\d{4}-\d{2}$/, "expected yyyy-mm");
 const AddBody = z.object({
   investorId: z.string().uuid(),
   category: z.enum(GIFT_CATEGORIES),
+  /** What the gift was - required when the category is "other". */
+  categoryOther: z.string().trim().max(60).nullish(),
   grade: z.string().max(4).nullish(),
   occasion: z.enum(["birthday", "anniversary", "festival", "other"]).default("birthday"),
   amount: z.number().int().min(0).default(0),
@@ -110,7 +114,7 @@ export async function GET(req: NextRequest) {
       // One month of gifts, for the calendar and the recent-activity list.
       const rows = (
         await tx.execute(sql`
-          SELECT g.id, g.investor_id, g.category, g.grade, g.occasion, g.title,
+          SELECT g.id, g.investor_id, g.category, g.category_other, g.grade, g.occasion, g.title,
                  g.amount, g.given_on, g.delivered_on, g.notes,
                  i.name AS client_name,
                  u.name AS rm_name
@@ -186,8 +190,9 @@ export async function GET(req: NextRequest) {
         clientName: r.client_name,
         rmName: r.rm_name,
         category: r.category,
+        categoryOther: r.category_other,
         grade: r.grade,
-        label: giftLabel(r.category, r.grade),
+        label: giftLabel(r.category, r.grade, r.category_other),
         occasion: r.occasion,
         title: r.title,
         amount: Number(r.amount ?? 0),
@@ -239,6 +244,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    const categoryOther = b.category === "other" ? (b.categoryOther ?? "").trim() : "";
+    if (b.category === "other" && !categoryOther) {
+      return NextResponse.json({ error: "type what the gift is (for Other)" }, { status: 400 });
+    }
     const clientMeta = clientMetaFromHeaders(req.headers);
 
     const result = await withTenant(session.tenantId, async (tx) => {
@@ -252,15 +261,16 @@ export async function POST(req: NextRequest) {
 
       // `title` is NOT NULL on the table and is what the older per-client UI
       // renders, so keep it populated from the catalogue label.
-      const title = giftLabel(b.category, b.grade);
+      const title = giftLabel(b.category, b.grade, categoryOther);
 
       const ins = await tx.execute(sql`
         INSERT INTO client_gifts
-          (tenant_id, investor_id, category, grade, rm_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
+          (tenant_id, investor_id, category, category_other, grade, rm_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
         VALUES (
           ${session.tenantId}::uuid,
           ${b.investorId}::uuid,
           ${b.category},
+          ${categoryOther || null},
           ${b.grade ?? null},
           ${inv.rm_id}::uuid,
           ${b.occasion},
@@ -271,7 +281,7 @@ export async function POST(req: NextRequest) {
           ${b.notes ?? null},
           ${session.userId}::uuid
         )
-        RETURNING id, category, grade, title, amount, given_on, delivered_on
+        RETURNING id, category, category_other, grade, title, amount, given_on, delivered_on
       `);
       const g = ins.rows[0] as unknown as InsertedGiftSql;
 
@@ -320,7 +330,7 @@ export async function POST(req: NextRequest) {
         id: g.id,
         category: g.category,
         grade: g.grade,
-        label: giftLabel(g.category, g.grade),
+        label: giftLabel(g.category, g.grade, g.category_other),
         amount: Number(g.amount ?? 0),
         givenOn: g.given_on,
         deliveredOn: g.delivered_on,

@@ -694,7 +694,6 @@ export function ScheduleMeetingDialog({
               <option value="online">Online</option>
               <option value="office">Office</option>
               <option value="client_place">Client Place</option>
-              <option value="phone">Phone</option>
             </select>
           </label>
           <label className="block">

@@ -465,7 +465,7 @@ export function ReviewMeetingDetailEditor({
           <label className="block">
             <div className="text-[11px] text-muted-foreground mb-0.5">Mode</div>
             <SelectField value={meetingMode} onChange={(e) => setMeetingMode(e.target.value)} size="sm" className="w-full">
-              {MODES.map(([k, l]) => (
+              {MODES.filter(([k]) => k !== "phone" || meeting.meetingMode === "phone").map(([k, l]) => (
                 <option key={k} value={k}>{l}</option>
               ))}
             </SelectField>

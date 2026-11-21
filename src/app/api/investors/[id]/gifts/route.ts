@@ -36,6 +36,8 @@ const AddBody = z.object({
   deliveredOn: DateStr.nullish(),
   /** Catalogue category + grade, so the gift is countable on the engagement board. */
   category: z.enum(GIFT_CATEGORIES).nullish(),
+  /** What the gift was - required when the category is "other". */
+  categoryOther: z.string().trim().max(60).nullish(),
   grade: z.string().max(4).nullish(),
 });
 
@@ -48,6 +50,7 @@ function mapGift(r: any) {
     id: r.id as string,
     occasion: r.occasion as string,
     category: (r.category as string | null) ?? null,
+    categoryOther: (r.category_other as string | null) ?? null,
     grade: (r.grade as string | null) ?? null,
     title: r.title as string,
     amount: Number(r.amount ?? 0),
@@ -77,7 +80,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
 
       const giftRes = await tx.execute(sql`
-        SELECT id, occasion, category, grade, title, amount, given_on, delivered_on, notes, created_at
+        SELECT id, occasion, category, category_other, grade, title, amount, given_on, delivered_on, notes, created_at
         FROM client_gifts
         WHERE tenant_id = ${session.tenantId}::uuid AND investor_id = ${id}::uuid
         ORDER BY given_on DESC, created_at DESC
@@ -118,6 +121,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       );
     }
 
+    const categoryOther = body.category === "other" ? (body.categoryOther ?? "").trim() : "";
+    if (body.category === "other" && !categoryOther) {
+      return NextResponse.json({ error: "type what the gift is (for Other)" }, { status: 400 });
+    }
+
     const result = await withTenant(session.tenantId, async (tx) => {
       // Verify the investor is visible in-tenant before inserting.
       // Pull the RM up front — the intimation below needs it, and it doubles
@@ -132,11 +140,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await assertInScope(tx, session, { branchId: inv.branch_id, ownerId: [inv.rm_id, inv.service_rm_id] }, "client");
 
       const ins = await tx.execute(sql`
-        INSERT INTO client_gifts (tenant_id, investor_id, category, grade, rm_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
+        INSERT INTO client_gifts (tenant_id, investor_id, category, category_other, grade, rm_id, occasion, title, amount, given_on, delivered_on, notes, created_by)
         VALUES (
           ${session.tenantId}::uuid,
           ${id}::uuid,
           ${body.category ?? null},
+          ${categoryOther || null},
           ${body.grade ?? null},
           ${inv.rm_id}::uuid,
           ${body.occasion},
@@ -147,7 +156,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           ${body.notes ?? null},
           ${session.userId}::uuid
         )
-        RETURNING id, occasion, category, grade, title, amount, given_on, delivered_on, notes, created_at
+        RETURNING id, occasion, category, category_other, grade, title, amount, given_on, delivered_on, notes, created_at
       `);
       const gift = mapGift(ins.rows[0]);
 

@@ -18,8 +18,10 @@ import { SelectField } from "@/components/ui/SelectField";
 
 type Subject = { type: "investor" | "lead" | "family"; id: string; name: string; phone?: string | null };
 
+// Only Call and Email can be logged by hand. (Visit / Note / WhatsApp / SMS were removed from this
+// form; records logged earlier with those types still show, and the geo Check-in below still records a visit.)
 const KINDS = [
-  ["call", "Call"], ["visit", "Visit"], ["note", "Note"], ["whatsapp", "WhatsApp"], ["email", "Email"], ["sms", "SMS"],
+  ["call", "Call"], ["email", "Email"],
 ] as const;
 const STATUSES = [
   ["", "Select…"], ["completed", "Completed"], ["no_answer", "No answer"],

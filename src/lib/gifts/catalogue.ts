@@ -6,19 +6,23 @@
  * category on purpose — a cake has no AAA tier.
  */
 
-export const GIFT_CATEGORIES = ["hamper", "cake", "plant"] as const;
+export const GIFT_CATEGORIES = ["hamper", "cake", "plant", "books", "other"] as const;
 export type GiftCategory = (typeof GIFT_CATEGORIES)[number];
 
 export const GIFT_GRADES_BY_CATEGORY: Record<GiftCategory, readonly string[]> = {
   hamper: ["A", "AA", "AAA"],
   cake: ["A", "AA"],
   plant: ["A", "AA", "AAA"],
+  books: ["A", "AA", "AAA"],
+  other: ["A", "AA", "AAA"],
 };
 
 export const GIFT_CATEGORY_LABEL: Record<GiftCategory, string> = {
   hamper: "Hamper",
   cake: "Cake",
   plant: "Plant",
+  books: "Books",
+  other: "Other",
 };
 
 export function isGiftCategory(v: unknown): v is GiftCategory {
@@ -32,8 +36,17 @@ export function isValidGrade(category: string | null | undefined, grade: string 
   return GIFT_GRADES_BY_CATEGORY[category].includes(grade);
 }
 
-/** "Hamper · AA" — one label for tables and calendar cells. */
-export function giftLabel(category: string | null | undefined, grade: string | null | undefined): string {
-  const cat = isGiftCategory(category) ? GIFT_CATEGORY_LABEL[category] : (category ?? "Gift");
+/**
+ * "Hamper · AA" — one label for tables and calendar cells. For "Other" the typed
+ * description rides along: "Other (Pen set) · A".
+ */
+export function giftLabel(
+  category: string | null | undefined,
+  grade: string | null | undefined,
+  categoryOther?: string | null
+): string {
+  let cat = isGiftCategory(category) ? GIFT_CATEGORY_LABEL[category] : (category ?? "Gift");
+  const what = (categoryOther ?? "").trim();
+  if (category === "other" && what) cat = `Other (${what})`;
   return grade ? `${cat} · ${grade}` : cat;
 }

@@ -86,6 +86,8 @@ const PatchBody = z
     // them — otherwise the only editable fields would be ones that screen
     // doesn't show.
     category: z.enum(GIFT_CATEGORIES).nullish(),
+    /** What the gift was - required when the category is "other"; cleared for any other category. */
+    categoryOther: z.string().trim().max(60).nullish(),
     grade: z.string().max(4).nullish(),
     /** yyyy-mm-dd to mark delivered; null to undo. */
     deliveredOn: z
@@ -121,6 +123,9 @@ export async function PATCH(
     }
     const body = parse.data;
     const { deliveredOn } = body;
+    if (body.category === "other" && !(body.categoryOther ?? "").trim()) {
+      return NextResponse.json({ error: "type what the gift is (for Other)" }, { status: 400 });
+    }
 
     const result = await withTenant(session.tenantId, async (tx) => {
       const invRes = await tx.execute(sql`
@@ -140,7 +145,11 @@ export async function PATCH(
       if (body.amount !== undefined) sets.push(sql`amount = ${body.amount}`);
       if (body.givenOn !== undefined) sets.push(sql`given_on = ${body.givenOn}::date`);
       if (body.notes !== undefined) sets.push(sql`notes = ${body.notes ?? null}`);
-      if (body.category !== undefined) sets.push(sql`category = ${body.category ?? null}`);
+      if (body.category !== undefined) {
+        sets.push(sql`category = ${body.category ?? null}`);
+        // The typed description belongs to "Other" only; any other category clears it.
+        sets.push(sql`category_other = ${body.category === "other" ? (body.categoryOther ?? "").trim() : null}`);
+      }
       if (body.grade !== undefined) sets.push(sql`grade = ${body.grade ?? null}`);
       if (body.deliveredOn !== undefined) sets.push(sql`delivered_on = ${deliveredOn}::date`);
 
