@@ -21,6 +21,8 @@ export type BulkField = {
   target: "column" | "address" | "tags";
   column?: string;
   placeholder?: string;
+  /** A select that also lets the person type a value that is not in the list yet. */
+  creatable?: boolean;
 };
 
 export type BulkFieldGroup = { group: string; fields: BulkField[] };

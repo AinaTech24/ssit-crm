@@ -44,15 +44,20 @@ export function BulkUpdateFieldDialog({
   const [fieldKey, setFieldKey] = useState(groups[0]?.fields[0]?.key ?? "");
   const [value, setValue] = useState("");
   const field = findField(groups, fieldKey);
+  // For a creatable select: the person chose "+ Add new" and types the value instead.
+  const NEW = "__new__";
+  const typingNew = !!field?.creatable && value === NEW;
+  const [newText, setNewText] = useState("");
 
   function pickField(k: string) {
     setFieldKey(k);
     setValue("");
+    setNewText("");
   }
 
   // Text fields may be left empty to clear them; everything else needs a value.
   const needsValue = !!field && field.kind !== "text";
-  const canApply = !!field && (!needsValue || value.trim() !== "");
+  const canApply = !!field && (!needsValue || (typingNew ? newText.trim().length >= 2 : value.trim() !== ""));
 
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
@@ -86,12 +91,25 @@ export function BulkUpdateFieldDialog({
                 {field.kind === "tag_add" ? "Tag to add" : field.kind === "tag_remove" ? "Tag to remove" : "New value"}
               </span>
               {field.kind === "select" ? (
-                <select className="input-base w-full" value={value} onChange={(e) => setValue(e.target.value)}>
-                  <option value="">Select…</option>
-                  {field.options?.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                <>
+                  <select className="input-base w-full" value={value} onChange={(e) => setValue(e.target.value)}>
+                    <option value="">Select…</option>
+                    {field.options?.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                    {field.creatable && <option value={NEW}>+ Add a new one…</option>}
+                  </select>
+                  {typingNew && (
+                    <input
+                      autoFocus
+                      className="input-base w-full mt-2"
+                      value={newText}
+                      maxLength={120}
+                      placeholder={field.placeholder}
+                      onChange={(e) => setNewText(e.target.value)}
+                    />
+                  )}
+                </>
               ) : field.kind === "date" ? (
                 <input type="date" className="input-base w-full" value={value} onChange={(e) => setValue(e.target.value)} />
               ) : (
@@ -119,7 +137,7 @@ export function BulkUpdateFieldDialog({
           <button type="button" className="btn-secondary" disabled={busy} onClick={() => onOpenChange(false)}>
             Cancel
           </button>
-          <button type="button" className="btn-primary" disabled={busy || !canApply} onClick={() => onApply(fieldKey, value)}>
+          <button type="button" className="btn-primary" disabled={busy || !canApply} onClick={() => onApply(fieldKey, typingNew ? newText.trim() : value)}>
             {busy && <Loader2 className="size-4 animate-spin" />} Update {count} {count === 1 ? "record" : "records"}
           </button>
         </DialogFooter>

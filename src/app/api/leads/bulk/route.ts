@@ -21,9 +21,11 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { requireAny } from "@/lib/auth/rbac";
+import { canEditAllLeads, leadScopeCondition } from "@/lib/leads/access";
+import { ensureLeadEvent } from "@/lib/leads/events";
 import { assertActiveLicense } from "@/lib/auth/license";
-import { leads, users, eventsOutbox, masterValues } from "@/db/schema";
+import { leads, users, eventsOutbox } from "@/db/schema";
 import { scoreFields } from "@/lib/leads/score";
 import { CANONICAL_LEAD_STAGES, LEAD_SOURCE_VALUES } from "@/lib/leads/normalize";
 import { findLeadBulkField } from "@/lib/leads/bulk-fields";
@@ -44,9 +46,10 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
-    // Bulk acts on arbitrary lead ids (no per-row ownership re-check), so it's a
-    // manager-level capability — RMs do single-lead edits via their own routes.
-    requireCap(session.roles, "lead.edit.all", session.permissions);
+    // Anyone who may edit leads may bulk-edit - but only leads inside their own data wall
+    // (an RM's own leads, a branch head's branch, ...), exactly as one-by-one edits. Moving
+    // leads between people and deleting them stay with managers (lead.edit.all).
+    requireAny(session.roles, ["lead.edit.all", "lead.edit.assigned"], session.permissions);
     // A lapsed tenant must not be able to mutate the pipeline in bulk (the
     // single-lead PATCH already enforces this; bulk skipped it).
     await assertActiveLicense(session.tenantId, session.roles);
@@ -55,6 +58,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid body", issues: parsed.error.issues }, { status: 400 });
     }
     const { ids, action, value, field } = parsed.data;
+    if ((action === "assign" || action === "delete") && !canEditAllLeads(session)) {
+      return NextResponse.json(
+        { error: action === "assign" ? "Only a manager can reassign leads in bulk." : "Only a manager can delete leads in bulk." },
+        { status: 403 }
+      );
+    }
     const meta = clientMetaFromHeaders(req.headers);
 
     const patch: Record<string, any> = { updatedAt: new Date() };
@@ -106,22 +115,13 @@ export async function POST(req: NextRequest) {
         if (def.key === "event") {
           // The name must be one of the firm's own events; the stored spelling is the list's.
           if (!v) return NextResponse.json({ error: "choose an event" }, { status: 400 });
-          const label = await withTenant(session.tenantId, async (tx) => {
-            const rows = await tx
-              .select({ label: masterValues.label })
-              .from(masterValues)
-              .where(
-                and(
-                  eq(masterValues.tenantId, session.tenantId),
-                  eq(masterValues.masterType, "lead_event"),
-                  eq(masterValues.isActive, true)
-                )
-              );
-            return rows.find((r) => r.label.trim().toLowerCase() === v.toLowerCase())?.label ?? null;
-          });
-          if (!label) return NextResponse.json({ error: "that event is not in your event list" }, { status: 400 });
+          if (v.length < 2 || v.length > 120) {
+            return NextResponse.json({ error: "an event name is 2 to 120 characters" }, { status: 400 });
+          }
+          // A name not in the list yet is added to it (for everyone), a removed one comes back.
+          const ev = await withTenant(session.tenantId, async (tx) => ensureLeadEvent(tx, session.tenantId, v));
           patch.source = "event";
-          patch.sourceCampaign = label;
+          patch.sourceCampaign = ev.label;
         } else if (def.key === "source") {
           if (!(LEAD_SOURCE_VALUES as readonly string[]).includes(v) || v === "event") {
             return NextResponse.json({ error: "choose a valid lead source" }, { status: 400 });
@@ -181,10 +181,11 @@ export async function POST(req: NextRequest) {
       // matching the single-lead route convention — scope by id only, never
       // add a redundant tenant_id predicate. RLS guarantees only the caller's
       // tenant's leads are visible/updatable.
+      const wall = await leadScopeCondition(tx, session);
       const updated = await tx
         .update(leads)
         .set(patch as any)
-        .where(inArray(leads.id, ids))
+        .where(and(inArray(leads.id, ids), wall))
         .returning({ id: leads.id });
 
       // Re-score affected leads when the action changed a scoring input (stage,
@@ -244,7 +245,7 @@ export async function POST(req: NextRequest) {
       return updated.length;
     });
 
-    return NextResponse.json({ ok: true, updated: count });
+    return NextResponse.json({ ok: true, updated: count, requested: ids.length });
   } catch (err: any) {
     return handleApiError(err);
   }

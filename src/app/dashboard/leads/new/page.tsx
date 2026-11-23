@@ -135,7 +135,7 @@ export default function NewLeadPage() {
         "Leads already tagged with it keep their attribution."
     );
     if (!ok) return;
-    const res = await fetch(`/api/lead-events?key=${encodeURIComponent(ev.key)}`, { method: "DELETE" });
+    const res = await fetch(`/api/lead-events?key=${encodeURIComponent(ev.key)}&label=${encodeURIComponent(ev.label)}`, { method: "DELETE" });
     if (!res.ok) {
       setErr((await res.json().catch(() => ({})))?.error ?? "Could not remove the event.");
       return;

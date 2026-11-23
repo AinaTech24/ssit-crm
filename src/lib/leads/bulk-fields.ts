@@ -38,7 +38,7 @@ export const LEAD_BULK_FIELD_GROUPS: BulkFieldGroup[] = [
   {
     group: "Source",
     fields: [
-      { key: "event", label: "Event (makes them event leads)", kind: "select", target: "column", options: [] },
+      { key: "event", label: "Event (makes them event leads)", kind: "select", target: "column", options: [], creatable: true, placeholder: "Type the new event's name" },
       { key: "source", label: "Lead source", kind: "select", target: "column", options: LEAD_BULK_SOURCE_OPTIONS },
       { key: "sourceCampaign", label: "Campaign", kind: "text", target: "column", placeholder: "e.g. Diwali-2026" },
     ],

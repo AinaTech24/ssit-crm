@@ -137,6 +137,12 @@ export function LeadsTable({ rows, sort, dir = "desc" }: { rows: Row[]; sort: st
         return false;
       }
       setSelected(new Set());
+      if (typeof j.updated === "number" && typeof j.requested === "number" && j.updated < j.requested) {
+        setErr(`Updated ${j.updated} of ${j.requested} - the others are not yours to edit.`);
+      }
+      if (action === "field" && payload.field === "event") {
+        fetch("/api/lead-events").then((r) => r.json()).then((x) => { if (Array.isArray(x.events)) setEvents(x.events); }).catch(() => {});
+      }
       router.refresh();
       return true;
     } catch (e: any) {
