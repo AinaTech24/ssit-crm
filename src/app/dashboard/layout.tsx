@@ -792,6 +792,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
               roleLabel={adminMode ? `${roleLabel} · Admin view` : roleLabel}
               initials={initials}
               avatarUrl={avatarUrl}
+              canFirmProfile={can(session.roles, "settings.users", (session as any).permissions)}
             />
           </div>
         </div>

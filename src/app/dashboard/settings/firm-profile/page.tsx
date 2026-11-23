@@ -18,7 +18,7 @@ import { AlertTriangle, CheckCircle2, ShieldCheck } from "lucide-react";
 import { eq, count, and, sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { require as requireCap } from "@/lib/auth/rbac";
+import { can, require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import {
   tenants,
@@ -36,6 +36,17 @@ export const dynamic = "force-dynamic";
 
 export default async function FirmProfilePage() {
   const session = await requireSession();
+  // The firm profile holds regulator, bank and signatory details, so it is for people who manage
+  // the firm's settings. Anyone else gets a plain message instead of a crash page.
+  if (!can(session.roles, "settings.users", session.permissions)) {
+    return (
+      <div className="max-w-xl border rounded-lg bg-card p-8 text-sm text-muted-foreground">
+        <h1 className="text-lg font-semibold text-foreground mb-1">Firm profile</h1>
+        You do not have access to the firm profile. It is managed by the firm&apos;s owner or an admin - ask them to
+        turn on &ldquo;Settings &mdash; users&rdquo; for you if you need it.
+      </div>
+    );
+  }
   requireCap(session.roles, "settings.users", session.permissions);
   await assertActiveLicense(session.tenantId, session.roles);
 

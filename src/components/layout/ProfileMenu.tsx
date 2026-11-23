@@ -19,6 +19,7 @@ export function ProfileMenu({
   avatarUrl,
   canSwitchAdmin = false,
   adminMode = false,
+  canFirmProfile = true,
 }: {
   name: string;
   email?: string;
@@ -30,6 +31,8 @@ export function ProfileMenu({
   canSwitchAdmin?: boolean;
   /** Currently in the admin view. */
   adminMode?: boolean;
+  /** May open the Firm profile page (settings.users). */
+  canFirmProfile?: boolean;
   /** License plan key, e.g. "premium" — shown as the "premium" chip. */
   /** License status, e.g. "trial" / "active". */
   /** e.g. "19 Jun" — shown as a "Trial ends" chip inside the menu. */
@@ -170,7 +173,9 @@ export function ProfileMenu({
               <MenuLink href="/dashboard/settings/profile" icon={UserCircle} label="My profile" onClick={() => setOpen(false)} />
               <MenuLink href="/dashboard/settings/security" icon={ShieldCheck} label="Account & security" onClick={() => setOpen(false)} />
               <MenuLink href="/dashboard/settings" icon={Settings} label="Settings" onClick={() => setOpen(false)} />
-              <MenuLink href="/dashboard/settings/firm-profile" icon={Building2} label="Firm profile" onClick={() => setOpen(false)} />
+              {canFirmProfile && (
+                <MenuLink href="/dashboard/settings/firm-profile" icon={Building2} label="Firm profile" onClick={() => setOpen(false)} />
+              )}
             </div>
             <div className="border-t border-border p-1.5">
               {canSwitchAdmin && (
