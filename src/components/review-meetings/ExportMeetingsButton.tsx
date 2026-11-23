@@ -36,7 +36,7 @@ const CATEGORIES: Array<[string, string]> = [
   ["follow_up", "Follow-up"],
 ];
 
-export function ExportMeetingsButton({ units, rms }: { units: Unit[]; rms: Rm[] }) {
+export function ExportMeetingsButton({ units, rms, label = "Export" }: { units: Unit[]; rms: Rm[]; label?: string }) {
   const now = new Date();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"month" | "year" | "custom" | "all">("month");
@@ -95,7 +95,7 @@ export function ExportMeetingsButton({ units, rms }: { units: Unit[]; rms: Rm[] 
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary"
       >
-        <Download className="size-3.5" /> Export
+        <Download className="size-3.5" /> {label}
       </button>
       <Dialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
         <DialogContent>

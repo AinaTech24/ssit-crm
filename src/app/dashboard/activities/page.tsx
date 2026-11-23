@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth/session";
 import { resolveMeetingScope } from "@/lib/auth/data-scope";
 import { loadMeetingRmOptions } from "@/lib/meetings/export-options";
 import { ExportMeetingsButton } from "@/components/review-meetings/ExportMeetingsButton";
+import { ExportActivitiesButton } from "@/components/activities/ExportActivitiesButton";
 import { can } from "@/lib/auth/rbac";
 import { formatDate } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
@@ -115,7 +116,13 @@ export default async function ActivitiesPage({ searchParams }: { searchParams: P
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2"><ActivityIcon className="size-6 text-brand-cyan" /> Activity Log</h1>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Export = this log (calls, emails, visits, notes). Meetings keep their own export beside it. */}
+          <ExportActivitiesButton
+            units={data.exportUnits ?? []}
+            rms={(data.exportRms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }))}
+          />
           <ExportMeetingsButton
+            label="Export meetings"
             units={data.exportUnits ?? []}
             rms={(data.exportRms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }))}
           />
