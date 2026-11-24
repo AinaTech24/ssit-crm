@@ -10,7 +10,7 @@ import {
   Clock,
 } from "lucide-react";
 import { withTenant } from "@/db/client";
-import { dataScopeSqlFor } from "@/lib/auth/data-scope";
+import { proposalVisibleSql } from "@/lib/proposals/access";
 import { requireSession } from "@/lib/auth/session";
 import { formatINR } from "@/lib/utils";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
@@ -62,13 +62,10 @@ export default async function ProposalsPage({
           : sql`p.created_at DESC`;
 
   const data = await withTenant(session.tenantId, async (tx) => {
-    // The data wall: a proposal belongs to whoever prepared it.
-    const filters: any[] = [
-      await dataScopeSqlFor(tx, session, {
-        branch: "p.branch_id",
-        owner: "p.prepared_by_user_id",
-      }),
-    ];
+    // The data wall: a proposal is seen by whoever prepared it AND by whoever looks after the
+    // client or lead it is for (see lib/proposals/access.ts).
+    const visible = await proposalVisibleSql(tx, session, "p");
+    const filters: any[] = [visible];
     if (q) {
       filters.push(
         sql`(p.proposal_number ILIKE ${`%${q}%`} OR p.title ILIKE ${`%${q}%`} OR p.recipient_name ILIKE ${`%${q}%`})`
@@ -132,7 +129,8 @@ export default async function ProposalsPage({
             WHERE status IN ('sent','viewed')
           ), 0
         )::numeric AS outstanding_value
-      FROM proposals
+      FROM proposals p
+      WHERE ${visible}
     `);
     return {
       rows: rows.rows as any[],

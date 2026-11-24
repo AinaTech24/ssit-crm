@@ -2,7 +2,7 @@
 
 /**
  * Shared document preview modal — renders a PDF (or a same-origin print page)
- * in an <iframe> inside a popup, with smooth CSS zoom and a download/print
+ * in an <iframe> inside a popup, with zoom (the page is re-fitted to a wider or narrower frame) and a download/print
  * action. The browser's built-in PDF chrome is hidden via the
  * #toolbar=0&navpanes=0&scrollbar=0 fragment, and the modal's own scrollbars
  * are hidden, so only the document shows.
@@ -75,14 +75,17 @@ export function PdfModal({
               <span className="text-xs">Preparing document…</span>
             </div>
           )}
-          {/* Clip wrapper — the iframe is sized ~18px wider/taller than this box
-              so the browser PDF viewer's own scrollbars (which #scrollbar=0 no
-              longer hides in modern Chrome/PDFium) fall outside the clip and are
-              hidden. With view=FitH the page fits the non-scrollbar width, so no
-              document content is lost — only the scrollbar is cut off. */}
+          {/* Zoom works by resizing the frame, not by scaling it: the PDF viewer is told to fit
+              the page to its width (view=FitH), so a frame at 70% width shows the page at 70%,
+              centred, and a frame at 140% shows it larger (the pane then scrolls sideways).
+              Scaling the iframe with CSS instead left the page small in a big empty box, with
+              the bottom of the page cut off.
+              The iframe itself is ~18px wider/taller than its clip so the PDF viewer's own
+              scrollbars (which #scrollbar=0 no longer hides in modern Chrome/PDFium) fall
+              outside the clip and are hidden - only the scrollbar is cut off, never content. */}
           <div
             className="mx-auto overflow-hidden"
-            style={{ width: "100%", height: "100%", transform: `scale(${zoom})`, transformOrigin: "top center", transition: "transform 0.2s ease" }}
+            style={{ width: `${Math.round(zoom * 100)}%`, height: "100%", transition: "width 0.2s ease" }}
           >
             <iframe
               ref={iframeRef}

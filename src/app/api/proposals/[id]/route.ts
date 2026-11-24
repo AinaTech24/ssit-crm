@@ -17,6 +17,7 @@ import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { proposals } from "@/db/schema";
 import { proposalTotals } from "@/lib/proposals/projections";
 import { assertInScope } from "@/lib/auth/data-scope";
+import { canSeeProposal } from "@/lib/proposals/access";
 
 export const dynamic = "force-dynamic";
 
@@ -56,11 +57,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       // investor.view.all/compliance.view check, which let compliance see
       // every proposal in the firm even though compliance is walled to its own
       // branch everywhere else now.
-      try {
-        await assertInScope(tx, session, { branchId: r.branchId, ownerId: r.preparedByUserId }, "proposal");
-      } catch {
-        return null;
-      }
+      // Prepared by me / inside my wall, or made for a client or lead I look after.
+      if (!(await canSeeProposal(tx, session, id))) return null;
       return r;
     });
     // 404 (not 403) so we don't leak which proposal ids exist outside the

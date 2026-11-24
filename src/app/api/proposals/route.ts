@@ -10,7 +10,7 @@ import { v4 as uuid } from "uuid";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
-import { dataScopeSqlFor } from "@/lib/auth/data-scope";
+import { proposalVisibleSql } from "@/lib/proposals/access";
 import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, can } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
@@ -175,10 +175,8 @@ export async function GET() {
     const seesAll = can(session.roles, "investor.view.all", session.permissions) || can(session.roles, "compliance.view", session.permissions);
 
     const rows = await withTenant(session.tenantId, async (tx) => {
-      const scope = await dataScopeSqlFor(tx, session, {
-        branch: "proposals.branch_id",
-        owner: "proposals.prepared_by_user_id",
-      });
+      // Prepared by me / my wall, or for a client or lead I look after.
+      const scope = await proposalVisibleSql(tx, session, "proposals");
       return tx.select().from(proposals).where(scope).orderBy(desc(proposals.createdAt));
     });
     return NextResponse.json({ proposals: rows });

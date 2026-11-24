@@ -14,6 +14,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap, can } from "@/lib/auth/rbac";
 import { proposals, tenants } from "@/db/schema";
 import { brandFromTenant, renderClientProposalPdf } from "@/lib/proposal/render";
+import { canSeeProposal } from "@/lib/proposals/access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         .where(and(eq(proposals.id, id), eq(proposals.tenantId, session.tenantId)))
         .limit(1);
       if (!p) return null;
-      if (!seesAll && p.preparedByUserId !== session.userId) return null;
+      if (!seesAll && !(await canSeeProposal(tx, session, id))) return null;
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1);
       const pdf = await renderClientProposalPdf({ proposal: p as any, brand: brandFromTenant(t) });
       return { pdf, num: p.proposalNumber ?? id };
