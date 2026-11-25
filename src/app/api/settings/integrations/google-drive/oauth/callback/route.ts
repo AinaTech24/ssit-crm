@@ -13,6 +13,7 @@ import { can } from "@/lib/auth/rbac";
 import { verifyState } from "@/lib/comms/oauth";
 import { exchangeDriveCode, getDriveConfig, saveDriveConfig } from "@/lib/integrations/google-drive";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { requestBaseUrl } from "@/lib/url/request-base";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,8 @@ const SETTINGS = "/dashboard/settings/google-drive";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const back = (params: string) => NextResponse.redirect(new URL(`${SETTINGS}?${params}`, url.origin));
+  const origin = await requestBaseUrl();
+  const back = (params: string) => NextResponse.redirect(new URL(`${SETTINGS}?${params}`, origin));
 
   const providerError = url.searchParams.get("error");
   if (providerError) return back(`drive_error=${encodeURIComponent(providerError)}`);

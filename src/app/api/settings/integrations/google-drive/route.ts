@@ -16,6 +16,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { disconnectDrive, driveRedirectUri, driveStatusView, getDriveConfig, saveDriveConfig } from "@/lib/integrations/google-drive";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { requestBaseUrl } from "@/lib/url/request-base";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
     const session = await requireSession();
     requireCap(session.roles, "settings.users", session.permissions);
     const cfg = await withTenant(session.tenantId, (tx) => getDriveConfig(tx, session.tenantId));
-    return NextResponse.json({ ...driveStatusView(cfg), redirectUri: driveRedirectUri(new URL(req.url).origin) });
+    return NextResponse.json({ ...driveStatusView(cfg), redirectUri: driveRedirectUri(await requestBaseUrl()) });
   } catch (err: any) {
     return handleApiError(err);
   }

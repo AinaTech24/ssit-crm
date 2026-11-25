@@ -11,13 +11,15 @@ import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
 import { signState } from "@/lib/comms/oauth";
 import { driveAuthUrl, driveRedirectUri, getDriveConfig } from "@/lib/integrations/google-drive";
+import { requestBaseUrl } from "@/lib/url/request-base";
 
 export const dynamic = "force-dynamic";
 
 const SETTINGS = "/dashboard/settings/google-drive";
 
 export async function GET(req: NextRequest) {
-  const origin = new URL(req.url).origin;
+  // The address people use in the browser (behind the load balancer the request's own origin can be internal).
+  const origin = await requestBaseUrl();
   const back = (params: string) => NextResponse.redirect(new URL(`${SETTINGS}?${params}`, origin));
 
   const session = await requireSession();
