@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { DriveVideoUploader } from "@/components/drive/DriveVideoUploader";
 import {
   ChevronLeft,
   Upload,
@@ -233,8 +234,21 @@ export default function NewCustomAssetPage() {
             </div>
           )}
         </label>
+        <div className="space-y-1">
+          <div className="text-xs font-medium">Video? Send it to Google Drive</div>
+          <DriveVideoUploader
+            source="content_library"
+            onDone={(url) => {
+              set("fileUrl", url);
+              set("type", "video");
+            }}
+          />
+          <div className="text-[11px] text-muted-foreground">
+            The video is copied to the firm&apos;s Google Drive (month folder) and its Drive link is filled in below as the file URL.
+          </div>
+        </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-          <Link2 className="size-3" /> Or paste a public URL:
+          <Link2 className="size-3" /> Or paste a public URL (for example a Google Drive link):
         </div>
         <label className="block">
           <div className="text-xs font-medium mb-1">

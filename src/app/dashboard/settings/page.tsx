@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, CalendarCheck, Building2, Database, Users, CreditCard, MessageCircle, Mail, Webhook, ShieldCheck, Workflow, KeyRound, Palette, UserCircle, GitBranch, Target, Network, BellRing, ClipboardCheck, SlidersHorizontal } from "lucide-react";
+import { Activity, HardDrive, CalendarCheck, Building2, Database, Users, CreditCard, MessageCircle, Mail, Webhook, ShieldCheck, Workflow, KeyRound, Palette, UserCircle, GitBranch, Target, Network, BellRing, ClipboardCheck, SlidersHorizontal } from "lucide-react";
 
 const SECTIONS = [
   {
@@ -22,6 +22,13 @@ const SECTIONS = [
     desc: "Add your Calendly booking link — meetings you schedule here are booked on it too.",
     href: "/dashboard/settings/calendly",
     group: "You",
+  },
+  {
+    icon: HardDrive,
+    title: "Google Drive",
+    desc: "Connect the firm's Google account so uploaded videos are copied to Drive, month by month.",
+    href: "/dashboard/settings/google-drive",
+    group: "Workspace",
   },
   {
     icon: Building2,

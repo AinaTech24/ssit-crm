@@ -11,6 +11,7 @@
  * can read; only people with social_tracker.manage get Add / Edit / Delete.
  */
 
+import { DriveVideoUploader } from "@/components/drive/DriveVideoUploader";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
@@ -38,6 +39,8 @@ export type TrackerRow = {
   platform: string;
   status: string;
   postLink: string | null;
+  /** The entry's video in Google Drive (the same on each of its lines). */
+  driveLink?: string | null;
   views: number;
   reach: number;
   likes: number;
@@ -46,7 +49,7 @@ export type TrackerRow = {
 };
 
 /** The two things fixed for the whole entry. */
-type Head = { postDate: string; contentTitle: string };
+type Head = { postDate: string; contentTitle: string; driveLink: string };
 
 /** One platform line of an entry. `id` is set for a line that is already saved. */
 type Line = {
@@ -64,7 +67,7 @@ type Line = {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-const blankHead = (): Head => ({ postDate: today(), contentTitle: "" });
+const blankHead = (): Head => ({ postDate: today(), contentTitle: "", driveLink: "" });
 
 const blankLine = (platform: string, status = "posted", contentType = "post"): Line => ({
   platform,
@@ -124,6 +127,7 @@ const toEntries = (head: Head, lines: Line[]) =>
     platform: l.platform,
     status: l.status,
     postLink: l.postLink,
+    driveLink: head.driveLink,
     views: l.views === "" ? 0 : Number(l.views),
     reach: l.reach === "" ? 0 : Number(l.reach),
     likes: l.likes === "" ? 0 : Number(l.likes),
@@ -195,7 +199,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
       const mine = all.filter((r) => entryKey(r) === g.key);
       const use = mine.length ? mine : g.lines;
       const first = use[0];
-      setHead({ postDate: first.postDate, contentTitle: first.contentTitle });
+      setHead({ postDate: first.postDate, contentTitle: first.contentTitle, driveLink: use.find((r) => r.driveLink)?.driveLink ?? "" });
       setLines(use.map(lineFromRow));
       setOriginalDate(first.postDate);
       setReturnKey(g.key);
@@ -339,6 +343,19 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                 className={field}
               />
             </label>
+          </div>
+
+          {/* The entry's video: upload it from here (it is copied to Google Drive and the link filled in), or paste a link. */}
+          <div className="space-y-1.5">
+            <div className="text-xs font-medium">Video in Google Drive</div>
+            <input
+              value={head.driveLink}
+              onChange={(e) => setH("driveLink", e.target.value)}
+              maxLength={1000}
+              placeholder="Paste the Google Drive link, or upload the video below"
+              className={field}
+            />
+            <DriveVideoUploader folderDate={head.postDate} onDone={(url) => setH("driveLink", url)} />
           </div>
 
           {isNew && dayTaken && (
@@ -495,6 +512,17 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                           <td rowSpan={span} className="py-2 pr-3 max-w-[20rem] align-top">
                             <div className="font-medium break-words">{g.contentTitle}</div>
                             {multi && <div className="text-xs text-muted-foreground">{g.lines.length} posts</div>}
+                            {g.lines.find((l) => l.driveLink)?.driveLink && (
+                              <a
+                                href={g.lines.find((l) => l.driveLink)!.driveLink!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-xs text-brand-cyan hover:underline inline-flex items-center gap-1"
+                              >
+                                Open video <ExternalLink className="size-3" />
+                              </a>
+                            )}
                           </td>
                         </>
                       )}
@@ -580,6 +608,16 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                   {fmtDate(card.postDate)}
                   {card.lines.length > 1 ? ` · ${card.lines.length} posts` : ""}
                 </DialogDescription>
+                {card.lines.find((l) => l.driveLink)?.driveLink && (
+                  <a
+                    href={card.lines.find((l) => l.driveLink)!.driveLink!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-brand-cyan hover:underline inline-flex items-center gap-1 mt-1"
+                  >
+                    Open video in Google Drive <ExternalLink className="size-3.5" />
+                  </a>
+                )}
               </DialogHeader>
 
               <div className="mt-4 space-y-3">

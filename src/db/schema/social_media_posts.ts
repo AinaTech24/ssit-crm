@@ -19,6 +19,8 @@ export const socialMediaPosts = pgTable(
     platform: text("platform").notNull(),
     status: text("status").notNull().default("planned"),
     postLink: text("post_link"),
+    /** Where the entry's video lives in Google Drive (same value on each of the entry's lines). */
+    driveLink: text("drive_link"),
     views: integer("views").notNull().default(0),
     reach: integer("reach").notNull().default(0),
     likes: integer("likes").notNull().default(0),

@@ -65,6 +65,14 @@ export const PostFields = z.object({
     .refine((v) => v === "" || /^https?:\/\/\S+$/i.test(v), "The post link must start with http:// or https://")
     .optional()
     .transform((v) => (v ? v : null)),
+  /** Where the entry's video lives in Google Drive - a web link, or empty. */
+  driveLink: z
+    .string()
+    .trim()
+    .max(1000)
+    .refine((v) => v === "" || /^https?:\/\/\S+$/i.test(v), "The Google Drive link must start with http:// or https://")
+    .optional()
+    .transform((v) => (v ? v : null)),
   views: count,
   reach: count,
   likes: count,

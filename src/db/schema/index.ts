@@ -58,6 +58,7 @@ export * from "./proposals";
 export * from "./insurance";
 export * from "./content_posts";
 export * from "./content_library";
+export * from "./drive_uploads";
 export * from "./workflow_rules";
 export * from "./risk_profile_templates";
 export * from "./share_tokens";

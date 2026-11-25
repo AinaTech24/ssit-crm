@@ -125,6 +125,7 @@ export async function PUT(req: NextRequest) {
           platform: b.platform,
           status: b.status,
           postLink: b.postLink,
+          driveLink: b.driveLink,
           views: b.views,
           reach: b.reach,
           likes: b.likes,

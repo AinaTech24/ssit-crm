@@ -8,7 +8,7 @@
  * Region: ap-south-1 (Mumbai) — DPDP data localization requirement.
  */
 
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import fs from "fs";
 import path from "path";
@@ -256,6 +256,48 @@ export async function getObjectBytes(key: string): Promise<Buffer> {
     return fs.promises.readFile(filePath);
   }
   const res = await client().send(new GetObjectCommand({ Bucket: bucket(), Key: key }));
+  const stream = res.Body as AsyncIterable<Uint8Array> | undefined;
+  if (!stream) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
+/** Size in bytes of a stored object, or null when it is not there. */
+export async function objectSize(key: string): Promise<number | null> {
+  if (!isS3Configured()) {
+    const filePath = path.join(process.cwd(), "node-local", "uploads", key);
+    const st = await fs.promises.stat(filePath).catch(() => null);
+    return st ? st.size : null;
+  }
+  try {
+    const r = await client().send(new HeadObjectCommand({ Bucket: bucket(), Key: key }));
+    return typeof r.ContentLength === "number" ? r.ContentLength : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Read bytes [start, endInclusive] of an object, so a large file can be moved on in pieces
+ * without ever holding the whole file in memory.
+ */
+export async function readObjectRange(key: string, start: number, endInclusive: number): Promise<Buffer> {
+  if (!isS3Configured()) {
+    const filePath = path.join(process.cwd(), "node-local", "uploads", key);
+    const fh = await fs.promises.open(filePath, "r");
+    try {
+      const len = endInclusive - start + 1;
+      const buf = Buffer.alloc(len);
+      const { bytesRead } = await fh.read(buf, 0, len, start);
+      return buf.subarray(0, bytesRead);
+    } finally {
+      await fh.close();
+    }
+  }
+  const res = await client().send(
+    new GetObjectCommand({ Bucket: bucket(), Key: key, Range: `bytes=${start}-${endInclusive}` })
+  );
   const stream = res.Body as AsyncIterable<Uint8Array> | undefined;
   if (!stream) return Buffer.alloc(0);
   const chunks: Buffer[] = [];

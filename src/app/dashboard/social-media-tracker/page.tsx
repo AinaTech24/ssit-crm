@@ -66,6 +66,7 @@ export default async function SocialMediaTrackerPage({
     platform: r.platform,
     status: r.status,
     postLink: r.postLink,
+    driveLink: r.driveLink,
     views: r.views,
     reach: r.reach,
     likes: r.likes,
