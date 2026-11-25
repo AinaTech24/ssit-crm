@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const cfg = await withTenant(session.tenantId, (tx) => getDriveConfig(tx, session.tenantId));
   if (!cfg?.clientId || !cfg.clientSecret) return back("drive_error=Save the Google client ID and secret first.");
 
-  const redirectUri = driveRedirectUri(origin);
+  const redirectUri = driveRedirectUri(origin, cfg);
   const state = signState({
     tenantId: session.tenantId,
     userId: session.userId,

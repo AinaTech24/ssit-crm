@@ -38,10 +38,39 @@ export interface DriveConfig {
   email?: string;
   /** The "Equitywala Content" folder, created on first use. */
   rootFolderId?: string;
+  /**
+   * The CRM's public web address (e.g. https://crm.equitywala.com), typed on the settings page. The redirect
+   * address Google is given is built from it, so it matches what is registered in Google Cloud even when the
+   * server only knows its own internal name (localhost:3000) behind the load balancer.
+   */
+  redirectBase?: string;
 }
 
-export const driveRedirectUri = (origin: string) => {
-  const base = process.env.OAUTH_REDIRECT_BASE?.replace(/\/$/, "") || origin.replace(/\/$/, "");
+const isLocalHost = (u: string) => /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(u);
+
+/** "https://crm.equitywala.com/anything/" -> "https://crm.equitywala.com"; null when it is not a web address. */
+export function cleanBaseUrl(raw: string | null | undefined): string | null {
+  try {
+    const u = new URL(String(raw ?? "").trim());
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The address Google redirects back to. Order: what the owner typed on the settings page, then the server's
+ * configured public address, then the address the request arrived on - but a request that arrived as
+ * "localhost" is only used when nothing better is known.
+ */
+export const driveRedirectUri = (origin: string, cfg?: Pick<DriveConfig, "redirectBase"> | null) => {
+  const envBase = [process.env.OAUTH_REDIRECT_BASE, process.env.APP_URL, process.env.NEXTAUTH_URL, process.env.NEXT_PUBLIC_APP_URL]
+    .map((v) => cleanBaseUrl(v))
+    .find((v) => !!v && !isLocalHost(v));
+  const typed = cleanBaseUrl(cfg?.redirectBase);
+  const fromRequest = cleanBaseUrl(origin);
+  const base = typed ?? (fromRequest && !isLocalHost(fromRequest) ? fromRequest : envBase ?? fromRequest ?? origin.replace(/\/$/, ""));
   return `${base}/api/settings/integrations/google-drive/oauth/callback`;
 };
 
@@ -78,7 +107,10 @@ export async function disconnectDrive(tx: Tx, tenantId: string): Promise<void> {
 export function driveStatusView(cfg: DriveConfig | null) {
   return {
     hasCredentials: !!cfg?.clientId && !!cfg?.clientSecret,
-    clientIdHint: cfg?.clientId ? `${cfg.clientId.slice(0, 12)}…${cfg.clientId.slice(-18)}` : null,
+    /** The client ID is not a secret (Google shows it in the sign-in address), so it is shown in full. */
+    clientId: cfg?.clientId ?? null,
+    hasSecret: !!cfg?.clientSecret,
+    redirectBase: cfg?.redirectBase ?? null,
     connected: !!cfg?.refreshToken,
     email: cfg?.email ?? null,
   };
