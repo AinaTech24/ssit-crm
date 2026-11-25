@@ -175,6 +175,7 @@ export async function POST(req: NextRequest) {
       // Resolve the subject — investor OR lead. The XOR was enforced by zod.
       let subjectName = "";
       let subjectEmail: string | null = null;
+      let subjectPhone: string | null = null;
       let subjectRmId: string | null = null;
       let subjectType: "investor" | "lead" | "internal" = "investor";
       let subjectId = "";
@@ -183,6 +184,7 @@ export async function POST(req: NextRequest) {
         if (!inv) throw Object.assign(new Error("investor not found"), { status: 404 });
         subjectName = inv.name;
         subjectEmail = inv.email ?? null;
+        subjectPhone = inv.phone ?? null;
         subjectRmId = inv.rmId ?? null;
         subjectType = "investor";
         subjectId = body.investorId;
@@ -195,6 +197,7 @@ export async function POST(req: NextRequest) {
         if (!ld) throw Object.assign(new Error("lead not found"), { status: 404 });
         subjectName = ld.name;
         subjectEmail = ld.email ?? null;
+        subjectPhone = ld.phone ?? null;
         subjectRmId = (ld as any).ownerId ?? null;
         subjectType = "lead";
         subjectId = body.leadId!;
@@ -335,7 +338,7 @@ export async function POST(req: NextRequest) {
         aboutName = ((who.rows[0] as { name?: string } | undefined)?.name) ?? null;
       }
 
-      return { id, createdById, reminderTaskId, aboutName, subjectEmail, meetingDate, meetingType: body.meetingType, durationMinutes: body.durationMinutes };
+      return { id, createdById, reminderTaskId, aboutName, subjectEmail, subjectPhone, meetingDate, meetingType: body.meetingType, durationMinutes: body.durationMinutes };
     });
 
     // Email the collaborators AFTER the meeting is committed: a bounced mailbox
@@ -386,6 +389,8 @@ export async function POST(req: NextRequest) {
           startsAt: result.meetingDate,
           inviteeName: result.aboutName ?? "",
           inviteeEmail: result.subjectEmail,
+          inviteePhone: result.subjectPhone,
+          locationText: body.locationOrLink ?? null,
         });
       }
     }

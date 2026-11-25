@@ -65,17 +65,26 @@ describe("resolveCalendlyConfig", () => {
 });
 
 describe("bookOnCalendly", () => {
-  const startsAt = new Date("2026-11-03T10:30:00.000Z");
+  // A time a few days ahead, on the half hour (the CRM refuses to book the past).
+  const startsAt = new Date(Math.ceil((Date.now() + 3 * 86_400_000) / 1_800_000) * 1_800_000);
+  const iso = startsAt.toISOString();
+  const openSlot = { status: 200, json: { collection: [{ status: "available", start_time: iso }] } };
+  const noLocation = { status: 200, json: { resource: { locations: [] } } };
+  const routes = (extra: Record<string, { status: number; json: any }> = {}) => ({
+    "/event_type_available_times": openSlot,
+    "/event_types/ET1": noLocation,
+    ...extra,
+  });
+  const posted = (calls: Call[]) => calls.filter((c) => c.method === "POST");
 
   it("books the invitee on the event type at the meeting time (UTC)", async () => {
-    const { fn, calls } = fakeFetch({ "/invitees": { status: 201, json: { resource: { uri: "INV1" } } } });
+    const { fn, calls } = fakeFetch(routes({ "/invitees": { status: 201, json: { resource: { uri: "INV1" } } } }));
     const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "Asha", inviteeEmail: "asha@x.com" }, fn);
     expect(out.status).toBe("booked");
-    expect(calls).toHaveLength(1);
-    expect(calls[0].method).toBe("POST");
-    expect(calls[0].body).toEqual({
+    expect(posted(calls)).toHaveLength(1);
+    expect(posted(calls)[0].body).toEqual({
       event_type: cfg.eventTypeUri,
-      start_time: "2026-11-03T10:30:00.000Z",
+      start_time: iso,
       invitee: { name: "Asha", email: "asha@x.com", timezone: "Asia/Kolkata" },
     });
   });
@@ -87,17 +96,63 @@ describe("bookOnCalendly", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("does not try to book a time that has already passed", async () => {
+    const { fn, calls } = fakeFetch({});
+    const out = await bookOnCalendly(cfg, { startsAt: new Date(Date.now() - 3_600_000), inviteeName: "A", inviteeEmail: "a@x.com" }, fn);
+    expect(out.status).toBe("skipped");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("says the time is not open (and what is) instead of attempting a booking that would be refused", async () => {
+    const other = new Date(startsAt.getTime() + 3_600_000).toISOString();
+    const { fn, calls } = fakeFetch(
+      routes({ "/event_type_available_times": { status: 200, json: { collection: [{ status: "available", start_time: other }] } } })
+    );
+    const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "A", inviteeEmail: "a@x.com" }, fn);
+    expect(out.status).toBe("skipped");
+    if (out.status === "skipped") expect(out.reason).toMatch(/not open on your Calendly/);
+    expect(posted(calls)).toHaveLength(0);
+  });
+
+  it("sends the client's number when the event is a phone call that needs the invitee's number", async () => {
+    const { fn, calls } = fakeFetch(
+      routes({
+        "/event_types/ET1": { status: 200, json: { resource: { locations: [{ kind: "outbound_call" }] } } },
+        "/invitees": { status: 201, json: {} },
+      })
+    );
+    const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "A", inviteeEmail: "a@x.com", inviteePhone: "98765 43210" }, fn);
+    expect(out.status).toBe("booked");
+    expect(posted(calls)[0].body.location).toEqual({ kind: "outbound_call", location: "+919876543210" });
+  });
+
+  it("explains when a phone-call event needs a number the client does not have", async () => {
+    const { fn, calls } = fakeFetch(
+      routes({ "/event_types/ET1": { status: 200, json: { resource: { locations: [{ kind: "outbound_call" }] } } } })
+    );
+    const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "A", inviteeEmail: "a@x.com" }, fn);
+    expect(out.status).toBe("skipped");
+    expect(posted(calls)).toHaveLength(0);
+  });
+
+  it("still tries the booking when the open-times question itself cannot be answered", async () => {
+    const { fn, calls } = fakeFetch({ "/invitees": { status: 201, json: {} } });
+    const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "A", inviteeEmail: "a@x.com" }, fn);
+    expect(out.status).toBe("booked");
+    expect(posted(calls)).toHaveLength(1);
+  });
+
   it("returns Calendly's refusal instead of throwing", async () => {
-    const { fn } = fakeFetch({
-      "/invitees": { status: 400, json: { title: "Invalid Argument", message: "The supplied start_time is not available" } },
-    });
+    const { fn } = fakeFetch(
+      routes({ "/invitees": { status: 400, json: { title: "Invalid Argument", message: "The supplied start_time is not available" } } })
+    );
     const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "A", inviteeEmail: "a@x.com" }, fn);
     expect(out).toMatchObject({ status: "failed" });
     if (out.status === "failed") expect(out.reason).toMatch(/not available/);
   });
 
   it("passes on Calendly's own reason for a refusal, without claiming a paid plan is needed", async () => {
-    const { fn } = fakeFetch({ "/invitees": { status: 403, json: { message: "Please upgrade" } } });
+    const { fn } = fakeFetch(routes({ "/invitees": { status: 403, json: { message: "Please upgrade" } } }));
     const out = await bookOnCalendly(cfg, { startsAt, inviteeName: "A", inviteeEmail: "a@x.com" }, fn);
     if (out.status !== "failed") throw new Error("expected failed");
     expect(out.reason).toContain("Please upgrade");
