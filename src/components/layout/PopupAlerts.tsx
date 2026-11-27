@@ -18,7 +18,7 @@ import { Bell, CalendarClock, CheckSquare, PhoneCall, X } from "lucide-react";
 
 type Popup = {
   key: string;
-  kind: "task" | "meeting" | "followup" | "notice" | "cob";
+  kind: "task" | "meeting" | "followup" | "notice" | "cob" | "amc";
   /** Just created, rather than coming due. */
   fresh?: boolean;
   title: string;
@@ -50,16 +50,17 @@ function saveSeen(seen: Set<string>) {
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" });
 
-const ICON = { task: CheckSquare, meeting: CalendarClock, followup: PhoneCall, notice: Bell, cob: Bell } as const;
-const LABEL = { task: "Task due", meeting: "Meeting soon", followup: "Follow-up due", notice: "Update", cob: "COB check due" } as const;
+const ICON = { task: CheckSquare, meeting: CalendarClock, followup: PhoneCall, notice: Bell, cob: Bell, amc: CalendarClock } as const;
+const LABEL = { task: "Task due", meeting: "Meeting soon", followup: "Follow-up due", notice: "Update", cob: "COB check due", amc: "AMC meeting" } as const;
 // One theme token for every kind — the icon already says which kind it is.
-const FRESH_LABEL = { task: "New task", meeting: "New meeting", followup: "New follow-up", notice: "Update", cob: "COB check due" } as const;
+const FRESH_LABEL = { task: "New task", meeting: "New meeting", followup: "New follow-up", notice: "Update", cob: "COB check due", amc: "AMC meeting" } as const;
 const TONE = {
   task: "text-primary",
   meeting: "text-primary",
   followup: "text-primary",
   notice: "text-primary",
   cob: "text-primary",
+  amc: "text-primary",
 } as const;
 
 export function PopupAlerts() {
@@ -90,6 +91,21 @@ export function PopupAlerts() {
           title: c.client_name,
           detail: "This client's change of broker: is it done? Open and answer Yes or No.",
           href: `/dashboard/business-entries/${c.id}`,
+        });
+      }
+      for (const a of rem?.amcSoon ?? []) {
+        found.push({
+          key: `amc-${a.id}`,
+          kind: "amc",
+          title: a.subject || a.amc_name || "AMC meeting",
+          detail: `${a.amc_name ? `${a.amc_name} · ` : ""}${
+            Number(a.days_away) === 0
+              ? "today"
+              : Number(a.days_away) === 1
+                ? "tomorrow"
+                : `scheduled for ${new Date(`${a.meeting_date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`
+          }`,
+          href: `/dashboard/amc-empanelments?view=meetings&meeting=${a.id}`,
         });
       }
       for (const t of rem?.newTasks ?? []) {
@@ -158,6 +174,7 @@ export function PopupAlerts() {
       for (const n of notif?.notifications ?? []) {
         if (n.readAt || Date.now() - new Date(n.createdAt).getTime() > 15 * 60_000) continue;
         if (n.kind === "birthday_today") continue;
+        if (n.kind === "amc_meeting.tagged" && (rem?.amcSoon ?? []).some((a: any) => String(n.linkUrl ?? "").endsWith(String(a.id)))) continue;
         if (n.kind === "business.cob_due" && (rem?.cobDue ?? []).some((c: any) => String(n.linkUrl ?? "").endsWith(String(c.id)))) continue;
         // The "New meeting" card already covers an invitation to a meeting that was just created.
         if (n.kind === "meeting.invited" && (rem?.newMeetings ?? []).some((x: any) => String(n.linkUrl ?? "").endsWith(String(x.id)))) continue;

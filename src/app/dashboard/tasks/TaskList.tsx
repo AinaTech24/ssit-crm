@@ -141,6 +141,8 @@ export function TaskList({ initialRows, currentUserId, canManageAll = false, ini
           .join(" / ") + prefix
       );
     }
+    const bucket = sp.get("bucket");
+    if (!sp.get("status") && (bucket === "completed" || bucket === "closed")) parts.push(bucket);
     if (sp.get("mine") === "1") parts.push("assigned to me");
     if (sp.get("overdue") === "1") parts.push("overdue");
     return parts.join(" · ");

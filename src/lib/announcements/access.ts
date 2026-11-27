@@ -19,9 +19,12 @@ import type { SessionUser } from "@/lib/auth/session";
  * Expects the announcements table aliased `a`.
  */
 export function audienceUserSql(session: { userId: string; roles: string[] }, ownerSeesAll = false) {
-  if (ownerSeesAll && session.roles.includes("owner")) return sql`TRUE`;
-  return sql`(a.audience_user_ids IS NULL OR jsonb_array_length(a.audience_user_ids) = 0
-    OR a.audience_user_ids ? ${session.userId}::text OR a.created_by_user_id = ${session.userId}::uuid)`;
+  // Notices that AMC meetings used to post for the people tagged on them stay off the board, banner and
+  // badge for everyone (those people are told by notification and pop-up instead).
+  const notAmcInvite = sql`NOT (a.category = 'amc_meeting' AND jsonb_array_length(COALESCE(a.audience_user_ids, '[]'::jsonb)) > 0)`;
+  if (ownerSeesAll && session.roles.includes("owner")) return notAmcInvite;
+  return sql`(${notAmcInvite} AND (a.audience_user_ids IS NULL OR jsonb_array_length(a.audience_user_ids) = 0
+    OR a.audience_user_ids ? ${session.userId}::text OR a.created_by_user_id = ${session.userId}::uuid))`;
 }
 
 /** Posting a notice is owner / branch-head work; so is attaching to one. */

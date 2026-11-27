@@ -7,9 +7,9 @@ import { handleApiError } from "@/lib/api/error-handler";
  * meeting. An AMC that has no empanelment row gets one on the spot, marked
  * "under review" so it does not pass for a signed-up house.
  *
- * Tagged colleagues (and everyone in a tagged branch) are told through an
- * announcement that only they — and the author — can see, plus an in-app
- * notification. Nobody else on the firm's board sees it.
+ * Tagged colleagues (and everyone in a tagged branch) get an in-app notification and
+ * pop-up when it is scheduled, and again the day before and on the day (/api/reminders).
+ * Nothing is posted on the announcement board.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,7 +21,7 @@ import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
-import { amcEmpanelments, amcMeetings, announcements, AMC_MEETING_MODES, AMC_MODE_LABEL } from "@/db/schema";
+import { amcEmpanelments, amcMeetings, AMC_MEETING_MODES, AMC_MODE_LABEL } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -126,28 +126,13 @@ export async function POST(req: NextRequest) {
           b.followUp ? `Follow-up: ${clip(b.followUp, 160)}` : null,
         ].filter(Boolean) as string[];
         const title = `AMC meeting: ${clip(b.subject, 120)}`;
-        // Stays on the banner until read; lapses two days after the meeting date.
-        const expires = new Date(Math.max(Date.parse(`${b.meetingDate}T00:00:00Z`), Date.now()) + 2 * 86_400_000);
-        const annId = uuid();
-        await tx.insert(announcements).values({
-          id: annId,
-          tenantId: session.tenantId,
-          title,
-          body: lines.join("\n"),
-          category: "amc_meeting",
-          audienceRoles: [],
-          audienceUserIds: recipients,
-          isPinned: true,
-          requiresAck: false,
-          publishedAt: new Date(),
-          expiresAt: expires,
-          createdByUserId: session.userId,
-        });
-        const metaJson = JSON.stringify({ announcementId: annId, amcMeetingId: meetingId });
+        // The bell and the pop-up - to the people added only; nothing goes on the announcement board.
+        const metaJson = JSON.stringify({ amcMeetingId: meetingId });
+        const link = `/dashboard/amc-empanelments?view=meetings&meeting=${meetingId}`;
         await tx.execute(sql`
           INSERT INTO notifications (tenant_id, user_id, kind, title, body, link_url, severity, meta)
-          SELECT ${session.tenantId}::uuid, u.id, 'amc_meeting.tagged', ${title}, ${lines[0] ?? ""},
-                 '/dashboard/announcements', 'info', ${metaJson}::jsonb
+          SELECT ${session.tenantId}::uuid, u.id, 'amc_meeting.tagged', ${title}, ${lines.join(" · ").slice(0, 240)},
+                 ${link}, 'info', ${metaJson}::jsonb
             FROM users u
            WHERE u.tenant_id = ${session.tenantId}::uuid
              AND u.id IN (${sql.join(recipients.map((x) => sql`${x}::uuid`), sql`, `)})

@@ -7,8 +7,8 @@
  *
  * The AMC picker is the same searchable list the empanelment form uses (the
  * standard houses plus anything the firm added), so it is never empty on a firm
- * that has no empanelments yet. Tagged people get an announcement of their own;
- * nobody else sees it.
+ * that has no empanelments yet. Tagged people get a notification and reminder
+ * pop-ups; nothing is posted in Announcements.
  */
 
 import { useState } from "react";
@@ -203,7 +203,7 @@ export function AddAmcMeetingButton({
             />
             {(collaborators.length > 0 || branchId) && (
               <p className="text-[11px] text-muted-foreground">
-                Only the people you tag{branchId ? " and that branch" : ""} will see this meeting in Announcements.
+                The people you tag{branchId ? " and that branch" : ""} get a notification and a reminder pop-up.
               </p>
             )}
             <div className="flex items-center gap-2 justify-end">

@@ -490,7 +490,7 @@ export function ReviewMeetingDetailEditor({
               className="input-base"
             />
             <p className="text-[11px] text-amber-600 mt-1">
-              Saving moves the T-1 reminder task to the new date and logs a reschedule.
+              Saving logs a reschedule.
             </p>
           </label>
         )}

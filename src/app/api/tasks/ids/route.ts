@@ -13,6 +13,8 @@ import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import { tasks, users } from "@/db/schema";
 import { taskMineSql, taskScopeSql } from "@/lib/tasks/access";
+import { bucketStatuses, parseBucket } from "@/lib/tasks/buckets";
+import { parseScope, scopeFilterSql } from "@/lib/scope/view-filter";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,7 @@ export async function GET(req: NextRequest) {
     const csv = (v: string) => v.split(",").filter(Boolean);
     const q = g("q").trim();
     const statusFilter = csv(g("status"));
+    const typeFilter = csv(g("type"));
     const priorityFilter = csv(g("priority"));
     const deptFilter = csv(g("department"));
     const assigneeFilter = csv(g("assignee"));
@@ -44,16 +47,23 @@ export async function GET(req: NextRequest) {
       // "Select all" must never reach past what the list shows.
       conds.push(await taskScopeSql(tx, session));
       if (!canViewAll) conds.push(or(eq(tasks.createdById, session.userId), taskMineSql("tasks", session.userId))!);
+      conds.push(scopeFilterSql(parseScope(Object.fromEntries(url.searchParams)), session.tenantId, ["tasks.assignee_id", "tasks.created_by_id"]));
       if (view === "to_me") conds.push(taskMineSql("tasks", session.userId));
       else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
+      if (view === "other") conds.push(eq(tasks.type, "other_activity"));
+      else conds.push(sql`${tasks.type} <> 'other_activity'`);
+      if (typeFilter.length) conds.push(inArray(tasks.type, typeFilter as any));
       if (statusFilter.length) conds.push(inArray(tasks.status, statusFilter as any));
-      else if (!approval) conds.push(eq(tasks.status, "open"));
+      else if (!approval) {
+        const wanted = bucketStatuses(parseBucket(g("bucket")));
+        if (wanted) conds.push(inArray(tasks.status, wanted));
+      }
       if (approval === "pending") conds.push(eq(tasks.approvalStatus, "pending"));
       else if (approval === "mine") {
         conds.push(eq(tasks.approvalStatus, "pending"));
         if (!canViewAll) conds.push(eq(tasks.createdById, session.userId));
       }
-      if (q) conds.push(or(ilike(tasks.title, `%${q}%`), ilike(tasks.description, `%${q}%`))!);
+      if (q) conds.push(or(ilike(tasks.title, `%${q}%`), ilike(tasks.description, `%${q}%`), ilike(users.name, `%${q}%`))!);
       if (priorityFilter.length) conds.push(inArray(tasks.priority, priorityFilter as any));
       if (deptFilter.length) conds.push(inArray(tasks.department, deptFilter as any));
       if (assigneeFilter.length) conds.push(inArray(tasks.assigneeId, assigneeFilter as any));

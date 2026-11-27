@@ -7,8 +7,8 @@ import { bookOnCalendly, getCalendlyConfig, type CalendlyOutcome } from "@/lib/i
  *   POST /api/review-meetings   — schedule a new meeting
  *
  * Automations fired on create:
- *   1. Insert a reminder task for the RM (1 day before the meeting)
- *   2. Outbox event so any subscribed workflow can hook in (WA reminder, etc.)
+ *   - No task is created for the meeting itself
+ *   - Outbox event so any subscribed workflow can hook in (WA reminder, etc.)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -224,23 +224,9 @@ export async function POST(req: NextRequest) {
         if (conflicts.length) return { conflicts } as const;
       }
 
-      // ─── Automation 1 — reminder task (1 day before) ───────────────
-      const reminderTaskId = uuid();
+      // No task is created for a new meeting (firm's choice): the meeting itself shows in Meetings,
+      // the calendar and the pop-ups. `reminderAt` is still sent to subscribed automations below.
       const reminderAt = new Date(meetingDate.getTime() - 24 * 60 * 60 * 1000);
-      await tx.insert(tasks).values({
-        id: reminderTaskId,
-        tenantId: session.tenantId,
-        branchId: session.branchId ?? null,
-        assigneeId: createdById,
-        subjectType,
-        subjectId: subjectId || null,
-        type: "review_meeting_reminder",
-        title: `Reminder: ${labelForType(body.meetingType)} with ${subjectName} tomorrow`,
-        description: `Mode: ${labelForMode(body.meetingMode)}${body.locationOrLink ? " · " + body.locationOrLink : ""}.${body.discussionPoints ? " Agenda: " + body.discussionPoints : ""}`,
-        priority: "normal",
-        status: "open",
-        dueAt: reminderAt,
-      } as any);
 
       await tx.insert(reviewMeetings).values({
         id,
@@ -261,14 +247,12 @@ export async function POST(req: NextRequest) {
         locationOrLink: body.locationOrLink ?? null,
         discussionPoints: body.discussionPoints ?? null,
         status: body.status,
-        reminderTaskId,
       } as any);
 
       // Outbox so subscribed workflows can confirm + remind the client. The
       // entity pointer is the *person* (investor/lead) — not the meeting — so a
       // subscribed recipe's subject resolves to someone with a phone/email to
-      // message. `reminderAt` (meeting − 1 day, already computed above for the
-      // RM reminder task) lets a recipe wait_until_date and fire a day-before
+      // message. `reminderAt` (meeting − 1 day) lets a recipe wait_until_date and fire a day-before
       // reminder. Meeting linkage stays in `after`.
       // The outbox points at the person (client / lead); an "Other" attendee has
       // no record to point at, so no automation event is raised for them.
@@ -338,7 +322,7 @@ export async function POST(req: NextRequest) {
         aboutName = ((who.rows[0] as { name?: string } | undefined)?.name) ?? null;
       }
 
-      return { id, createdById, reminderTaskId, aboutName, subjectEmail, subjectPhone, meetingDate, meetingType: body.meetingType, durationMinutes: body.durationMinutes };
+      return { id, createdById, aboutName, subjectEmail, subjectPhone, meetingDate, meetingType: body.meetingType, durationMinutes: body.durationMinutes };
     });
 
     // Email the collaborators AFTER the meeting is committed: a bounced mailbox

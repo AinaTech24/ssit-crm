@@ -107,7 +107,7 @@ export default async function NewReviewMeetingPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Schedule review meeting</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            A reminder task auto-fires the day before. After completion, action items become tasks.
+            After completion, action items become tasks.
           </p>
         </div>
       </div>

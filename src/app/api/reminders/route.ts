@@ -37,6 +37,24 @@ export async function GET() {
       ).rows
     ).catch(() => []);
 
+    // AMC meetings this person was added to (by name or through their branch): today's, tomorrow's, and any
+    // upcoming one scheduled in the last day, so it is seen even if they were away when it was created.
+    const amcSoon = await withTenant(session.tenantId, async (tx) =>
+      (
+        await tx.execute(sql`
+          SELECT m.id, m.subject, m.meeting_date::text AS meeting_date, e.amc_name,
+                 (m.meeting_date - ${istToday()}::date) AS days_away
+            FROM amc_meetings m
+            LEFT JOIN amc_empanelments e ON e.id = m.amc_empanelment_id
+           WHERE m.tenant_id = ${session.tenantId}::uuid
+             AND m.meeting_date >= ${istToday()}::date
+             AND (m.meeting_date <= ${istToday()}::date + 1 OR m.created_at >= now() - interval '1 day')
+             AND (jsonb_exists(COALESCE(m.collaborator_user_ids, '[]'::jsonb), ${me})
+                  OR m.branch_id = (SELECT u.branch_id FROM users u WHERE u.id = ${me}::uuid))
+           ORDER BY m.meeting_date ASC LIMIT 8`)
+      ).rows
+    ).catch(() => []);
+
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
@@ -138,7 +156,7 @@ export async function GET() {
       },
       { userId: session.userId, branchId: session.branchId, roles: session.roles }
     );
-    return NextResponse.json({ ...data, cobDue });
+    return NextResponse.json({ ...data, cobDue, amcSoon });
   } catch (err: any) {
     return handleApiError(err);
   }

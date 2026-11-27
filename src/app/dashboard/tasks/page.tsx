@@ -17,6 +17,8 @@ import { Pager } from "@/components/common/Pager";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { CustomViews } from "@/components/common/CustomViews";
 import { TaskViewSelect } from "./TaskViewSelect";
+import { TaskBucketTabs } from "./TaskBucketTabs";
+import { TASK_BUCKETS, activeBucket, bucketStatuses, parseBucket, type TaskBucketKey, type TaskStatusValue } from "@/lib/tasks/buckets";
 import { TaskList } from "./TaskList";
 import { TaskKanban } from "./TaskKanban";
 import { OtherActivityButton } from "./OtherActivityButton";
@@ -98,25 +100,6 @@ export default async function TasksPage({
     if (view === "other") conds.push(eq(tasks.type, "other_activity"));
     else conds.push(sql`${tasks.type} <> 'other_activity'`);
 
-    // Status filtering applies to the LIST only — the KANBAN's columns ARE the
-    // status dimension, so it must show every status (otherwise a lingering
-    // status=open from a stat-card click collapses the board to one column).
-    // List: an explicit filter wins, else default to open.
-    if (!isKanban) {
-      // An explicit status filter wins; with none, the list shows EVERY status —
-      // the same set the Kanban shows. Defaulting to "open" hid in-progress and
-      // completed tasks, so a firm with one completed task saw "all caught up".
-      if (statusFilter.length) {
-        conds.push(inArray(tasks.status, statusFilter as any));
-      }
-    }
-    // Awaiting sign-off. 'pending' = any; 'mine' = ones this user approves.
-    if (approval === "pending") conds.push(eq(tasks.approvalStatus, "pending"));
-    else if (approval === "mine") {
-      conds.push(eq(tasks.approvalStatus, "pending"));
-      if (!canViewAll) conds.push(or(eq(tasks.createdById, session.userId), sql`tasks.meta->>'approverId' = ${session.userId}`)!);
-    }
-
     if (q) {
       conds.push(or(ilike(tasks.title, `%${q}%`), ilike(tasks.description, `%${q}%`), ilike(users.name, `%${q}%`))!);
     }
@@ -142,6 +125,30 @@ export default async function TasksPage({
     }
     const dr = dateRangeCond(sp, "created", "tasks.created_at");
     if (dr) conds.push(dr);
+
+    // Counts for the Open / Completed / Closed buttons: every filter applied except the status itself.
+    const statusRows = await tx
+      .select({ status: tasks.status, c: sql<number>`count(*)::int` })
+      .from(tasks)
+      .leftJoin(users, eq(users.id, tasks.assigneeId))
+      .where(and(...conds) as any)
+      .groupBy(tasks.status);
+
+    // Status applies to the LIST only — the kanban's columns ARE the statuses. A Status filter or an
+    // approval view wins; otherwise the chosen button decides, and the list opens on Open.
+    if (!isKanban) {
+      if (statusFilter.length) conds.push(inArray(tasks.status, statusFilter as any));
+      else if (!approval) {
+        const wanted = bucketStatuses(parseBucket(sp.bucket));
+        if (wanted) conds.push(inArray(tasks.status, wanted));
+      }
+    }
+    // Awaiting sign-off. 'pending' = any; 'mine' = ones this user approves.
+    if (approval === "pending") conds.push(eq(tasks.approvalStatus, "pending"));
+    else if (approval === "mine") {
+      conds.push(eq(tasks.approvalStatus, "pending"));
+      if (!canViewAll) conds.push(or(eq(tasks.createdById, session.userId), sql`tasks.meta->>'approverId' = ${session.userId}`)!);
+    }
 
     const where = conds.length ? and(...conds) : undefined;
 
@@ -219,8 +226,8 @@ export default async function TasksPage({
     const kpiRes = await tx.execute(sql`
       SELECT
         COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE tasks.status IN ('open', 'in_progress'))::int AS open,
-        COUNT(*) FILTER (WHERE tasks.status IN ('open', 'in_progress') AND tasks.due_at < now())::int AS overdue,
+        COUNT(*) FILTER (WHERE tasks.status IN ('open', 'in_progress', 'blocked'))::int AS open,
+        COUNT(*) FILTER (WHERE tasks.status IN ('open', 'in_progress', 'blocked') AND tasks.due_at < now())::int AS overdue,
         COUNT(*) FILTER (WHERE tasks.status = 'completed')::int AS completed
       FROM tasks
       WHERE tasks.tenant_id = ${session.tenantId}::uuid
@@ -239,11 +246,17 @@ export default async function TasksPage({
           where: sql`${where ?? sql`TRUE`}`,
         })
       : { byDesk: [], byRm: [] };
-    return { rows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[], scopeUnits, scopeMembers, kpi, breakdown };
+    return { rows, statusRows, rms: rmRows.rows as any[], total, tags: tagRows.rows as any[], scopeUnits, scopeMembers, kpi, breakdown };
   });
 
   const rmOptions = (result.rms ?? []).map((r: any) => ({ value: String(r.id), label: r.name ?? "—" }));
   const tagOptions = (result.tags ?? []).map((t: any) => ({ value: String(t.tag), label: String(t.tag) }));
+  const bucketCounts = Object.fromEntries(
+    TASK_BUCKETS.map((b) => [
+      b.key,
+      result.statusRows.filter((r) => !b.statuses || b.statuses.includes(r.status as TaskStatusValue)).reduce((n, r) => n + Number(r.c), 0),
+    ])
+  ) as Record<TaskBucketKey, number>;
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -301,6 +314,8 @@ export default async function TasksPage({
         />
       )}
 
+      {!isKanban && <TaskBucketTabs params={sp} active={activeBucket(sp.bucket, statusFilter, approval)} counts={bucketCounts} />}
+
       {/* Search + filter + sort + view — rendered inside the table header (list)
           or above the board (kanban). */}
       {(() => {
@@ -336,7 +351,7 @@ export default async function TasksPage({
                   { value: "in_progress", label: "In progress" },
                   { value: "blocked", label: "Blocked" },
                   { value: "completed", label: "Completed" },
-                  { value: "cancelled", label: "Cancelled" },
+                  { value: "cancelled", label: "Closed (cancelled)" },
                 ],
               }]
             : []),

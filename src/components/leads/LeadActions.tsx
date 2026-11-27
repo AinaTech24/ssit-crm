@@ -666,7 +666,6 @@ export function ScheduleMeetingDialog({
         <p className="text-xs text-muted-foreground -mt-1">
           Creates a meeting record in the Meetings module and moves the
           blueprint to <span className="font-medium">Meeting Scheduled</span>.
-          A reminder task auto-fires the day before.
         </p>
         <div className="grid grid-cols-2 gap-3">
           <label className="block">

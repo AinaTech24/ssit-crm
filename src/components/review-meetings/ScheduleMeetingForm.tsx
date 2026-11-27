@@ -448,7 +448,7 @@ export function ScheduleMeetingForm({
 
       <p className="text-[11px] text-muted-foreground leading-relaxed pt-2 border-t border-border flex items-start gap-1.5">
         <Calendar className="size-3.5 mt-0.5 flex-shrink-0" />
-        A reminder task auto-fires the day before. After completion, action items become tasks
+        After completion, action items become tasks
         {subjectKind === "other" ? "." : <>{" "}and the {subjectKind === "lead" ? "lead's last-contact date" : "client's next review date"} gets updated.</>}
       </p>
     </div>

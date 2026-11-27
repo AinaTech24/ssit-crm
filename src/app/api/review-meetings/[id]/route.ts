@@ -445,22 +445,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               `);
               if (existing.rows.length === 0) {
                 const nextId = uuid();
-                const nextReminderId = uuid();
                 const nextMeetingDate = new Date(`${nextReviewDate}T11:00:00`);
-                await sp.insert(tasks).values({
-                  id: nextReminderId,
-                  tenantId: session.tenantId,
-                  assigneeId: before.createdById ?? session.userId,
-                  subjectType: "investor",
-                  subjectId: before.investorId,
-                  relatedInvestorId: before.investorId,
-                  relatedMeetingId: nextId,
-                  type: "review_meeting_reminder",
-                  title: "Reminder: next portfolio review coming up",
-                  priority: "normal",
-                  status: "open",
-                  dueAt: new Date(nextMeetingDate.getTime() - 24 * 60 * 60 * 1000),
-                } as any);
                 await sp.insert(reviewMeetings).values({
                   id: nextId,
                   tenantId: session.tenantId,
@@ -475,7 +460,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
                   durationMinutes: before.durationMinutes ?? "30",
                   meetingMode: before.meetingMode,
                   status: "scheduled",
-                  reminderTaskId: nextReminderId,
                 } as any);
               }
             });
