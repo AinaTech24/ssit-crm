@@ -9,12 +9,8 @@ import { SelectField } from "@/components/ui/SelectField";
 import { PartnerSelect } from "@/components/service-requests/PartnerSelect";
 import { AttachmentPicker, uploadAttachments } from "@/components/common/EntityAttachments";
 
-const DEPARTMENTS = [
-  { value: "motilal_oswal", label: "Motilal Oswal" },
-  { value: "mf", label: "MF" },
-  { value: "demat", label: "Demat" },
-  { value: "insurance", label: "Insurance" },
-];
+// Only Motilal Oswal is offered. (MF / Demat / Insurance were removed; older requests that carry one keep it.)
+const DEPARTMENTS = [{ value: "motilal_oswal", label: "Motilal Oswal" }];
 
 type ClientHit = {
   id: string;

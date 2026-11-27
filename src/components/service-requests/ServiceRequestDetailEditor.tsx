@@ -228,9 +228,10 @@ export function ServiceRequestDetailEditor({
             <select value={department} onChange={(e) => setDepartment(e.target.value)} className="input-base">
               <option value="">—</option>
               <option value="motilal_oswal">Motilal Oswal</option>
-              <option value="mf">MF</option>
-              <option value="demat">Demat</option>
-              <option value="insurance">Insurance</option>
+              {/* An older request saved under a removed department keeps showing it until it is changed. */}
+              {department && department !== "motilal_oswal" && (
+                <option value={department}>{({ mf: "MF", demat: "Demat", insurance: "Insurance" } as Record<string, string>)[department] ?? department}</option>
+              )}
             </select>
           </label>
           <div className="block">
