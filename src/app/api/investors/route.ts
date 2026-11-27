@@ -20,6 +20,7 @@ import { investorScopeCondition } from "@/lib/investors/access";
 import { healthFields } from "@/lib/investors/health";
 import { NomineesArray } from "@/lib/investors/nominee";
 import { ReferralsArray } from "@/lib/investors/referral";
+import { syncReferralLinks } from "@/lib/investors/referral-links";
 import { registerNomineePanDocs } from "@/lib/investors/nominee-docs";
 import { loadCustomFieldDefs, sanitizeCustomFields } from "@/lib/custom-fields/values";
 import { applyRiskCategory, RISK_CATEGORIES } from "@/lib/risk-profile/apply";
@@ -342,6 +343,12 @@ export async function POST(req: NextRequest) {
           }),
         } as any)
         .returning();
+
+      // People entered under Referrals get this new client in their "Referred by".
+      if (body.referrals?.length) {
+        const linked = await syncReferralLinks(tx, session.tenantId, id, [], body.referrals);
+        await tx.update(investors).set({ referrals: linked }).where(and(eq(investors.id, id), eq(investors.tenantId, session.tenantId)));
+      }
 
       // Emit outbox event so subscribed workflows can react
       await tx.insert(eventsOutbox).values({

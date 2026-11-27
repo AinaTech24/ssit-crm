@@ -13,6 +13,10 @@ export const ReferralSchema = z.object({
   email: z.string().max(160).optional(),
   /** Free note — context, status, or what they're interested in. */
   note: z.string().max(500).optional(),
+  /** The existing client this entry is (picked from the suggestions) - their "Referred by" then lists this client. */
+  investorId: z.string().uuid().optional(),
+  /** The existing lead this entry is. */
+  leadId: z.string().uuid().optional(),
 });
 
 export type Referral = z.infer<typeof ReferralSchema>;

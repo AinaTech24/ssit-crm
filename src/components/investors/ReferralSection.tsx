@@ -34,6 +34,9 @@ export function ReferralSection({
   canEdit?: boolean;
 }) {
   const seed: Referral[] = referrals && referrals.length ? referrals : [];
+  // People already shown as a referral card below are not repeated as a name chip.
+  const carded = new Set(seed.flatMap((r) => [r.investorId, r.leadId]).filter(Boolean));
+  const chips = referredList.filter((p) => !carded.has(p.id));
 
   const router = useRouter();
   const toast = useToast();
@@ -97,9 +100,9 @@ export function ReferralSection({
 
       {/* The clients (and open leads) that came in through this client - names only, filled in
           automatically from "Referred by" on their own record */}
-      {referredList.length > 0 && (
+      {chips.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-1.5">
-          {referredList.map((p) => (
+          {chips.map((p) => (
             <Link
               key={`${p.kind}-${p.id}`}
               href={p.kind === "client" ? `/dashboard/investors/${p.id}` : `/dashboard/leads/${p.id}`}
@@ -132,7 +135,15 @@ export function ReferralSection({
                   Referral {i + 1}
                 </span>
               </div>
-              <div className="text-sm font-semibold">{n.name || "—"}</div>
+              <div className="text-sm font-semibold">
+                {n.investorId || n.leadId ? (
+                  <Link href={n.investorId ? `/dashboard/investors/${n.investorId}` : `/dashboard/leads/${n.leadId}`} className="hover:underline">
+                    {n.name || "—"}
+                  </Link>
+                ) : (
+                  n.name || "—"
+                )}
+              </div>
               <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
                 <RefKV label="Relation" value={n.relation} cap />
                 <RefKV label="Mobile" value={n.mobile} mono />

@@ -25,7 +25,8 @@ import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { healthFields } from "@/lib/investors/health";
 import { computeNextReview } from "@/lib/investors/review-cadence";
 import { NomineesArray } from "@/lib/investors/nominee";
-import { ReferralsArray } from "@/lib/investors/referral";
+import { syncReferralLinks } from "@/lib/investors/referral-links";
+import { ReferralsArray, type Referral } from "@/lib/investors/referral";
 import { registerNomineePanDocs } from "@/lib/investors/nominee-docs";
 import { recomputeFamilyHealthForInvestor } from "@/lib/families/health-persist";
 import { propagateFamilyReview } from "@/lib/investors/family-review";
@@ -342,6 +343,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         referredPatch = { referredByInvestorIds: ids, referredByInvestorId: ids[0] ?? null };
       }
 
+      // Adding someone under Referrals writes this client into THEIR "Referred by" (and removing takes it off).
+      let referralsPatch: { referrals?: Referral[] } = {};
+      if (parse.data.referrals !== undefined) {
+        referralsPatch = {
+          referrals: await syncReferralLinks(tx, session.tenantId, id, (before.referrals ?? []) as Referral[], parse.data.referrals),
+        };
+      }
+
       // Stamp KYC audit fields when any KYC-related column is touched.
       const touchingKyc =
         parse.data.kycStatus !== undefined ||
@@ -421,6 +430,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...mirror,
           ...rmBranchPatch,
           ...referredPatch,
+          ...referralsPatch,
           ...(parse.data.uccCodes !== undefined ? { uccCodes: cleanUccCodes(parse.data.uccCodes) } : {}),
           // De-duplicate rather than trusting the client: the tag chips and the
           // free-text box can both produce "Motilal Oswal".

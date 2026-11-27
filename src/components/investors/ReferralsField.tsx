@@ -54,10 +54,13 @@ export function ReferralsField({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <NameLookup
               value={n.name ?? ""}
-              onType={(v) => update(i, { name: v })}
+              // Typing changes who this is; picking a suggestion says exactly which record it is.
+              onType={(v) => update(i, { name: v, investorId: undefined, leadId: undefined })}
               onPick={(p) =>
                 update(i, {
                   name: p.name,
+                  investorId: p.kind === "Client" ? p.id : undefined,
+                  leadId: p.kind === "Lead" ? p.id : undefined,
                   mobile: p.phone || n.mobile,
                   email: p.email || n.email,
                 })
