@@ -19,6 +19,8 @@ import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-sc
  *   assignee_id     who has to do it
  *   created_by_id   who asked for it
  *
+ * plus anyone named as a COLLABORATOR on it (migration 0269), who works it with them.
+ *
  * A task is in scope when EITHER of them is inside the wall, which gives the
  * behaviour a sub-branch needs without any extra rule: a head assigns work to
  * someone on their desk and both of them see it — the head because the
@@ -30,10 +32,37 @@ import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-sc
  *   desks    → every task whose assignee or creator sits on my sub-branch
  *   branches → the same, one level up
  *   own      → assigned to me, or created by me (unchanged for RMs)
+ *
+ * On top of that, people who "share tasks" with each other (users.task_team_ids) see one
+ * another's tasks in the All view. The Assigned-to-me / Assigned-by-me views filter to the
+ * person afterwards, so those stay personal.
  */
 
 export function requireTaskView(session: SessionUser) {
   requireAny(session.roles, ["task.view.all", "task.view.assigned"], session.permissions);
+}
+
+/** `alias` is a trusted constant of our own queries, never user input. */
+export function isTaskCollaboratorSql(alias: string, userId: string): SQL {
+  return sql`jsonb_exists(COALESCE(${sql.raw(alias)}.collaborator_ids, '[]'::jsonb), ${userId})`;
+}
+
+/** "Assigned to me": I am the assignee, or I am on it as a collaborator. */
+export function taskMineSql(alias: string, userId: string): SQL {
+  return sql`(${sql.raw(alias)}.assignee_id = ${userId}::uuid OR ${isTaskCollaboratorSql(alias, userId)})`;
+}
+
+/** Who shares tasks with this person - whichever of the two had the setting made. */
+export async function taskTeamIds(tx: Tx, tenantId: string, userId: string): Promise<string[]> {
+  const r = await tx.execute(sql`
+    SELECT u.id FROM users u
+     WHERE u.tenant_id = ${tenantId}::uuid AND u.id <> ${userId}::uuid
+       AND (jsonb_exists(COALESCE(u.task_team_ids, '[]'::jsonb), ${userId})
+            OR EXISTS (SELECT 1 FROM users me
+                        WHERE me.id = ${userId}::uuid AND me.tenant_id = ${tenantId}::uuid
+                          AND jsonb_exists(COALESCE(me.task_team_ids, '[]'::jsonb), u.id::text)))
+  `);
+  return (r.rows as Array<{ id: string }>).map((x) => String(x.id));
 }
 
 /**
@@ -47,7 +76,12 @@ export function requireTaskView(session: SessionUser) {
 export async function taskScopeSql(tx: Tx, session: SessionUser, alias = "tasks"): Promise<SQL> {
   const scope = await resolveDataScope(tx, session);
   const wall = dataScopeSqlViaOwnerBranch(scope, [`${alias}.assignee_id`, `${alias}.created_by_id`]);
+  const team = await taskTeamIds(tx, session.tenantId, session.userId);
+  const teamIds = team.length ? sql.join(team.map((t) => sql`${t}::uuid`), sql`, `) : null;
+  const shared = teamIds
+    ? sql` OR ${sql.raw(alias)}.assignee_id IN (${teamIds}) OR ${sql.raw(alias)}.created_by_id IN (${teamIds})`
+    : sql``;
   // A named sign-off approver (marketing content) always sees the task they
   // have to approve, whichever desk they sit on.
-  return sql`(${wall} OR ${sql.raw(alias)}.meta->>'approverId' = ${session.userId})`;
+  return sql`(${wall} OR ${sql.raw(alias)}.meta->>'approverId' = ${session.userId} OR ${isTaskCollaboratorSql(alias, session.userId)}${shared})`;
 }

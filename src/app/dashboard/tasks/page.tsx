@@ -7,7 +7,7 @@ import { withTenant } from "@/db/client";
 import { tasks, users, investors, leads } from "@/db/schema";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
-import { taskScopeSql } from "@/lib/tasks/access";
+import { taskScopeSql, taskMineSql } from "@/lib/tasks/access";
 import { CompactFilterBar } from "@/components/common/CompactFilterBar";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
 import { usersInScopeSql } from "@/lib/auth/data-scope";
@@ -91,7 +91,7 @@ export default async function TasksPage({
     conds.push(scopeFilterSql(scopeSel, session.tenantId, ["tasks.assignee_id", "tasks.created_by_id"]));
 
     // View-tab scope: tasks assigned TO me, or tasks I assigned (created).
-    if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
+    if (view === "to_me") conds.push(taskMineSql("tasks", session.userId));
     else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
     // "Other activity" (bank work, AMC work, BA service…) lives in its own tab;
     // every other view leaves it out so it doesn't mix into client tasks.
@@ -178,6 +178,8 @@ export default async function TasksPage({
         task: tasks,
         assignee: users.name,
         createdBy: taskCreator.name,
+        collaboratorNames: sql<string | null>`(SELECT string_agg(cu.name, ', ' ORDER BY cu.name) FROM users cu
+          WHERE jsonb_exists(COALESCE(${tasks.collaboratorIds}, '[]'::jsonb), cu.id::text))`,
         investorName: investors.name,
         investorAvatarUrl: investors.avatarUrl,
         leadName: leads.name,

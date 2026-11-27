@@ -191,6 +191,8 @@ export const users = pgTable(
      * src/lib/auth/data-scope.ts (loadDelegatedUserIds).
      */
     delegatesFor: jsonb("delegates_for").$type<string[]>(),
+    /** People whose tasks this user sees in All tasks, and who see theirs (migration 0269). */
+    taskTeamIds: jsonb("task_team_ids").$type<string[]>().notNull().default([]),
     customLeaveEntitlements: jsonb("custom_leave_entitlements").$type<Record<string, number>>(),
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     /**

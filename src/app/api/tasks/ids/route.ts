@@ -12,6 +12,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import { tasks, users } from "@/db/schema";
+import { taskMineSql } from "@/lib/tasks/access";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +41,8 @@ export async function GET(req: NextRequest) {
 
     const out = await withTenant(session.tenantId, async (tx) => {
       const conds: any[] = [eq(tasks.tenantId, session.tenantId), isNull(tasks.deletedAt)];
-      if (!canViewAll) conds.push(or(eq(tasks.assigneeId, session.userId), eq(tasks.createdById, session.userId))!);
-      if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
+      if (!canViewAll) conds.push(or(eq(tasks.createdById, session.userId), taskMineSql("tasks", session.userId))!);
+      if (view === "to_me") conds.push(taskMineSql("tasks", session.userId));
       else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
       if (statusFilter.length) conds.push(inArray(tasks.status, statusFilter as any));
       else if (!approval) conds.push(eq(tasks.status, "open"));

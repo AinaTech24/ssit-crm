@@ -60,7 +60,7 @@ export default async function ProposalDetailPage({
   const session = await requireSession();
   const data = await withTenant(session.tenantId, async (tx) => {
     const p = (await tx.select().from(proposals).where(eq(proposals.id, id)).limit(1))[0];
-    if (!p) return null;
+    if (!p || p.deletedAt) return null;
     const u = p.preparedByUserId
       ? (await tx.select().from(users).where(eq(users.id, p.preparedByUserId)).limit(1))[0]
       : null;

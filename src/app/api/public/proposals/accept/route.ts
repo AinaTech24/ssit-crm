@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     try {
       out = await withTenant(tk.tenantId!, async (tx) => {
       const [proposal] = await tx.select().from(proposals).where(eq(proposals.id, tk.subjectId));
-      if (!proposal) throw new Error("Proposal not found");
+      if (!proposal || proposal.deletedAt) throw new Error("Proposal not found");
 
       const approvalId = uuid();
       const now = new Date();

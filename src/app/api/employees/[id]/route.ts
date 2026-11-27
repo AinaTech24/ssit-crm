@@ -96,6 +96,8 @@ const PatchBody = z.object({
   /** Client BOOK tags this user may see. [] / null = no restriction. */
   allowedClientTags: z.array(z.string().max(60)).max(25).nullable().optional(),
   delegatesFor: z.array(z.string().uuid()).nullable().optional(),
+  /** People this person shares tasks with (All tasks shows each other's). */
+  taskTeamIds: z.array(z.string().uuid()).max(50).optional(),
   /** Let this person switch to the firm-admin view (migration 0234). */
   canSwitchAdmin: z.boolean().optional(),
   restrictToOwnRecords: z.boolean().optional(),
@@ -240,6 +242,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (body.allowedBranches !== undefined) patch.allowedBranches = body.allowedBranches;
       if (body.allowedClientTags !== undefined) patch.allowedClientTags = body.allowedClientTags;
       if (body.delegatesFor !== undefined) patch.delegatesFor = body.delegatesFor;
+      if (body.taskTeamIds !== undefined) patch.taskTeamIds = body.taskTeamIds;
       if (body.canSwitchAdmin !== undefined) patch.canSwitchAdmin = body.canSwitchAdmin;
       if (body.restrictToOwnRecords !== undefined) patch.restrictToOwnRecords = body.restrictToOwnRecords;
       if (body.dataScopeOverride !== undefined) patch.dataScopeOverride = body.dataScopeOverride;

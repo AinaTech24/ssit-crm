@@ -56,6 +56,8 @@ export const proposals = pgTable(
       .default("mutual_fund"),
 
     title: text("title").notNull(),
+    /** Set when the proposal is deleted; deleted proposals are not listed or opened (migration 0269). */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     summary: text("summary"),
     coverLetter: text("cover_letter"),
     disclaimer: text("disclaimer"),

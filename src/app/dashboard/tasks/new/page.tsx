@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { InvestorLookup } from "@/components/common/InvestorLookup";
 import { RmSelector } from "@/components/common/RmSelector";
+import { CollaboratorSelect } from "@/components/common/CollaboratorSelect";
 import { SelectField } from "@/components/ui/SelectField";
 import { DEPARTMENTS } from "@/config/departments";
 import { AttachmentPicker, uploadAttachments, MAX_MARKETING_ATTACHMENT_BYTES } from "@/components/common/EntityAttachments";
@@ -114,6 +115,7 @@ export default function NewTaskPage() {
     dueDate: defaultDueDate(3),
     department: "",
     assigneeId: "",
+    collaboratorIds: [] as string[],
     remarks: "",
     requiresApproval: false,
     contentKind: "", // marketing content request: post | reel | carousel | other
@@ -285,6 +287,7 @@ export default function NewTaskPage() {
         dueAt: form.dueDate ? new Date(form.dueDate).toISOString() : undefined,
         department: form.department || undefined,
         assigneeId: form.assigneeId || undefined,
+        collaboratorIds: form.collaboratorIds.length ? form.collaboratorIds : undefined,
         remarks: form.remarks || undefined,
         requiresApproval: form.requiresApproval || undefined,
         contentKind: activityMode ? undefined : form.contentKind || undefined,
@@ -745,6 +748,15 @@ export default function NewTaskPage() {
               placeholder={isMarketing ? "Select the marketing person" : "Assign to myself"}
             />
           </label>
+          {/* Not a <label>: clicking inside one would hit the picker's first button. */}
+          {canAssignOthers !== false && (
+            <div className="block sm:col-span-2">
+              <div className="text-xs font-medium mb-1">
+                Collaborators <span className="ml-1 text-[10px] text-muted-foreground font-normal">· optional - they work the task with the assignee and see it too</span>
+              </div>
+              <CollaboratorSelect values={form.collaboratorIds} onChange={(ids) => set("collaboratorIds", ids)} byDepartment />
+            </div>
+          )}
         </div>
 
         {/* Recurrence (Sanchay "Enable Recurring" parity) */}

@@ -63,6 +63,8 @@ interface TaskRow {
   assignee: string | null;
   /** Creator's name ("assigned by"). */
   createdBy?: string | null;
+  /** Collaborators' names, comma separated. */
+  collaboratorNames?: string | null;
   investorName: string | null;
   investorAvatarUrl?: string | null;
   leadName: string | null;
@@ -566,7 +568,13 @@ export function TaskList({ initialRows, currentUserId, canManageAll = false, ini
                   </div>
                   <div className="w-28 min-w-0">
                     <div className="text-[9px] uppercase tracking-wide text-slate-400 leading-none">Assigned to</div>
-                    <div className="text-xs text-slate-700 font-medium truncate mt-0.5">{assigneeLabel}</div>
+                    <div
+                      className="text-xs text-slate-700 font-medium truncate mt-0.5"
+                      title={row.collaboratorNames ? `${assigneeLabel} with ${row.collaboratorNames}` : assigneeLabel}
+                    >
+                      {assigneeLabel}
+                      {row.collaboratorNames ? <span className="text-muted-foreground"> +{row.collaboratorNames.split(", ").length}</span> : null}
+                    </div>
                   </div>
                 </div>
 

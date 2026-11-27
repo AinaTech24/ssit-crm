@@ -36,7 +36,7 @@ export default async function PublicProposalApprovalPage({ params }: { params: P
     return { tenant: t, proposal: p };
   });
 
-  if (!proposal) return <ErrorScreen message="Proposal not found." />;
+  if (!proposal || proposal.deletedAt) return <ErrorScreen message="Proposal not found." />;
 
   const acceptanceText = String(info.payload?.acceptanceText ?? DEFAULT_ACCEPTANCE_TEXT);
 

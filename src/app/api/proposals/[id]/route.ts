@@ -160,6 +160,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           status: "rejected",
           rejectionReason: before.rejectionReason ?? "deleted",
           rejectedAt: new Date(),
+          deletedAt: new Date(),
           updatedAt: new Date(),
         } as any)
         .where(and(eq(proposals.id, id), eq(proposals.tenantId, session.tenantId)));

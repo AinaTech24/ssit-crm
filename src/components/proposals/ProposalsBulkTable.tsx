@@ -100,7 +100,7 @@ export function ProposalsBulkTable({ rows }: { rows: Row[] }) {
     {
       key: "actions", colKey: "actions", header: "", thClass: "px-4 py-2", tdClass: "px-4 py-3 text-right",
       render: (p) => (
-        <RowActions inline deleteIcon={Ban} editHref={`/dashboard/proposals/${p.id}`} deleteUrl={`/api/proposals/${p.id}`} itemLabel="proposal" itemName={p.proposal_number} verb="Cancel" />
+        <RowActions inline editHref={`/dashboard/proposals/${p.id}`} deleteUrl={`/api/proposals/${p.id}`} itemLabel="proposal" itemName={p.proposal_number} verb="Delete" />
       ),
     },
   ];

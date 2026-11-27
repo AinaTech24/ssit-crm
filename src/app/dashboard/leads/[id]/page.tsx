@@ -132,7 +132,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       tx
         .select()
         .from(proposals)
-        .where(and(eq(proposals.leadId, id)))
+        .where(and(eq(proposals.leadId, id), isNull(proposals.deletedAt)))
         .orderBy(desc(proposals.createdAt))
         .limit(1),
       tx

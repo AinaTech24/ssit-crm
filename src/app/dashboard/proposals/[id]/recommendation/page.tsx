@@ -41,7 +41,7 @@ export default async function RecommendationPage({
         )
       )
       .limit(1);
-    if (!proposal) return null;
+    if (!proposal || proposal.deletedAt) return null;
 
     const rows = await tx
       .select()

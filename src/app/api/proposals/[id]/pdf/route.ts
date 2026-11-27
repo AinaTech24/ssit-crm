@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         .from(proposals)
         .where(and(eq(proposals.id, id), eq(proposals.tenantId, session.tenantId)))
         .limit(1);
-      if (!p) return null;
+      if (!p || p.deletedAt) return null;
       if (!seesAll && !(await canSeeProposal(tx, session, id))) return null;
       const [t] = await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1);
       const [preparer] = p.preparedByUserId

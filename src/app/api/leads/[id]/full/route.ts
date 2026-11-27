@@ -39,7 +39,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           tx.select().from(tasks).where(and(eq(tasks.subjectType, "lead"), eq(tasks.subjectId, id), isNull(tasks.deletedAt))).orderBy(desc(tasks.createdAt)).limit(50),
           tx.select().from(communications).where(eq(communications.leadId, id)).orderBy(desc(communications.createdAt)).limit(50),
           tx.select().from(riskProfileResponses).where(eq(riskProfileResponses.investorId, id)).orderBy(desc(riskProfileResponses.signedAt)).limit(1),
-          tx.select().from(proposals).where(eq(proposals.leadId, id)).orderBy(desc(proposals.createdAt)).limit(1),
+          tx.select().from(proposals).where(and(eq(proposals.leadId, id), isNull(proposals.deletedAt))).orderBy(desc(proposals.createdAt)).limit(1),
         ]);
 
         const daysAsLead = lead.createdAt ? Math.max(0, Math.floor((Date.now() - new Date(lead.createdAt).getTime()) / 86_400_000)) : 0;

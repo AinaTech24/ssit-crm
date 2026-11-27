@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Calendar, User, Sparkles, LifeBuoy, AlertCircle, Trash, Plus, CheckCircle2, ListChecks, Loader2, ShieldCheck, Clock3, Bell, Send, RotateCcw } from "lucide-react";
 import { RmSelector } from "@/components/common/RmSelector";
+import { CollaboratorSelect } from "@/components/common/CollaboratorSelect";
 import { SelectField } from "@/components/ui/SelectField";
 import { DateField } from "@/components/ui/DateField";
 import { useToast } from "@/components/ui/Toast";
@@ -104,6 +105,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
   const [priority, setPriority] = useState(task.priority);
   const [department, setDepartment] = useState(task.department ?? "");
   const [assigneeId, setAssigneeId] = useState(task.assigneeId ?? "");
+  const [collaboratorIds, setCollaboratorIds] = useState<string[]>((task.collaboratorIds as string[] | null) ?? []);
   const [dueDate, setDueDate] = useState(() => {
     if (!task.dueAt) return "";
     return new Date(task.dueAt).toISOString().split("T")[0];
@@ -221,6 +223,7 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
     setPriority(task.priority);
     setDepartment(task.department ?? "");
     setAssigneeId(task.assigneeId ?? "");
+    setCollaboratorIds((task.collaboratorIds as string[] | null) ?? []);
     setDueDate(task.dueAt ? new Date(task.dueAt).toISOString().split("T")[0] : "");
     setSlaDate(task.slaDueAt ? new Date(task.slaDueAt).toISOString().split("T")[0] : "");
     setRemarksHistory(task.remarks ?? "");
@@ -274,6 +277,10 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
       // Only send the reminder when the user changed it (avoids re-arming).
       if (reminderDirty) payload.remindAt = computeRemindAt();
       payload.tags = tags;
+      // Sent only when changed, so saving never needs the "assign others" permission by accident.
+      if (JSON.stringify(collaboratorIds) !== JSON.stringify((task.collaboratorIds as string[] | null) ?? [])) {
+        payload.collaboratorIds = collaboratorIds;
+      }
 
       const res = await fetch(`/api/tasks/${task.id}`, {
         method: "PATCH",
@@ -604,6 +611,11 @@ export function TaskDetailDrawer({ task, currentUserId, canManageAll = false, on
               onChange={(id) => setAssigneeId(id ?? "")}
               placeholder="Unassigned (defaults to creator)"
             />
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Collaborators</div>
+            <CollaboratorSelect values={collaboratorIds} onChange={setCollaboratorIds} byDepartment />
           </div>
 
           <hr className="border-slate-100" />

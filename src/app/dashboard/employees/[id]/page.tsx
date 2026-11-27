@@ -352,6 +352,7 @@ export default async function EmployeeDetailPage({ params }: { params: Promise<{
           allowedClientTags: emp.allowedClientTags ?? null,
           canSwitchAdmin: !!emp.canSwitchAdmin,
           delegatesFor: emp.delegatesFor ?? null,
+          taskTeamIds: emp.taskTeamIds ?? [],
           restrictToOwnRecords: emp.restrictToOwnRecords ?? false,
           dataScopeOverride: (emp.dataScopeOverride ?? null) as "all" | "branch" | "own" | null,
           customLeaveEntitlements: (emp as any).customLeaveEntitlements as Record<string, number> | null,

@@ -24,7 +24,7 @@ export async function GET() {
         const [tasks, meetings, leadFollowUps, activityFollowUps, newTasks, newMeetings, newFollowUps] = await Promise.all([
           tx.execute(sql`
             SELECT id, title, due_at FROM tasks
-             WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${me}::uuid
+             WHERE tenant_id = ${session.tenantId}::uuid AND (assignee_id = ${me}::uuid OR jsonb_exists(COALESCE(collaborator_ids, '[]'::jsonb), ${me}))
                AND status IN ('open', 'in_progress', 'blocked')
                AND due_at IS NOT NULL AND due_at <= now() + interval '2 hours'
              ORDER BY due_at ASC LIMIT 8`),
@@ -58,7 +58,7 @@ export async function GET() {
           // pops up straight away with its title, not only when it falls due.
           tx.execute(sql`
             SELECT id, title, due_at FROM tasks
-             WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${me}::uuid
+             WHERE tenant_id = ${session.tenantId}::uuid AND (assignee_id = ${me}::uuid OR jsonb_exists(COALESCE(collaborator_ids, '[]'::jsonb), ${me}))
                AND status IN ('open', 'in_progress', 'blocked')
                AND created_at >= now() - interval '10 minutes'
              ORDER BY created_at DESC LIMIT 8`),

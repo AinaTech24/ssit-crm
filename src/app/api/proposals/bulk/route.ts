@@ -18,6 +18,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { proposals } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -47,9 +48,17 @@ export async function POST(req: NextRequest) {
           status: "rejected",
           rejectionReason: "deleted",
           rejectedAt: new Date(),
+          deletedAt: new Date(),
           updatedAt: new Date(),
         } as any)
-        .where(and(eq(proposals.tenantId, session.tenantId), inArray(proposals.id, ids)))
+        // Only proposals inside the caller's own wall, as when deleting one.
+        .where(
+          and(
+            eq(proposals.tenantId, session.tenantId),
+            inArray(proposals.id, ids),
+            await dataScopeSqlFor(tx, session, { branch: "proposals.branch_id", owner: "proposals.prepared_by_user_id" })
+          )
+        )
         .returning({ id: proposals.id });
 
       await recordAudit(tx, {

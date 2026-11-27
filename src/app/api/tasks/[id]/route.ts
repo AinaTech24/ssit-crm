@@ -19,13 +19,14 @@ import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications/create";
 import { spawnNextOccurrence } from "@/lib/tasks/recurrence";
 import { notifyWatchers } from "@/lib/tasks/watchers";
+import { taskTeamIds } from "@/lib/tasks/access";
 import { tasks, users, taskChecklist } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
-/** A view.assigned/edit.assigned user may only touch tasks they own. */
-function ownsTask(task: { assigneeId: string | null; createdById: string | null }, userId: string): boolean {
-  return task.assigneeId === userId || task.createdById === userId;
+/** A view.assigned/edit.assigned user may only touch tasks they own or work on as a collaborator. */
+function ownsTask(task: { assigneeId: string | null; createdById: string | null; collaboratorIds?: unknown }, userId: string): boolean {
+  return task.assigneeId === userId || task.createdById === userId || (Array.isArray(task.collaboratorIds) && task.collaboratorIds.includes(userId));
 }
 
 /** True if the user is delegated any sub-task on this task — grants them read +
@@ -40,6 +41,8 @@ const Patch = z.object({
   status: z.enum(["open", "in_progress", "blocked", "completed", "cancelled"]).optional(),
   priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
   assigneeId: z.string().uuid().optional(),
+  /** Full replacement of the collaborator list. */
+  collaboratorIds: z.array(z.string().uuid()).max(20).optional(),
   dueAt: z.string().optional(),
   slaDueAt: z.string().nullable().optional(),
   // Module 18 — explicit related entity + department + remarks
@@ -116,7 +119,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // Assigned-only viewers can't read other people's tasks — unless a sub-task
     // is delegated to them (then they may open + update the parent task).
     if (!canViewAll && !ownsTask(row, session.userId) && !isSubtaskAssignee(row, session.userId)) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      // People who share tasks may open each other's.
+      const team = await withTenant(session.tenantId, (tx) => taskTeamIds(tx, session.tenantId, session.userId));
+      if (!team.includes(row.assigneeId ?? "") && !team.includes(row.createdById ?? "")) {
+        return NextResponse.json({ error: "not found" }, { status: 404 });
+      }
     }
     return NextResponse.json(row);
   } catch (err: any) {
@@ -178,6 +185,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (checklist !== undefined) {
         patch.meta = { ...((before.meta as Record<string, unknown>) ?? {}), checklist };
       }
+      // Collaborators: people of this firm; changing them takes the same permission as assigning others.
+      if (parse.data.collaboratorIds !== undefined) {
+        const next = [...new Set(parse.data.collaboratorIds)];
+        const had = (before.collaboratorIds ?? []) as string[];
+        const changed = next.length !== had.length || next.some((c) => !had.includes(c));
+        if (changed && !can(session.roles, "task.assign.others", session.permissions) && next.some((c) => c !== session.userId && !had.includes(c))) {
+          return { forbidden: true as const };
+        }
+        if (next.length) {
+          const found = await tx
+            .select({ id: users.id })
+            .from(users)
+            .where(and(inArray(users.id, next), eq(users.tenantId, session.tenantId)));
+          if (found.length !== next.length) return { badAssignee: true as const };
+        }
+        patch.collaboratorIds = next;
+        for (const c of next) {
+          if (had.includes(c) || c === session.userId) continue;
+          await createNotification(tx, {
+            tenantId: session.tenantId,
+            userId: c,
+            kind: "task.assigned",
+            title: `New task: ${before.title}`,
+            body: "You were added to this task as a collaborator",
+            linkUrl: "/dashboard/tasks?view=to_me",
+            severity: "info",
+            meta: { task_id: id, assigned_by: session.userId, collaborator: true },
+          });
+        }
+      }
+
       // A reassignment target must be a user in this tenant.
       if (parse.data.assigneeId !== undefined) {
         const [u] = await tx
@@ -483,7 +521,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         .where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)))
         .limit(1))[0];
       if (!before) return "not_found" as const;
-      if (!canEditAll && !ownsTask(before, session.userId)) return "forbidden" as const;
+      // Deleting stays with whoever raised or holds the task, not its collaborators.
+      if (!canEditAll && before.assigneeId !== session.userId && before.createdById !== session.userId) return "forbidden" as const;
       if (permanent) {
         await tx.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.tenantId, session.tenantId)));
       } else {

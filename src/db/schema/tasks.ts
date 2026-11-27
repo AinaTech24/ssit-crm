@@ -122,6 +122,8 @@ export const tasks = pgTable(
     workflowStepId: text("workflow_step_id"),
 
     meta: jsonb("meta").$type<Record<string, unknown>>(),
+    /** Colleagues working this task with the assignee (migration 0269). */
+    collaboratorIds: jsonb("collaborator_ids").$type<string[]>().notNull().default([]),
     tags: jsonb("tags").$type<string[]>().default([]),
     ...timestamps,
   },

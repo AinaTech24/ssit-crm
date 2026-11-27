@@ -107,6 +107,7 @@ export type EmployeeFormValues = {
   allowedClientTags: string[] | null;
   canSwitchAdmin: boolean;
   delegatesFor: string[] | null;
+  taskTeamIds?: string[] | null;
   restrictToOwnRecords: boolean;
   dataScopeOverride: "all" | "branch" | "own" | null;
   customLeaveEntitlements: Partial<Record<string, number>> | null;
@@ -149,6 +150,8 @@ export function EmployeeEditForm({
   // Which client BOOKS this person handles. Empty = no restriction.
   const [bookTags, setBookTags] = useState<string[]>(employee.allowedClientTags ?? []);
   const [delegatesFor, setDelegatesFor] = useState<string[]>(employee.delegatesFor ?? []);
+  const [taskTeam, setTaskTeam] = useState<string[]>(employee.taskTeamIds ?? []);
+  const taskTeamSaved = useRef<string[]>(employee.taskTeamIds ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -437,6 +440,7 @@ export function EmployeeEditForm({
       for (const k of Object.keys(next) as (keyof typeof next)[]) {
         if (JSON.stringify(next[k]) !== JSON.stringify(prev[k])) body[k] = next[k];
       }
+      if (JSON.stringify(taskTeam) !== JSON.stringify(taskTeamSaved.current)) body.taskTeamIds = taskTeam;
       const r = await fetch(`/api/employees/${employee.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -456,6 +460,7 @@ export function EmployeeEditForm({
         throw new Error(fields ? `${base} — check: ${fields}` : base);
       }
       initialRef.current = { v, customActive, moduleAccessActive, branchAccess, bookTags, delegatesFor };
+      taskTeamSaved.current = taskTeam;
       setSaved(true);
       router.refresh();
     } catch (err: any) {
@@ -916,6 +921,41 @@ export function EmployeeEditForm({
                 </div>
               </>
             )}
+          </div>
+
+          {/* ---- Shared tasks ---- */}
+          <div className="border rounded-lg p-4 bg-secondary/10 space-y-3">
+            <div>
+              <div className="text-xs font-semibold">Shares Tasks With</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                Tick colleagues who work one pool of tasks with this person (for example the MF back office). Each of them sees
+                the others&apos; tasks under All tasks. &ldquo;Assigned to me&rdquo; and &ldquo;Assigned by me&rdquo; stay personal.
+                Setting it on one person is enough - it works both ways.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {teammates.map((t) => {
+                const on = taskTeam.includes(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className={`flex items-center gap-1.5 text-xs border rounded-md px-2.5 py-1.5 cursor-pointer transition-colors ${
+                      on ? "bg-primary/10 border-primary/40 font-medium" : "bg-card hover:bg-accent/40"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={(e) => {
+                        setTaskTeam((prev) => (e.target.checked ? [...prev, t.id] : prev.filter((x) => x !== t.id)));
+                        setSaved(false);
+                      }}
+                    />
+                    <span>{t.name}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           <div className="border rounded-lg p-4 bg-secondary/10 space-y-3">

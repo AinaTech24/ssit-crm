@@ -32,7 +32,8 @@ export async function proposalVisibleSql(tx: any, session: SessionUser, alias = 
   } catch {
     leadWall = sql`vl.owner_id = ${session.userId}::uuid`;
   }
-  return sql`(
+  // A deleted proposal is visible to nobody.
+  return sql`${a}.deleted_at IS NULL AND (
     ${prepared}
     OR EXISTS (SELECT 1 FROM investors vi WHERE vi.id = ${a}.investor_id AND ${clientWall})
     OR EXISTS (SELECT 1 FROM leads vl WHERE vl.id = ${a}.lead_id AND ${leadWall})

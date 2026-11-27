@@ -53,7 +53,7 @@ export default async function ProposalPrintPage({
     const p = (
       await tx.select().from(proposals).where(eq(proposals.id, id)).limit(1)
     )[0];
-    if (!p) return null;
+    if (!p || p.deletedAt) return null;
     const tenant = (
       await tx.select().from(tenants).where(eq(tenants.id, session.tenantId)).limit(1)
     )[0];

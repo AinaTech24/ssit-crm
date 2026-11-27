@@ -7,7 +7,7 @@ import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
-import { taskScopeSql } from "@/lib/tasks/access";
+import { taskScopeSql, taskMineSql } from "@/lib/tasks/access";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications/create";
@@ -47,6 +47,8 @@ const Body = z.object({
    *  column. Defaults to 'open' for the normal create flow. */
   status: z.enum(["open", "in_progress", "blocked", "completed", "cancelled"]).default("open"),
   assigneeId: z.string().uuid().optional(),
+  /** Colleagues working the task with the assignee. */
+  collaboratorIds: z.array(z.string().uuid()).max(20).optional(),
   dueAt: z.string().optional(),
   /** Recurrence — null/omitted = one-off. */
   recurrence: z.enum(["daily", "weekly", "monthly", "quarterly", "yearly"]).optional(),
@@ -132,7 +134,7 @@ export async function GET(req: NextRequest) {
         // branch_head, so trusting it alone showed every sub-branch head the
         // whole firm's tasks — including the other sub-branches'.
         conds.push(await taskScopeSql(tx, session));
-        if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
+        if (view === "to_me") conds.push(taskMineSql("tasks", session.userId));
         else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
         // Kanban shows every status; the list defaults to open when no status
         // filter — UNLESS an approval filter is active (pending-approval tasks
@@ -233,7 +235,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const collaboratorIds = [...new Set(body.collaboratorIds ?? [])].filter((c) => c !== assigneeId);
+    if (!canAssignOthers && collaboratorIds.some((c) => c !== session.userId)) {
+      return NextResponse.json({ error: "You do not have permission to add other people to a task." }, { status: 403 });
+    }
+
     await withTenant(session.tenantId, async (tx) => {
+      if (collaboratorIds.length) {
+        const found = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(and(inArray(users.id, collaboratorIds), eq(users.tenantId, session.tenantId)));
+        if (found.length !== collaboratorIds.length) throw Object.assign(new Error("a collaborator was not found in this firm"), { status: 400 });
+      }
       // Assignee must be a user in THIS tenant (the FK allows any tenant's user).
       const [u] = await tx
         .select({ id: users.id, roles: users.roles })
@@ -285,6 +299,7 @@ export async function POST(req: NextRequest) {
         priority: body.priority,
         status: body.status,
         assigneeId,
+        collaboratorIds,
         createdById: session.userId,
         dueAt: body.dueAt ? new Date(body.dueAt) : null,
         slaDueAt,
@@ -330,6 +345,21 @@ export async function POST(req: NextRequest) {
         after: { title: body.title, type: body.type, assigneeId, priority: body.priority } as any,
         ...meta,
       });
+
+      // Collaborators hear about it too - the same "New task" pop-up.
+      for (const c of collaboratorIds) {
+        if (c === session.userId) continue;
+        await createNotification(tx, {
+          tenantId: session.tenantId,
+          userId: c,
+          kind: "task.assigned",
+          title: `New task: ${body.title}`,
+          body: "You were added to this task as a collaborator",
+          linkUrl: "/dashboard/tasks?view=to_me",
+          severity: "info",
+          meta: { task_id: id, assigned_by: session.userId, collaborator: true },
+        });
+      }
 
       // Notify the assignee when someone *else* assigns them a task (no self-ping).
       if (assigneeId !== session.userId) {

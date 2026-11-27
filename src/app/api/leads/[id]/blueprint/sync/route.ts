@@ -13,7 +13,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import {
   riskProfileResponses,
@@ -83,7 +83,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       const [leadProposal] = await tx
         .select()
         .from(proposals)
-        .where(eq(proposals.leadId, id))
+        .where(and(eq(proposals.leadId, id), isNull(proposals.deletedAt)))
         .orderBy(desc(proposals.createdAt))
         .limit(1);
       if (leadProposal) {

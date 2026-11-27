@@ -73,7 +73,7 @@ export async function GET(
           )
         )
         .limit(1);
-      if (!proposal) return null;
+      if (!proposal || proposal.deletedAt) return null;
       const rows = await tx
         .select()
         .from(proposalSchemes)
@@ -115,7 +115,7 @@ export async function PUT(
           )
         )
         .limit(1);
-      if (!proposal) throw new Error("proposal not found");
+      if (!proposal || proposal.deletedAt) throw new Error("proposal not found");
 
       const existing = await tx
         .select()

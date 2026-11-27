@@ -162,7 +162,7 @@ const hasRiskProfileResponse: RuleFn = async (tx, _tenantId, leadId) => {
 
 const hasProposalDraft: RuleFn = async (tx, _tenantId, leadId) => {
   const r = await tx.execute(sql`
-    SELECT COUNT(*)::int AS c FROM proposals WHERE lead_id = ${leadId}::uuid
+    SELECT COUNT(*)::int AS c FROM proposals WHERE lead_id = ${leadId}::uuid AND deleted_at IS NULL
   `);
   const c = (r.rows[0] as any)?.c ?? 0;
   return {
@@ -176,7 +176,7 @@ const hasProposalDraft: RuleFn = async (tx, _tenantId, leadId) => {
 const hasProposalSent: RuleFn = async (tx, _tenantId, leadId) => {
   const r = await tx.execute(sql`
     SELECT COUNT(*)::int AS c FROM proposals
-    WHERE lead_id = ${leadId}::uuid AND status IN ('sent', 'viewed', 'accepted')
+    WHERE lead_id = ${leadId}::uuid AND deleted_at IS NULL AND status IN ('sent', 'viewed', 'accepted')
   `);
   const c = (r.rows[0] as any)?.c ?? 0;
   return {

@@ -12,6 +12,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import { tasks, users } from "@/db/schema";
+import { taskMineSql, taskScopeSql } from "@/lib/tasks/access";
 import { taskKpiSelect, normalizeTaskKpis } from "@/lib/tasks/kpis";
 
 export const dynamic = "force-dynamic";
@@ -39,8 +40,9 @@ export async function GET(req: NextRequest) {
       session.tenantId,
       async (tx) => {
         const conds: any[] = [eq(tasks.tenantId, session.tenantId), isNull(tasks.deletedAt)];
-        if (!canViewAll) conds.push(or(eq(tasks.assigneeId, session.userId), eq(tasks.createdById, session.userId))!);
-        if (view === "to_me") conds.push(eq(tasks.assigneeId, session.userId));
+        // Own, collaborated and shared-team tasks - the same set the list shows.
+        if (!canViewAll) conds.push(await taskScopeSql(tx, session));
+        if (view === "to_me") conds.push(taskMineSql("tasks", session.userId));
         else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
         if (q) conds.push(or(ilike(tasks.title, `%${q}%`), ilike(tasks.description, `%${q}%`), ilike(users.name, `%${q}%`))!);
         if (priorityFilter.length) conds.push(inArray(tasks.priority, priorityFilter as any));
