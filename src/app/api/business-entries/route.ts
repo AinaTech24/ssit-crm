@@ -18,6 +18,7 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { businessEntries, businessEntryLines, investors, users, sips, eventsOutbox } from "@/db/schema";
 import { EntryInput, normalizeLine, computeTotals } from "@/lib/business/entry-input";
+import { syncCobFollowUp } from "@/lib/business/cob";
 
 export const dynamic = "force-dynamic";
 
@@ -157,6 +158,9 @@ export async function POST(req: NextRequest) {
           sortOrder: i,
         })) as any
       );
+
+      // A change-of-broker line gets its 12-day check.
+      await syncCobFollowUp(tx, session.tenantId, entryId);
 
       // Auto-register a SIP in the SIP book for every SIP line on a real client,
       // so it shows in the SIP Tracker AND its installment day drives the

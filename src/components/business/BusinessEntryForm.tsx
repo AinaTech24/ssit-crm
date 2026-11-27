@@ -43,18 +43,18 @@ interface ProductConfig {
 }
 const PRODUCT_CONFIG: Record<string, ProductConfig> = {
   mutual_fund: { schemeLabel: "Scheme", schemePlaceholder: "Search catalog or type a name…", catalog: true,
-    txnTypes: ["lumpsum", "additional_purchase", "sip", "sip_topup", "sip_stop", "switch", "stp", "swp", "redemption", "other"] },
+    txnTypes: ["lumpsum", "additional_purchase", "sip", "sip_topup", "sip_stop", "switch", "stp", "swp", "redemption", "cob", "other"] },
   // Direct Equity is bought/sold, not SIP'd/switched — show Buy/Sell, not the MF set.
   direct_equity: { schemeLabel: "Stock / scrip", schemePlaceholder: "Stock name or symbol (e.g. RELIANCE)…", catalog: false,
     txnTypes: ["lumpsum", "additional_purchase", "redemption", "other"],
     txnLabels: { lumpsum: "Buy", additional_purchase: "Buy (add-on)", redemption: "Sell" },
     defaultAssetClass: "equity" },
   pms: { schemeLabel: "Strategy", schemePlaceholder: "PMS strategy name…", catalog: false,
-    txnTypes: ["lumpsum", "additional_purchase", "redemption", "other"], defaultAssetClass: "equity" },
+    txnTypes: ["lumpsum", "additional_purchase", "redemption", "cob", "other"], defaultAssetClass: "equity" },
   aif: { schemeLabel: "Scheme / fund", schemePlaceholder: "AIF scheme name…", catalog: false,
-    txnTypes: ["lumpsum", "additional_purchase", "redemption", "other"], defaultAssetClass: "other" },
+    txnTypes: ["lumpsum", "additional_purchase", "redemption", "cob", "other"], defaultAssetClass: "other" },
   sif: { schemeLabel: "Strategy", schemePlaceholder: "SIF strategy name…", catalog: false,
-    txnTypes: ["lumpsum", "additional_purchase", "sip", "sip_topup", "sip_stop", "redemption", "other"], defaultAssetClass: "equity" },
+    txnTypes: ["lumpsum", "additional_purchase", "sip", "sip_topup", "sip_stop", "redemption", "cob", "other"], defaultAssetClass: "equity" },
   bond: { schemeLabel: "Bond / instrument", schemePlaceholder: "Bond name / ISIN…", catalog: false,
     txnTypes: ["lumpsum", "redemption", "other"], defaultAssetClass: "debt", lockAssetClass: true },
   ncd: { schemeLabel: "NCD / instrument", schemePlaceholder: "NCD name / ISIN…", catalog: false,
@@ -64,13 +64,14 @@ const PRODUCT_CONFIG: Record<string, ProductConfig> = {
   las: { schemeLabel: "Facility", schemePlaceholder: "Loan-against-securities facility…", catalog: false,
     txnTypes: ["lumpsum", "redemption", "other"], defaultAssetClass: "other" },
   other: { schemeLabel: "Item", schemePlaceholder: "Product / item name…", catalog: false,
-    txnTypes: ["lumpsum", "additional_purchase", "sip", "sip_topup", "sip_stop", "redemption", "other"] },
+    txnTypes: ["lumpsum", "additional_purchase", "sip", "sip_topup", "sip_stop", "redemption", "cob", "other"] },
 };
 const productCfg = (pt: string): ProductConfig => PRODUCT_CONFIG[pt] ?? PRODUCT_CONFIG.mutual_fund;
 const TXN_OPTS: [string, string][] = [
   ["lumpsum", "Lumpsum"], ["additional_purchase", "Additional Purchase"], ["sip", "SIP"],
   ["sip_topup", "SIP Top-Up"], ["sip_stop", "SIP Stop"], ["other", "Others"],
   ["switch", "Switch"], ["stp", "STP"], ["swp", "SWP"], ["redemption", "Redemption"],
+  ["cob", "COB (Change of Broker)"],
 ];
 const FREQ_OPTS: [string, string][] = [
   ["one_time", "One-time"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["quarterly", "Quarterly"], ["half_yearly", "Half-yearly"], ["yearly", "Yearly"],
@@ -238,7 +239,8 @@ export function BusinessEntryForm({
 
   async function save() {
     if (!clientName.trim()) { toast.error("Pick or enter a client", "Missing client"); return; }
-    const cleaned = lines.filter((l) => l.schemeName.trim() && Number(l.amount) > 0);
+    // A change of broker is kept even without an amount.
+    const cleaned = lines.filter((l) => l.schemeName.trim() && (Number(l.amount) > 0 || l.txnType === "cob"));
     if (cleaned.length === 0) { toast.error("Add at least one scheme with an amount", "No schemes"); return; }
     setBusy(true);
     try {

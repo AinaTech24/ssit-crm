@@ -33,9 +33,11 @@ import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-sc
  *   branches → the same, one level up
  *   own      → assigned to me, or created by me (unchanged for RMs)
  *
- * On top of that, people who "share tasks" with each other (users.task_team_ids) see one
- * another's tasks in the All view. The Assigned-to-me / Assigned-by-me views filter to the
- * person afterwards, so those stay personal.
+ * People who "share tasks" with each other (users.task_team_ids) are a closed pool: each sees
+ * their own tasks and the others' - NOT the rest of the department or firm, even though a back
+ * office role would otherwise see everything. (The owner and branch heads keep their wider view
+ * and simply see the pool as part of it.) The Assigned-to-me / Assigned-by-me views filter to
+ * the person afterwards, so those stay personal.
  */
 
 export function requireTaskView(session: SessionUser) {
@@ -83,5 +85,11 @@ export async function taskScopeSql(tx: Tx, session: SessionUser, alias = "tasks"
     : sql``;
   // A named sign-off approver (marketing content) always sees the task they
   // have to approve, whichever desk they sit on.
-  return sql`(${wall} OR ${sql.raw(alias)}.meta->>'approverId' = ${session.userId} OR ${isTaskCollaboratorSql(alias, session.userId)}${shared})`;
+  const approver = sql`${sql.raw(alias)}.meta->>'approverId' = ${session.userId}`;
+  const collab = isTaskCollaboratorSql(alias, session.userId);
+  // In a shared pool: own + the pool's, instead of the role's wider wall.
+  if (team.length && !session.roles.some((r) => r === "owner" || r === "branch_head")) {
+    return sql`(${sql.raw(alias)}.assignee_id = ${session.userId}::uuid OR ${sql.raw(alias)}.created_by_id = ${session.userId}::uuid OR ${approver} OR ${collab}${shared})`;
+  }
+  return sql`(${wall} OR ${approver} OR ${collab}${shared})`;
 }

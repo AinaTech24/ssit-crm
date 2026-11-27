@@ -23,6 +23,7 @@ export function ImportWizard({
   commitUrl,
   requiredOurFields,
   welcomePrompt,
+  sampleUrl,
 }: {
   entityLabel: string;
   backHref: string;
@@ -37,6 +38,8 @@ export function ImportWizard({
    * decision rather than a default.
    */
   welcomePrompt?: { label: string; hint: string };
+  /** A sample Excel the person can download, fill in and upload. */
+  sampleUrl?: string;
 }) {
   const router = useRouter();
   const [parsed, setParsed] = useState<any>(null);
@@ -136,6 +139,11 @@ export function ImportWizard({
           <p className="text-xs text-muted-foreground mt-6">
             Required columns: {requiredOurFields.join(", ")}.
           </p>
+          {sampleUrl && (
+            <a href={sampleUrl} download className="mt-3 inline-block text-xs font-medium text-brand-cyan hover:underline">
+              Download sample Excel - fill it in and upload it here
+            </a>
+          )}
         </div>
       )}
 
@@ -240,6 +248,7 @@ export function ImportWizard({
               </ul>
             </details>
           )}
+          {commitResult.note && <p className="mt-4 text-sm text-muted-foreground">{commitResult.note}</p>}
           <button
             onClick={() => router.push(backHref)}
             className="mt-6 rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium"

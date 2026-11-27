@@ -18,7 +18,7 @@ import { Bell, CalendarClock, CheckSquare, PhoneCall, X } from "lucide-react";
 
 type Popup = {
   key: string;
-  kind: "task" | "meeting" | "followup" | "notice";
+  kind: "task" | "meeting" | "followup" | "notice" | "cob";
   /** Just created, rather than coming due. */
   fresh?: boolean;
   title: string;
@@ -50,15 +50,16 @@ function saveSeen(seen: Set<string>) {
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" });
 
-const ICON = { task: CheckSquare, meeting: CalendarClock, followup: PhoneCall, notice: Bell } as const;
-const LABEL = { task: "Task due", meeting: "Meeting soon", followup: "Follow-up due", notice: "Update" } as const;
+const ICON = { task: CheckSquare, meeting: CalendarClock, followup: PhoneCall, notice: Bell, cob: Bell } as const;
+const LABEL = { task: "Task due", meeting: "Meeting soon", followup: "Follow-up due", notice: "Update", cob: "COB check due" } as const;
 // One theme token for every kind — the icon already says which kind it is.
-const FRESH_LABEL = { task: "New task", meeting: "New meeting", followup: "New follow-up", notice: "Update" } as const;
+const FRESH_LABEL = { task: "New task", meeting: "New meeting", followup: "New follow-up", notice: "Update", cob: "COB check due" } as const;
 const TONE = {
   task: "text-primary",
   meeting: "text-primary",
   followup: "text-primary",
   notice: "text-primary",
+  cob: "text-primary",
 } as const;
 
 export function PopupAlerts() {
@@ -81,6 +82,16 @@ export function PopupAlerts() {
         noticesOnly ? null : fetch("/api/reminders", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
         fetch("/api/notifications?unreadOnly=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
       ]);
+      // Change of broker waiting for a Yes / No - comes back each day until answered.
+      for (const c of rem?.cobDue ?? []) {
+        found.push({
+          key: `cob-${c.id}`,
+          kind: "cob",
+          title: c.client_name,
+          detail: "This client's change of broker: is it done? Open and answer Yes or No.",
+          href: `/dashboard/business-entries/${c.id}`,
+        });
+      }
       for (const t of rem?.newTasks ?? []) {
         found.push({
           key: `task-new-${t.id}`,
@@ -147,6 +158,7 @@ export function PopupAlerts() {
       for (const n of notif?.notifications ?? []) {
         if (n.readAt || Date.now() - new Date(n.createdAt).getTime() > 15 * 60_000) continue;
         if (n.kind === "birthday_today") continue;
+        if (n.kind === "business.cob_due" && (rem?.cobDue ?? []).some((c: any) => String(n.linkUrl ?? "").endsWith(String(c.id)))) continue;
         // The "New meeting" card already covers an invitation to a meeting that was just created.
         if (n.kind === "meeting.invited" && (rem?.newMeetings ?? []).some((x: any) => String(n.linkUrl ?? "").endsWith(String(x.id)))) continue;
         found.push({

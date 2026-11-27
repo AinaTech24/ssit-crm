@@ -31,7 +31,7 @@ const KYC_LABEL: Record<string, string> = {
 };
 
 const TXN_LABEL: Record<string, string> = {
-  sip: "SIP", sip_topup: "SIP Top-Up", sip_stop: "SIP Stop", lumpsum: "Lumpsum", additional_purchase: "Add'l Purchase",
+  sip: "SIP", sip_topup: "SIP Top-Up", sip_stop: "SIP Stop", lumpsum: "Lumpsum", additional_purchase: "Add'l Purchase", cob: "COB",
   switch: "Switch", stp: "STP", swp: "SWP", redemption: "Redemption", other: "Others",
 };
 const STATUS_TONE: Record<string, string> = {

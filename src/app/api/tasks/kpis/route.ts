@@ -40,8 +40,8 @@ export async function GET(req: NextRequest) {
       session.tenantId,
       async (tx) => {
         const conds: any[] = [eq(tasks.tenantId, session.tenantId), isNull(tasks.deletedAt)];
-        // Own, collaborated and shared-team tasks - the same set the list shows.
-        if (!canViewAll) conds.push(await taskScopeSql(tx, session));
+        // The same set the list shows (the data wall / shared pool).
+        conds.push(await taskScopeSql(tx, session));
         if (view === "to_me") conds.push(taskMineSql("tasks", session.userId));
         else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));
         if (q) conds.push(or(ilike(tasks.title, `%${q}%`), ilike(tasks.description, `%${q}%`), ilike(users.name, `%${q}%`))!);

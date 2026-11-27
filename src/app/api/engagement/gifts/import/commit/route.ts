@@ -25,7 +25,8 @@ import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { investorScopeSql } from "@/lib/investors/access";
-import { GIFT_CATEGORIES, isValidGrade } from "@/lib/gifts/catalogue";
+import { GIFT_CATEGORIES, giftLabel, isValidGrade } from "@/lib/gifts/catalogue";
+import { nameKey, parseSheetDate } from "@/lib/gifts/import";
 
 export const dynamic = "force-dynamic";
 
@@ -34,31 +35,7 @@ const Body = z.object({
   rows: z.array(z.record(z.string(), z.any())).max(5000),
 });
 
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const OCCASIONS = new Set(["birthday", "anniversary", "festival", "other"]);
-
-function toISODate(v: unknown): string | null {
-  if (!v) return null;
-  if (v instanceof Date && !isNaN(v.getTime())) {
-    return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
-  }
-  const s = String(v).trim();
-  if (!s) return null;
-  if (ISO.test(s)) return s;
-  // dd/mm/yyyy and dd-mm-yyyy — how an Indian firm's sheet is written.
-  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (m) {
-    const [, d, mo, y] = m;
-    const dd = Number(d);
-    const mm = Number(mo);
-    if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return null;
-    return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
-  }
-  const parsed = new Date(s);
-  return isNaN(parsed.getTime())
-    ? null
-    : `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -104,12 +81,14 @@ export async function POST(req: NextRequest) {
         const entry = { id: String(c.id), rmId: c.rm_id ? String(c.rm_id) : null };
         if (c.pan) byPan.set(c.pan.trim().toUpperCase(), entry);
         if (c.name) {
-          const key = c.name.trim().toLowerCase();
+          const key = nameKey(c.name);
           byName.set(key, byName.has(key) ? "ambiguous" : entry);
         }
       }
 
       let inserted = 0;
+      // Which months the gifts landed in - the board shows one month at a time.
+      const months = new Map<string, number>();
       const errors: { rowIndex: number; error: string }[] = [];
 
       for (let i = 0; i < rows.length; i++) {
@@ -119,7 +98,7 @@ export async function POST(req: NextRequest) {
           errors.push({ rowIndex: i, error: "client is blank" });
           continue;
         }
-        const match = byPan.get(who.toUpperCase()) ?? byName.get(who.toLowerCase());
+        const match = byPan.get(who.toUpperCase()) ?? byName.get(nameKey(who));
         if (!match) {
           errors.push({ rowIndex: i, error: `no client of yours matches "${who}"` });
           continue;
@@ -129,15 +108,19 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const givenOn = toISODate(pickRaw(row, "givenOn"));
+        const givenOn = parseSheetDate(pickRaw(row, "givenOn"));
         if (!givenOn) {
-          errors.push({ rowIndex: i, error: "given-on date is missing or not a date" });
+          errors.push({ rowIndex: i, error: "given-on date is missing or not a date (write it day first, e.g. 27-11-2026)" });
           continue;
         }
-        const deliveredOn = toISODate(pickRaw(row, "deliveredOn"));
+        const deliveredOn = parseSheetDate(pickRaw(row, "deliveredOn"));
 
-        const categoryRaw = pick(row, "category").toLowerCase();
-        const category = (GIFT_CATEGORIES as readonly string[]).includes(categoryRaw) ? categoryRaw : null;
+        // A category the list does not have is kept as "Other" with that text.
+        const typed = pick(row, "category");
+        const categoryRaw = typed.toLowerCase();
+        const known = (GIFT_CATEGORIES as readonly string[]).includes(categoryRaw);
+        const category = known ? categoryRaw : typed ? "other" : null;
+        const categoryOther = category === "other" ? (known ? pick(row, "title") : typed).slice(0, 60) || null : null;
         const gradeRaw = pick(row, "grade").toUpperCase();
         const grade = category && isValidGrade(category, gradeRaw) ? gradeRaw : null;
 
@@ -149,22 +132,26 @@ export async function POST(req: NextRequest) {
 
         // Title is what the log reads as; fall back to the catalogue pair so a
         // sheet with only category+grade still produces a legible row.
-        const title =
-          pick(row, "title") || (category ? `${category}${grade ? ` · ${grade}` : ""}` : "Gift");
+        const title = pick(row, "title") || (category ? giftLabel(category, grade, categoryOther) : "Gift");
 
         try {
-          await tx.execute(sql`
-            INSERT INTO client_gifts
-              (id, tenant_id, investor_id, rm_id, category, grade, occasion, title,
-               amount, given_on, delivered_on, notes, created_by, created_at, updated_at)
-            VALUES (
-              ${uuid()}, ${session.tenantId}::uuid, ${match.id}::uuid, ${match.rmId}::uuid,
-              ${category}, ${grade}, ${occasion}, ${title},
-              ${amount}, ${givenOn}::date, ${deliveredOn}::date,
-              ${pick(row, "notes") || null}, ${session.userId}::uuid, now(), now()
-            )
-          `);
+          // Its own savepoint: one bad row must not undo the whole upload.
+          await tx.transaction(async (sp) => {
+            await sp.execute(sql`
+              INSERT INTO client_gifts
+                (id, tenant_id, investor_id, rm_id, category, category_other, grade, occasion, title,
+                 amount, given_on, delivered_on, notes, created_by, created_at, updated_at)
+              VALUES (
+                ${uuid()}, ${session.tenantId}::uuid, ${match.id}::uuid, ${match.rmId}::uuid,
+                ${category}, ${categoryOther}, ${grade}, ${occasion}, ${title},
+                ${amount}, ${givenOn}::date, ${deliveredOn}::date,
+                ${pick(row, "notes") || null}, ${session.userId}::uuid, now(), now()
+              )
+            `);
+          });
           inserted++;
+          const month = givenOn.slice(0, 7);
+          months.set(month, (months.get(month) ?? 0) + 1);
         } catch (err: any) {
           errors.push({ rowIndex: i, error: String(err?.message ?? "insert failed") });
         }
@@ -180,10 +167,20 @@ export async function POST(req: NextRequest) {
         ...clientMeta,
       });
 
-      return { inserted, errors };
+      return { inserted, errors, months: [...months.entries()].sort() };
     });
 
-    return NextResponse.json({ inserted: result.inserted, skipped: 0, errors: result.errors });
+    const where = result.months
+      .map(([m, n]) => `${new Date(`${m}-01T00:00:00Z`).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" })}: ${n}`)
+      .join(", ");
+    return NextResponse.json({
+      inserted: result.inserted,
+      skipped: 0,
+      errored: result.errors.length,
+      // Sheet row numbers: row 1 is the heading.
+      errors: result.errors.map((e) => ({ ...e, rowIndex: e.rowIndex + 2 })),
+      note: where ? `Added by month - ${where}. Use the month arrows on the engagement calendar to see them.` : "Nothing was added - see the errors below.",
+    });
   } catch (err: any) {
     return handleApiError(err);
   }

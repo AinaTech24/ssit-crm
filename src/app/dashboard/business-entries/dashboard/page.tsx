@@ -17,7 +17,7 @@ const PRODUCT_LABEL: Record<string, string> = {
   mutual_fund: "Mutual Fund", direct_equity: "Direct Equity", pms: "PMS", aif: "AIF", sif: "SIF",
   bond: "Bond", ncd: "NCD", p2p: "P2P", las: "LAS", other: "Other",
 };
-const TXN_LABEL: Record<string, string> = { sip: "SIP", sip_topup: "SIP Top-Up", sip_stop: "SIP Stop", other: "Others", lumpsum: "Lumpsum", additional_purchase: "Add'l Purchase", switch: "Switch", stp: "STP", swp: "SWP", redemption: "Redemption" };
+const TXN_LABEL: Record<string, string> = { sip: "SIP", sip_topup: "SIP Top-Up", sip_stop: "SIP Stop", other: "Others", lumpsum: "Lumpsum", additional_purchase: "Add'l Purchase", switch: "Switch", stp: "STP", swp: "SWP", redemption: "Redemption", cob: "COB" };
 const STATUS_LABEL: Record<string, string> = { draft: "Draft", confirmed: "Confirmed", emailed: "Emailed", cancelled: "Cancelled" };
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;

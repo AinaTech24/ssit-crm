@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
+import { istToday, notifyDueCob } from "@/lib/business/cob";
 
 type Rec = Record<string, any>;
 export const dynamic = "force-dynamic";
@@ -18,6 +19,24 @@ export async function GET() {
   try {
     const session = await requireSession();
     const me = session.userId;
+    // Change-of-broker checks that have come due: told once in the bell (in its own transaction, so a
+    // problem here can never take the other reminders down)...
+    await withTenant(session.tenantId, (tx) => notifyDueCob(tx, session.tenantId)).catch((e) =>
+      console.warn("[reminders] COB notify failed:", (e as Error)?.message)
+    );
+    // ...and listed for the pop-up until answered.
+    const cobDue = await withTenant(session.tenantId, async (tx) =>
+      (
+        await tx.execute(sql`
+          SELECT e.id, e.client_name, e.cob_due_on FROM business_entries e
+            LEFT JOIN investors i ON i.id = e.investor_id
+           WHERE e.tenant_id = ${session.tenantId}::uuid AND e.cob_status = 'pending' AND e.status <> 'cancelled'
+             AND e.cob_due_on <= ${istToday()}::date
+             AND (COALESCE(i.rm_id, e.rm_id) = ${me}::uuid OR e.executed_by_id = ${me}::uuid)
+           ORDER BY e.cob_due_on ASC LIMIT 8`)
+      ).rows
+    ).catch(() => []);
+
     const data = await withTenant(
       session.tenantId,
       async (tx) => {
@@ -119,7 +138,7 @@ export async function GET() {
       },
       { userId: session.userId, branchId: session.branchId, roles: session.roles }
     );
-    return NextResponse.json(data);
+    return NextResponse.json({ ...data, cobDue });
   } catch (err: any) {
     return handleApiError(err);
   }

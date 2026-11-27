@@ -19,7 +19,7 @@ import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { createNotification } from "@/lib/notifications/create";
 import { spawnNextOccurrence } from "@/lib/tasks/recurrence";
 import { notifyWatchers } from "@/lib/tasks/watchers";
-import { taskTeamIds } from "@/lib/tasks/access";
+import { taskTeamIds, taskScopeSql } from "@/lib/tasks/access";
 import { tasks, users, taskChecklist } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +33,12 @@ function ownsTask(task: { assigneeId: string | null; createdById: string | null;
  *  edit access to the parent task (so they can see it and update their step). */
 function isSubtaskAssignee(task: { meta: unknown }, userId: string): boolean {
   return taskChecklist(task.meta).some((c) => c.assigneeId === userId);
+}
+
+/** Does this person share tasks with whoever holds or raised the task? */
+async function sharesWith(tenantId: string, userId: string, task: { assigneeId: string | null; createdById: string | null }) {
+  const team = await withTenant(tenantId, (tx) => taskTeamIds(tx, tenantId, userId));
+  return team.includes(task.assigneeId ?? "") || team.includes(task.createdById ?? "");
 }
 
 const Patch = z.object({
@@ -116,12 +122,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         .limit(1))[0] ?? null
     );
     if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
-    // Assigned-only viewers can't read other people's tasks — unless a sub-task
-    // is delegated to them (then they may open + update the parent task).
-    if (!canViewAll && !ownsTask(row, session.userId) && !isSubtaskAssignee(row, session.userId)) {
-      // People who share tasks may open each other's.
-      const team = await withTenant(session.tenantId, (tx) => taskTeamIds(tx, session.tenantId, session.userId));
-      if (!team.includes(row.assigneeId ?? "") && !team.includes(row.createdById ?? "")) {
+    // Only a task the list would show may be opened - plus one with a sub-task delegated to this person.
+    if (!isSubtaskAssignee(row, session.userId)) {
+      const visible = await withTenant(session.tenantId, async (tx) => {
+        const scope = await taskScopeSql(tx, session);
+        const r = await tx.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, id), scope)).limit(1);
+        return r.length > 0;
+      });
+      if (!visible || (!canViewAll && !ownsTask(row, session.userId) && !(await sharesWith(session.tenantId, session.userId, row)))) {
         return NextResponse.json({ error: "not found" }, { status: 404 });
       }
     }

@@ -8,18 +8,19 @@ import { requireSession } from "@/lib/auth/session";
 import { formatINR } from "@/lib/utils";
 import { ASSET_CLASS_LABELS, ASSET_CLASS_ORDER, type AssetClass } from "@/lib/business/asset-class";
 import { BusinessEntryActions } from "@/components/business/BusinessEntryActions";
+import { CobFollowUp } from "@/components/business/CobFollowUp";
+import { istToday } from "@/lib/business/cob";
 import { RecordProvenance } from "@/components/common/RecordProvenance";
 
 export const dynamic = "force-dynamic";
 
 const MANAGE_ROLES = ["owner", "branch_head", "rm", "back_office", "ops"];
 const PRODUCT_LABEL: Record<string, string> = { mutual_fund: "Mutual Fund", pms: "PMS", aif: "AIF", sif: "SIF", bond: "Bond", ncd: "NCD", other: "Other" };
-const TXN_LABEL: Record<string, string> = { sip: "SIP", sip_topup: "SIP Top-Up", sip_stop: "SIP Stop", other: "Others", lumpsum: "Lumpsum", additional_purchase: "Add'l Purchase", switch: "Switch", stp: "STP", swp: "SWP", redemption: "Redemption" };
+const TXN_LABEL: Record<string, string> = { sip: "SIP", sip_topup: "SIP Top-Up", sip_stop: "SIP Stop", other: "Others", lumpsum: "Lumpsum", additional_purchase: "Add'l Purchase", switch: "Switch", stp: "STP", swp: "SWP", redemption: "Redemption", cob: "COB (Change of Broker)" };
 const STATUS_TONE: Record<string, string> = { draft: "bg-slate-100 text-slate-600", confirmed: "bg-sky-50 text-sky-700", emailed: "bg-emerald-50 text-emerald-700", cancelled: "bg-rose-50 text-rose-600" };
 
 export default async function BusinessEntryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireSession();
-  if (!session.roles.some((r) => MANAGE_ROLES.includes(r))) redirect("/dashboard");
   const { id } = await params;
 
   const data = await withTenant(session.tenantId, async (tx) => {
@@ -37,9 +38,18 @@ export default async function BusinessEntryDetailPage({ params }: { params: Prom
       email = inv?.email ?? null;
     }
     const exec = entry.executedById ? (await tx.select({ name: users.name }).from(users).where(eq(users.id, entry.executedById)).limit(1))[0] : null;
-    return { entry, lines, rmName: rm?.name ?? null, executedByName: exec?.name ?? null, email };
+    const answerer = entry.cobAnsweredBy ? (await tx.select({ name: users.name }).from(users).where(eq(users.id, entry.cobAnsweredBy)).limit(1))[0] : null;
+    let clientRmId: string | null = null;
+    if (entry.investorId) {
+      const [c] = await tx.select({ rmId: investors.rmId }).from(investors).where(eq(investors.id, entry.investorId)).limit(1);
+      clientRmId = c?.rmId ?? null;
+    }
+    return { entry, lines, rmName: rm?.name ?? null, executedByName: exec?.name ?? null, email, answeredBy: answerer?.name ?? null, clientRmId };
   });
   if (!data) notFound();
+  // Business roles, or someone asked to confirm this entry's change of broker.
+  const involved = !!data.entry.cobStatus && [data.clientRmId, data.entry.executedById, data.entry.rmId].includes(session.userId);
+  if (!involved && !session.roles.some((r) => MANAGE_ROLES.includes(r))) redirect("/dashboard");
 
   const { entry, lines } = data;
   const breakup = (entry.assetBreakup ?? {}) as Record<string, number>;
@@ -132,6 +142,17 @@ export default async function BusinessEntryDetailPage({ params }: { params: Prom
           <div className="text-xs font-medium text-muted-foreground mb-1">Notes</div>
           <p className="text-sm whitespace-pre-wrap">{entry.notes}</p>
         </div>
+      )}
+      {entry.cobStatus && entry.cobDueOn && (
+        <CobFollowUp
+          entryId={entry.id}
+          status={entry.cobStatus}
+          dueOn={String(entry.cobDueOn).slice(0, 10)}
+          isDue={String(entry.cobDueOn).slice(0, 10) <= istToday()}
+          reason={entry.cobReason}
+          answeredBy={data.answeredBy}
+          answeredAt={entry.cobAnsweredAt ? new Date(entry.cobAnsweredAt).toLocaleDateString("en-IN") : null}
+        />
       )}
       {entry.emailedAt && (
         <p className="text-xs text-muted-foreground">

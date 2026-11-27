@@ -12,7 +12,7 @@ import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can, requireAny } from "@/lib/auth/rbac";
 import { tasks, users } from "@/db/schema";
-import { taskMineSql } from "@/lib/tasks/access";
+import { taskMineSql, taskScopeSql } from "@/lib/tasks/access";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +41,8 @@ export async function GET(req: NextRequest) {
 
     const out = await withTenant(session.tenantId, async (tx) => {
       const conds: any[] = [eq(tasks.tenantId, session.tenantId), isNull(tasks.deletedAt)];
+      // "Select all" must never reach past what the list shows.
+      conds.push(await taskScopeSql(tx, session));
       if (!canViewAll) conds.push(or(eq(tasks.createdById, session.userId), taskMineSql("tasks", session.userId))!);
       if (view === "to_me") conds.push(taskMineSql("tasks", session.userId));
       else if (view === "by_me") conds.push(eq(tasks.createdById, session.userId));

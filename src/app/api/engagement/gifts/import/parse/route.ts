@@ -13,12 +13,13 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { requireSession } from "@/lib/auth/session";
 import { requireAny } from "@/lib/auth/rbac";
+import { parseSheetDate } from "@/lib/gifts/import";
 
 export const dynamic = "force-dynamic";
 
 const OUR_FIELDS = [
   { key: "client", label: "Client (name or PAN)" },
-  { key: "category", label: "Category (hamper / cake / plant)" },
+  { key: "category", label: "Category (hamper / cake / plant / books / other)" },
   { key: "grade", label: "Grade (A / AA / B …)" },
   { key: "occasion", label: "Occasion (birthday / anniversary / festival / other)" },
   { key: "title", label: "Gift / title" },
@@ -70,11 +71,15 @@ export async function POST(req: NextRequest) {
     }
 
     const buf = Buffer.from(await file.arrayBuffer());
-    const wb = XLSX.read(buf, { type: "buffer", cellDates: true });
+    // A CSV is read as text: letting the library guess its dates reads 05-11 as 11 May.
+    const wb = XLSX.read(buf, { type: "buffer", cellDates: true, raw: /\.csv$/i.test(file.name) });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     if (!sheet) return NextResponse.json({ error: "no sheet found" }, { status: 400 });
 
-    const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "", raw: false });
+    // Real values, not the cell's display format: a date cell shown month-first would otherwise be re-read wrongly.
+    const rows = XLSX.utils
+      .sheet_to_json<Record<string, any>>(sheet, { defval: "", raw: true })
+      .map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v instanceof Date ? parseSheetDate(v) ?? "" : v])));
     if (rows.length === 0) return NextResponse.json({ error: "empty sheet" }, { status: 400 });
     if (rows.length > 5000) return NextResponse.json({ error: "too many rows (max 5000)" }, { status: 413 });
 
@@ -82,7 +87,8 @@ export async function POST(req: NextRequest) {
       headers: Object.keys(rows[0]),
       ourFields: OUR_FIELDS,
       suggestedMapping: suggestMapping(Object.keys(rows[0])),
-      rows: rows.slice(0, 200),
+      // Every row: the wizard imports exactly what is returned here.
+      rows,
       total: rows.length,
     });
   } catch (err: any) {

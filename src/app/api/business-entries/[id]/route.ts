@@ -20,6 +20,7 @@ import {
   BUSINESS_ENTRY_STATUSES,
 } from "@/db/schema/business_entries";
 import { LineInput, normalizeLine, computeTotals } from "@/lib/business/entry-input";
+import { syncCobFollowUp } from "@/lib/business/cob";
 
 export const dynamic = "force-dynamic";
 
@@ -140,6 +141,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
 
       await tx.update(businessEntries).set(set as any).where(eq(businessEntries.id, id));
+      await syncCobFollowUp(tx, session.tenantId, id);
 
       // Emit business_entry.updated (snake-case before/after) so workflow rules
       // can react to a draft → confirmed change — e.g. send the client a

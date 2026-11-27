@@ -17,7 +17,7 @@ import { users } from "./users";
 
 export const PRODUCT_TYPES = ["mutual_fund", "direct_equity", "pms", "aif", "sif", "bond", "ncd", "p2p", "las", "other"] as const;
 export const BUSINESS_ENTRY_STATUSES = ["draft", "confirmed", "emailed", "cancelled"] as const;
-export const TXN_TYPES = ["sip", "sip_topup", "sip_stop", "lumpsum", "additional_purchase", "switch", "stp", "swp", "redemption", "other"] as const;
+export const TXN_TYPES = ["sip", "sip_topup", "sip_stop", "lumpsum", "additional_purchase", "switch", "stp", "swp", "redemption", "cob", "other"] as const;
 export const TXN_FREQUENCIES = ["one_time", "weekly", "monthly", "quarterly", "half_yearly", "yearly"] as const;
 /** Normalised asset bucket (derived from the master scheme category). */
 export const ASSET_CLASSES = ["equity", "debt", "liquid", "hybrid", "gold", "other"] as const;
@@ -55,6 +55,13 @@ export const businessEntries = pgTable(
     liquidNet: numeric("liquid_net", { precision: 18, scale: 2 }).notNull().default("0"),
 
     notes: text("notes"),
+    /** Change-of-broker follow-up (migration 0270): due day, answer and who gave it. NULL status = no COB line. */
+    cobDueOn: date("cob_due_on"),
+    cobStatus: text("cob_status", { enum: ["pending", "done", "not_done"] }),
+    cobReason: text("cob_reason"),
+    cobAnsweredBy: uuid("cob_answered_by").references(() => users.id),
+    cobAnsweredAt: timestamp("cob_answered_at", { withTimezone: true }),
+    cobNotifiedAt: timestamp("cob_notified_at", { withTimezone: true }),
     emailedAt: timestamp("emailed_at", { withTimezone: true }),
     createdById: uuid("created_by_id").references(() => users.id),
     ...timestamps,

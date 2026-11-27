@@ -30,6 +30,7 @@ export default async function ImportGiftsPage() {
       parseUrl="/api/engagement/gifts/import/parse"
       commitUrl="/api/engagement/gifts/import/commit"
       requiredOurFields={["client", "givenOn"]}
+      sampleUrl="/api/engagement/gifts/import/template"
     />
   );
 }
