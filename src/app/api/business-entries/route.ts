@@ -8,7 +8,7 @@ import { handleApiError } from "@/lib/api/error-handler";
 
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
-import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, or, sql, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(200, Math.max(1, Number(sp.get("limit")) || 100));
 
     const rows = await withTenant(session.tenantId, async (tx) => {
-      const conds: any[] = [eq(businessEntries.tenantId, session.tenantId)];
+      const conds: any[] = [eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)];
       // RMs see only the entries they booked; managers/ops see the whole firm.
       if (!seesAllEntries(session)) conds.push(eq(businessEntries.rmId, session.userId));
       conds.push(await clientBookSql(tx, session, "business_entries.investor_id"));

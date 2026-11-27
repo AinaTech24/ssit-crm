@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { ChevronLeft, User, Calendar, Briefcase } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { businessEntries, businessEntryLines, investors, users } from "@/db/schema";
@@ -27,7 +27,7 @@ export default async function BusinessEntryDetailPage({ params }: { params: Prom
     const [entry] = await tx
       .select()
       .from(businessEntries)
-      .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)))
+      .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)))
       .limit(1);
     if (!entry) return null;
     const lines = await tx.select().from(businessEntryLines).where(eq(businessEntryLines.entryId, id)).orderBy(asc(businessEntryLines.sortOrder));

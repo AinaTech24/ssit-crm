@@ -60,8 +60,8 @@ function inr(n: number): string {
 async function weekStats(tx: any): Promise<WeekStats> {
   const r = await tx.execute(sql`
     SELECT
-      (SELECT COALESCE(sum(total_amount), 0) FROM business_entries WHERE created_at >= now() - interval '7 days')::float8 AS business_amt,
-      (SELECT count(*) FROM business_entries WHERE created_at >= now() - interval '7 days')::int AS business_count,
+      (SELECT COALESCE(sum(total_amount), 0) FROM business_entries WHERE deleted_at IS NULL AND created_at >= now() - interval '7 days')::float8 AS business_amt,
+      (SELECT count(*) FROM business_entries WHERE deleted_at IS NULL AND created_at >= now() - interval '7 days')::int AS business_count,
       (SELECT count(*) FROM sips WHERE created_at >= now() - interval '7 days')::int AS sips_added,
       (SELECT COALESCE(sum(amount), 0) FROM sips WHERE created_at >= now() - interval '7 days')::float8 AS sips_added_amt,
       (SELECT count(*) FROM sips WHERE status IN ('stopped', 'rejected') AND updated_at >= now() - interval '7 days')::int AS sips_stopped,

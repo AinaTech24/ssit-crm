@@ -63,6 +63,8 @@ export const businessEntries = pgTable(
     cobAnsweredAt: timestamp("cob_answered_at", { withTimezone: true }),
     cobNotifiedAt: timestamp("cob_notified_at", { withTimezone: true }),
     emailedAt: timestamp("emailed_at", { withTimezone: true }),
+    /** Deleted by a user (migration 0271): hidden everywhere, kept for the audit trail. Status is 'cancelled' too. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdById: uuid("created_by_id").references(() => users.id),
     ...timestamps,
   },

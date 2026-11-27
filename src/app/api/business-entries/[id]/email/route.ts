@@ -6,7 +6,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { can } from "@/lib/auth/rbac";
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const [entry] = await tx
           .select()
           .from(businessEntries)
-          .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)))
+          .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)))
           .limit(1);
         if (!entry) return { error: "not_found" as const };
         // RMs may only email confirmations for their own bookings.
@@ -157,7 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         await tx
           .update(businessEntries)
           .set({ status: "emailed", emailedAt: new Date(), updatedAt: new Date() } as any)
-          .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)));
+          .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)));
         await recordAudit(tx, {
           tenantId: session.tenantId,
           actorUserId: session.userId,

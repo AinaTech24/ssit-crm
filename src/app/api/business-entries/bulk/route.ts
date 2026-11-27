@@ -5,15 +5,15 @@ import { handleApiError } from "@/lib/api/error-handler";
  * Body: { ids: string[], action, value? }
  *   action = "status"   value = draft|confirmed|emailed|cancelled
  *          = "assign"   value = userId (uuid) — reassigns the RM
- *          = "delete"   (no value) → SOFT-cancel (status='cancelled'); the
- *                        revenue row + its audit trail are preserved
+ *          = "delete"   (no value) → SOFT delete (deletedAt + status='cancelled'); hidden
+ *                        everywhere, the row + its audit trail are preserved
  *
  * RBAC: same manage roles as the single-entry route; RMs are scoped to the
  * entries they booked. Tenant-scoped via RLS.
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -51,14 +51,15 @@ export async function POST(req: NextRequest) {
 
     const count = await withTenant(session.tenantId, async (tx) => {
       // Scope: RMs may only act on the entries they booked.
-      const conds: any[] = [eq(businessEntries.tenantId, session.tenantId), inArray(businessEntries.id, ids)];
+      const conds: any[] = [eq(businessEntries.tenantId, session.tenantId), inArray(businessEntries.id, ids), isNull(businessEntries.deletedAt)];
       if (!seesAllEntries(session)) conds.push(eq(businessEntries.rmId, session.userId));
       const where = and(...conds);
 
       const patch: Record<string, any> = { updatedAt: new Date() };
       if (action === "delete") {
-        // Soft-cancel — void the booking but keep the revenue row + audit trail.
+        // Soft delete — hidden from the list and reports; the row + audit trail are kept.
         patch.status = "cancelled";
+        patch.deletedAt = new Date();
       } else if (action === "status") {
         if (!value || !(BUSINESS_ENTRY_STATUSES as readonly string[]).includes(value)) {
           throw Object.assign(new Error("invalid status"), { status: 400 });

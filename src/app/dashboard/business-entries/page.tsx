@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { clientBookSql } from "@/lib/investors/access";
-import { and, desc, eq, gte, ilike, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, or, sql, isNull } from "drizzle-orm";
 import { Plus, Briefcase, LayoutDashboard, Droplets } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { businessEntries, users, investors } from "@/db/schema";
@@ -44,7 +44,7 @@ export default async function BusinessEntriesPage({
   const to = sp.to;
 
   const { rows, kpi, rms } = await withTenant(session.tenantId, async (tx) => {
-    const conds: any[] = [eq(businessEntries.tenantId, session.tenantId)];
+    const conds: any[] = [eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)];
     if (!seesAll) conds.push(eq(businessEntries.rmId, session.userId));
     // A user limited to the Motilal Oswal / Mutual Fund book sees only that book's entries.
     const bookSql = await clientBookSql(tx, session, "business_entries.investor_id");

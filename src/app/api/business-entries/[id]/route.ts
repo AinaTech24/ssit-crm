@@ -2,12 +2,12 @@ import { handleApiError } from "@/lib/api/error-handler";
 /**
  *   GET    /api/business-entries/[id]   — header + scheme sub-form lines
  *   PATCH  /api/business-entries/[id]   — update header + (optionally) replace lines
- *   DELETE /api/business-entries/[id]   — delete (cascades lines)
+ *   DELETE /api/business-entries/[id]   — delete (soft: hidden everywhere, kept for audit)
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -54,7 +54,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       const [entry] = await tx
         .select()
         .from(businessEntries)
-        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)))
+        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)))
         .limit(1);
       if (!entry) return null;
       // RMs may only open their own bookings.
@@ -88,7 +88,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const [before] = await tx
         .select()
         .from(businessEntries)
-        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)))
+        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)))
         .limit(1);
       if (!before) return "not_found" as const;
       // RMs may only edit their own bookings.
@@ -150,7 +150,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const [afterRow] = await tx
         .select()
         .from(businessEntries)
-        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)))
+        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)))
         .limit(1);
       const snap = (e: any) =>
         e
@@ -208,22 +208,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       const [before] = await tx
         .select({ id: businessEntries.id, clientName: businessEntries.clientName, rmId: businessEntries.rmId, status: businessEntries.status })
         .from(businessEntries)
-        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)))
+        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)))
         .limit(1);
       if (!before) return "not_found" as const;
       // RMs may only cancel their own bookings.
       if (!seesAllEntries(session) && before.rmId !== session.userId) return "forbidden" as const;
-      // Soft delete: business entries are revenue/AUM records that feed the FY/MTD
-      // book, scorecards and reconciliation — void them (status='cancelled')
-      // rather than hard-deleting the row + its audit trail.
+      // Soft delete: gone from the list and reports (status='cancelled' keeps it out of every total,
+      // deletedAt hides it), while the row and its audit trail are kept.
       await tx
         .update(businessEntries)
-        .set({ status: "cancelled", updatedAt: new Date() } as any)
-        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)));
+        .set({ status: "cancelled", deletedAt: new Date(), updatedAt: new Date() } as any)
+        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)));
       await recordAudit(tx, {
         tenantId: session.tenantId,
         actorUserId: session.userId,
-        action: "business_entry.cancel",
+        action: "business_entry.delete",
         entityType: "business_entry",
         entityId: id,
         before: { clientName: before.clientName, status: before.status } as any,

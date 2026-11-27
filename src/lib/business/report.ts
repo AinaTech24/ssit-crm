@@ -55,7 +55,7 @@ export async function getBusinessSummary(
   const statusCond = status ? sql` AND e.status = ${status}` : sql` AND e.status <> 'cancelled'`;
   const productCond = productType ? sql` AND e.product_type = ${productType}` : sql``;
   const whereFrag = sql`
-    WHERE e.tenant_id = ${tenantId}::uuid${statusCond}
+    WHERE e.tenant_id = ${tenantId}::uuid AND e.deleted_at IS NULL${statusCond}
       AND e.business_date >= ${fromISO}::date
       AND e.business_date <= ${toISO}::date${rmCond(rmId)}${branchCond(branchId)}${productCond}
   `;

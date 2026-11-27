@@ -63,7 +63,7 @@ export function BusinessEntryActions({ id, status, hasEmail }: { id: string; sta
       <ConfirmDialog
         open={confirmDel}
         title="Delete business entry?"
-        message="This permanently removes the entry and all its scheme lines."
+        message="This removes the entry from Transactions and all reports."
         confirmLabel="Delete"
         tone="danger"
         busy={busy === "delete"}

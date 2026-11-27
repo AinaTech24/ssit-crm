@@ -79,6 +79,8 @@ export function BulkTable<T extends { id: string }>({
       return n;
     });
 
+  const plural = (n: number) => (n === 1 ? itemLabel : /[^aeiou]y$/i.test(itemLabel) ? `${itemLabel.slice(0, -1)}ies` : `${itemLabel}s`);
+
   async function apply(action: string, value?: string | null) {
     setBusy(true);
     try {
@@ -92,7 +94,14 @@ export function BulkTable<T extends { id: string }>({
         toast.error(j.error ?? `Request failed (HTTP ${res.status})`, "Bulk action failed");
         return;
       }
-      toast.success(`Updated ${selected.size} ${itemLabel}${selected.size === 1 ? "" : "s"}`);
+      // The server says how many it really changed (someone may only be allowed to touch their own).
+      const done = typeof j.count === "number" ? j.count : selected.size;
+      if (done === 0) {
+        toast.error(`Nothing was changed - you may not have access to the selected ${plural(selected.size)}.`, "Bulk action");
+        setConfirmDelete(false);
+        return;
+      }
+      toast.success(`${action === "delete" ? "Deleted" : "Updated"} ${done} ${plural(done)}`);
       setSelected(new Set());
       setPicker(null);
       setPickVal("");
@@ -206,7 +215,7 @@ export function BulkTable<T extends { id: string }>({
 
       <ConfirmDialog
         open={confirmDelete}
-        title={`Delete ${selected.size} ${itemLabel}${selected.size === 1 ? "" : "s"}?`}
+        title={`Delete ${selected.size} ${plural(selected.size)}?`}
         message="This removes the selected records. This cannot be undone."
         confirmLabel="Delete"
         tone="danger"

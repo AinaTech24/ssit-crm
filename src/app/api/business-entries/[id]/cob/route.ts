@@ -7,7 +7,7 @@ import { handleApiError } from "@/lib/api/error-handler";
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const [entry] = await tx
         .select()
         .from(businessEntries)
-        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId)))
+        .where(and(eq(businessEntries.id, id), eq(businessEntries.tenantId, session.tenantId), isNull(businessEntries.deletedAt)))
         .limit(1);
       if (!entry) return "not_found" as const;
       if (!entry.cobStatus) return "no_cob" as const;
