@@ -24,65 +24,35 @@ import { z } from "zod";
 import { v4 as uuid } from "uuid";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
-import { requireAny } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
+import { assertClientNotesVisible, isClientsServiceRm } from "@/lib/investors/note-access";
+import { requireAny } from "@/lib/auth/rbac";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
-import { activities, investors } from "@/db/schema";
-import { assertCanViewClient } from "@/lib/investors/access";
+import { activities } from "@/db/schema";
 import { notifyClientTeam } from "@/lib/notifications/client-team";
-import { and, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-const Body = z.object({
-  note: z.string().trim().min(1).max(4000),
-});
-
-/**
- * The client's own Service RM may read and add notes on it whatever their role's
- * capabilities say — being assigned as the client's service RM is exactly the
- * relationship notes exist for, and it must not depend on the role also holding
- * the view-clients capability. Everyone else goes through the normal client wall.
- */
-async function isClientsServiceRm(tx: any, session: any, investorId: string): Promise<boolean> {
-  const [row] = await tx
-    .select({ id: investors.id })
-    .from(investors)
-    .where(and(eq(investors.id, investorId), eq(investors.tenantId, session.tenantId), eq(investors.serviceRmId, session.userId)))
-    .limit(1);
-  return !!row;
-}
-
-/** Load the client and throw unless this session may open it. */
-async function assertClientVisible(tx: any, session: any, investorId: string) {
-  if (await isClientsServiceRm(tx, session, investorId)) {
-    const [inv] = await tx
-      .select({ id: investors.id, name: investors.name, phone: investors.phone })
-      .from(investors)
-      .where(and(eq(investors.id, investorId), eq(investors.tenantId, session.tenantId)))
-      .limit(1);
-    return inv;
-  }
-  requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
-  const [inv] = await tx
-    .select({ id: investors.id, name: investors.name, phone: investors.phone, rmId: investors.rmId, serviceRmId: investors.serviceRmId, branchId: investors.branchId })
-    .from(investors)
-    .where(and(eq(investors.id, investorId), eq(investors.tenantId, session.tenantId)))
-    .limit(1);
-  if (!inv) throw Object.assign(new Error("client not found"), { status: 404 });
-  await assertCanViewClient(tx, session, inv);
-  return inv;
-}
+const Body = z
+  .object({
+    note: z.string().trim().max(4000).default(""),
+    /** Files follow in a second request; a note may then have no text. */
+    withFiles: z.boolean().optional(),
+  })
+  .refine((b) => b.note.length > 0 || b.withFiles === true, { message: "a note cannot be empty" });
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
     const session = await requireSession();
     const rows = await withTenant(session.tenantId, async (tx) => {
-      await assertClientVisible(tx, session, id);
+      await assertClientNotesVisible(tx, session, id);
       const r = await tx.execute(sql`
         SELECT a.id, a.kind, a.subject, a.notes, a.occurred_at, a.owner_user_id, a.created_at, a.updated_at,
-               u.name AS author_name
+               u.name AS author_name,
+               (SELECT COALESCE(json_agg(json_build_object('id', f.id, 'fileName', f.file_name, 'contentType', f.content_type, 'sizeBytes', f.size_bytes) ORDER BY f.created_at), '[]'::json)
+                  FROM client_note_attachments f
+                 WHERE f.activity_id = a.id AND f.deleted_at IS NULL) AS files
         FROM activities a
         LEFT JOIN users u ON u.id = a.owner_user_id
         WHERE a.tenant_id = ${session.tenantId}::uuid
@@ -117,7 +87,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const noteId = uuid();
 
     await withTenant(session.tenantId, async (tx) => {
-      const inv = await assertClientVisible(tx, session, id);
+      // Servicing RM of this client, or someone who may view clients; the client wall is checked next.
+      if (!(await isClientsServiceRm(tx, session, id))) {
+        requireAny(session.roles, ["investor.view.all", "investor.view.assigned"], session.permissions);
+      }
+      const inv = await assertClientNotesVisible(tx, session, id);
       await tx.insert(activities).values({
         id: noteId,
         tenantId: session.tenantId,
@@ -129,7 +103,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         subjectName: inv.name ?? null,
         subjectPhone: inv.phone ?? null,
         kind: "note",
-        notes: parse.data.note,
+        notes: parse.data.note || null,
         occurredAt: new Date(),
         ownerUserId: session.userId,
       });
@@ -148,7 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         actorUserId: session.userId,
         kind: "client.meeting_note",
         title: "Meeting notes added for {client}",
-        body: parse.data.note.slice(0, 240),
+        body: parse.data.note.slice(0, 240) || "Files attached to a note",
       });
     });
 
