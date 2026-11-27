@@ -24,16 +24,13 @@ import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { autoAdvance } from "@/lib/blueprints/auto-advance";
 import { loadEditableLead } from "@/lib/leads/access";
 import { normalizePan } from "@/lib/leads/normalize";
-import { mapKycFieldsToInvestorUpdate } from "@/lib/onboarding/kyc-fields";
+import { carryLeadRecords } from "@/lib/leads/carry-over";
 import {
   leads,
   investors,
   users,
   eventsOutbox,
-  riskProfileResponses,
   proposals,
-  complianceDocuments,
-  communications,
 } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -148,121 +145,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       `);
 
       // ─── DATA CARRYOVER ──────────────────────────────────────────────
-      // Per the spec: no data should be lost on conversion. We re-point
-      // every related record from the lead onto the new investor.
-      //
-      // CRITICAL: the whole carryover runs inside a SAVEPOINT (nested tx) so
-      // a DB-level error in any single step — a column/table mismatch, a
-      // constraint, a statement timeout — rolls back ONLY the carryover, not
-      // the parent transaction. Without this isolation, a thrown SQL error
-      // here would abort the entire Postgres tx, the investor INSERT would
-      // never commit, and the API would return a bare "internal" 500 with no
-      // client created. The client being created is far more important than a
-      // perfect carryover; a partial-carryover failure is logged, not fatal.
-      try {
-        await tx.transaction(async (sp) => {
-          // 1. Risk profile responses — the lead's responses used `lead_id` in
-          //    `investor_id` polymorphically (see /api/public/risk-profile/submit).
-          //    Repoint to the actual investor so investor.riskProfile lines up.
-          const carriedRpr = await sp.execute(sql`
-            UPDATE risk_profile_responses
-               SET investor_id = ${investorId}::uuid,
-                   updated_at = now()
-             WHERE tenant_id = ${session.tenantId}::uuid
-               AND investor_id = ${leadId}::uuid
-            RETURNING id, final_category, total_score, signed_at
-          `);
-          const latestRisk = (carriedRpr.rows as any[])[0];
-          if (latestRisk) {
-            // signed_at comes back as a string from raw sp.execute (Postgres
-            // formatted timestamp). Drizzle's update on a timestamp column
-            // calls value.toISOString() — so we MUST hand it a real Date.
-            const signedAt = latestRisk.signed_at ? new Date(latestRisk.signed_at) : null;
-            await sp
-              .update(investors)
-              .set({
-                riskProfile: latestRisk.final_category as any,
-                riskProfileScore: Number(latestRisk.total_score),
-                riskProfileSignedAt: signedAt,
-                updatedAt: new Date(),
-              } as any)
-              .where(eq(investors.id, investorId));
-          }
-
-          // 2. Proposals — re-point lead-bound proposals to carry the investor
-          await sp
-            .update(proposals)
-            .set({ investorId, recipientType: "investor" as any, updatedAt: new Date() } as any)
-            .where(eq(proposals.leadId, leadId));
-
-          // 3. Compliance documents (KYC uploads) — were saved with
-          //    related_entity_type='lead' + related_entity_id=leadId. Move them.
-          await sp.execute(sql`
-            UPDATE compliance_documents
-               SET related_entity_type = 'investor',
-                   related_entity_id = ${investorId}::uuid,
-                   updated_at = now()
-             WHERE tenant_id = ${session.tenantId}::uuid
-               AND related_entity_type = 'lead'
-               AND related_entity_id = ${leadId}::uuid
-          `);
-
-          // 4. Communications — set investor_id on lead-bound rows so the
-          //    investor's timeline picks them up.
-          await sp
-            .update(communications)
-            .set({ investorId, updatedAt: new Date() } as any)
-            .where(eq(communications.leadId, leadId));
-
-          // 5. Meetings (review_meetings) — repoint lead → investor.
-          await sp.execute(sql`
-            UPDATE review_meetings
-               SET investor_id = ${investorId}::uuid,
-                   lead_id = NULL,
-                   updated_at = now()
-             WHERE tenant_id = ${session.tenantId}::uuid
-               AND lead_id = ${leadId}::uuid
-          `);
-
-          // 6. Open share_tokens (proposal approval, doc collection, risk
-          //    profile) pointing at the lead → repoint so links keep working.
-          await sp.execute(sql`
-            UPDATE share_tokens
-               SET subject_type = 'investor',
-                   subject_id = ${investorId}::uuid,
-                   updated_at = now()
-             WHERE tenant_id = ${session.tenantId}::uuid
-               AND subject_type = 'lead'
-               AND subject_id = ${leadId}::uuid
-               AND used_at IS NULL
-          `);
-
-          // 7. KYC data the client filled via the public onboarding link while
-          //    still a lead → apply it to the new investor's client master.
-          const kyc = (lead as any).kycData as Record<string, string> | null;
-          if (kyc && Object.keys(kyc).length > 0) {
-            const base = inserted[0] as any;
-            const upd = mapKycFieldsToInvestorUpdate(kyc, {
-              pan: base?.pan,
-              email: base?.email,
-              phone: base?.phone,
-              whatsappPhone: base?.whatsappPhone,
-              address: base?.address,
-              bankAccounts: base?.bankAccounts,
-              nominees: base?.nominees,
-            });
-            await sp
-              .update(investors)
-              .set({ ...upd, kycData: kyc, updatedAt: new Date() } as any)
-              .where(eq(investors.id, investorId));
-          }
-        });
-      } catch (carryErr) {
-        console.warn(
-          `[lead.convert] carryover failed for lead ${leadId} → investor ${investorId} (client still created):`,
-          (carryErr as Error)?.message
-        );
-      }
+      // Documents, activities, notes, tasks, meetings, proposals ... move onto the client
+      // (lib/leads/carry-over.ts). Each step is isolated: a failure never costs the others,
+      // and never the client record itself.
+      await carryLeadRecords(tx, {
+        tenantId: session.tenantId,
+        leadId,
+        investorId,
+        branchId: lead.branchId ?? session.branchId,
+        actorUserId: session.userId,
+        lead,
+        investorRow: inserted[0],
+      });
 
       // Outbox events — let subscribed workflows kick in.
       // `inserted[0]` contains Date objects from Drizzle's returning(); we
