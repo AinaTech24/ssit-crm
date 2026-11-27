@@ -12,7 +12,8 @@ import { TaskDetailDrawer } from "./TaskDetailDrawer";
 import { Avatar } from "@/components/ui/Avatar";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { taskChecklist, type Task } from "@/db/schema";
-import { Loader2, ListChecks, Trash2, Clock3, ShieldCheck, CalendarClock, Gauge, Check, X, Pencil, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { Loader2, ListChecks, Trash2, Clock3, ShieldCheck, CalendarClock, Gauge, Check, X, Pencil, ChevronDown, UserRound } from "lucide-react";
 
 // Priority → left-accent stripe colour (row hierarchy at a glance).
 const PRIORITY_ACCENT: Record<string, string> = {
@@ -504,6 +505,22 @@ export function TaskList({ initialRows, currentUserId, canManageAll = false, ini
                     only when it means something (overdue red, urgent/high tint,
                     blocked rose); everything else stays quiet. */}
                 <div className="hidden sm:flex items-center gap-2 shrink-0">
+                  {/* Whose task this is about - the client (or lead), as on the meetings list. */}
+                  {(row.investorName || row.leadName) && (
+                    <Link
+                      href={
+                        row.investorName
+                          ? `/dashboard/investors/${t.relatedInvestorId ?? t.subjectId}`
+                          : `/dashboard/leads/${t.relatedLeadId ?? t.subjectId}`
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                      title={row.investorName ? `Client: ${row.investorName}` : `Lead: ${row.leadName}`}
+                      className="inline-flex items-center gap-1 text-[11px] rounded-md px-1.5 py-0.5 border text-foreground bg-secondary/60 border-border max-w-[14rem] hover:underline"
+                    >
+                      <UserRound className="size-3 shrink-0" />
+                      <span className="truncate">{row.investorName ?? row.leadName}</span>
+                    </Link>
+                  )}
                   {t.dueAt && !isDone && (
                     <span
                       className={`inline-flex items-center gap-1 text-[11px] rounded-md px-1.5 py-0.5 border ${

@@ -186,8 +186,9 @@ export default async function TasksPage({
       .from(tasks)
       .leftJoin(users, eq(users.id, tasks.assigneeId))
       .leftJoin(taskCreator, eq(taskCreator.id, tasks.createdById))
-      .leftJoin(investors, eq(investors.id, tasks.relatedInvestorId))
-      .leftJoin(leads, eq(leads.id, tasks.relatedLeadId))
+      // The client / lead a task is about: the explicit link, else its subject (automation-made tasks use that).
+      .leftJoin(investors, sql`${investors.id} = COALESCE(${tasks.relatedInvestorId}, CASE WHEN ${tasks.subjectType} = 'investor' THEN ${tasks.subjectId} END)`)
+      .leftJoin(leads, sql`${leads.id} = COALESCE(${tasks.relatedLeadId}, CASE WHEN ${tasks.subjectType} = 'lead' THEN ${tasks.subjectId} END)`)
       .where(where as any)
       .orderBy(orderByExpr)
       .limit(isKanban ? 300 : PAGE_SIZE)
