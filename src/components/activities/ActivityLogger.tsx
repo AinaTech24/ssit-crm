@@ -15,7 +15,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Loader2, X, Plus, MapPin, Phone, Save } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
-import { RmSelector } from "@/components/common/RmSelector";
+import { CollaboratorSelect } from "@/components/common/CollaboratorSelect";
 
 type Subject = { type: "investor" | "lead" | "family"; id: string; name: string; phone?: string | null };
 
@@ -50,8 +50,8 @@ function LogActivityDrawer({ subject: fixed, onClose }: { subject?: Subject; onC
   const [subjectLine, setSubjectLine] = useState("");
   const [notes, setNotes] = useState("");
   const [durationMin, setDurationMin] = useState("");
-  // "Assign to": a colleague who gets a follow-up task (and a pop-up) from this note.
-  const [assignToId, setAssignToId] = useState<string | null>(null);
+  // "Assign to": colleagues who each get a follow-up task (and a pop-up) from this note.
+  const [assignToIds, setAssignToIds] = useState<string[]>([]);
   const [taskDueOn, setTaskDueOn] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -64,8 +64,8 @@ function LogActivityDrawer({ subject: fixed, onClose }: { subject?: Subject; onC
         subjectType: subject.type, subjectId: subject.id, kind,
         subject: subjectLine || undefined, notes: notes || undefined,
       };
-      if (assignToId) {
-        body.assignToId = assignToId;
+      if (assignToIds.length) {
+        body.assignToIds = assignToIds;
         if (taskDueOn) body.taskDueOn = taskDueOn;
       }
       if (kind === "call") {
@@ -130,13 +130,17 @@ function LogActivityDrawer({ subject: fixed, onClose }: { subject?: Subject; onC
           <Field label="Subject"><input value={subjectLine} onChange={(e) => setSubjectLine(e.target.value)} placeholder="e.g. SIP top-up discussion" className="input-base" /></Field>
           <Field label="Notes / outcome"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className="input-base" placeholder="What was discussed / agreed?" /></Field>
 
-          <Field label="Assign to (optional)">
-            <RmSelector value={assignToId} onChange={(id) => setAssignToId(id)} placeholder="— Nobody; just log it —" allowClear />
-          </Field>
-          {assignToId && (
+          {/* Not wrapped in <Field> (a <label>): clicking inside a label would hit the picker's first button. */}
+          <div>
+            <div className="text-[11px] text-muted-foreground mb-1">Assign to (optional) - pick one or several people</div>
+            <CollaboratorSelect values={assignToIds} onChange={setAssignToIds} placeholder="Nobody; just log it - add people…" byDepartment />
+          </div>
+          {assignToIds.length > 0 && (
             <Field label="Task due on (optional)">
               <input type="date" value={taskDueOn} onChange={(e) => setTaskDueOn(e.target.value)} className="input-base text-sm" />
-              <div className="text-[11px] text-muted-foreground mt-1">A follow-up task is created for them and they get a &ldquo;New task&rdquo; pop-up.</div>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                {assignToIds.length === 1 ? "A follow-up task is created for them" : `A follow-up task is created for each of the ${assignToIds.length} people`} and they get a &ldquo;New task&rdquo; pop-up.
+              </div>
             </Field>
           )}
 

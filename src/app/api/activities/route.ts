@@ -25,7 +25,7 @@ import { assertCanViewClient } from "@/lib/investors/access";
 import { notifyClientTeam } from "@/lib/notifications/client-team";
 import { createNotification } from "@/lib/notifications/create";
 import { tasks, users } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   ACTIVITY_KINDS,
   ACTIVITY_DIRECTIONS,
@@ -50,9 +50,9 @@ const Body = z.object({
   geoLng: z.number().min(-180).max(180).optional(),
   locationLabel: z.string().max(200).optional(),
   nextFollowupAt: z.string().datetime().optional(),
-  /** "Assign to": hand a follow-up task to a colleague. A task is created for them and they get a "New task" pop-up. */
-  assignToId: z.string().uuid().optional(),
-  /** Optional due day (yyyy-mm-dd) for that task. */
+  /** "Assign to": hand a follow-up task to one or more colleagues. Each gets their own task and a "New task" pop-up. */
+  assignToIds: z.array(z.string().uuid()).max(20).optional(),
+  /** Optional due day (yyyy-mm-dd) for those tasks. */
   taskDueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
@@ -138,6 +138,8 @@ export async function POST(req: NextRequest) {
     const seesAllInvestors = can(session.roles, "investor.view.all", session.permissions);
     const seesAllLeads = can(session.roles, "lead.view.all", session.permissions);
 
+    const assigneeIds = [...new Set(b.assignToIds ?? [])];
+
     const result = await withTenant(
       session.tenantId,
       async (tx) => {
@@ -171,6 +173,21 @@ export async function POST(req: NextRequest) {
           return { forbidden: true as const };
         }
 
+        let assignees: Array<{ id: string }> = [];
+        if (assigneeIds.length) {
+          const found = await tx
+            .select({ id: users.id, status: users.status })
+            .from(users)
+            .where(and(inArray(users.id, assigneeIds), eq(users.tenantId, session.tenantId)));
+          assignees = found.filter((u) => u.status === "active");
+          if (assignees.length !== assigneeIds.length) return { badAssignee: true as const };
+          const mayTask = can(session.roles, "task.edit.all", session.permissions) || can(session.roles, "task.edit.assigned", session.permissions);
+          const toOthers = assignees.some((u) => u.id !== session.userId);
+          if (!mayTask || (toOthers && !can(session.roles, "task.assign.others", session.permissions))) {
+            return { cannotAssign: true as const };
+          }
+        }
+
         await tx.insert(activities).values({
           id,
           tenantId: session.tenantId,
@@ -202,62 +219,53 @@ export async function POST(req: NextRequest) {
           after: { kind: b.kind, subjectType: b.subjectType, subjectId: b.subjectId } as any,
           ...meta,
         });
-        // "Assign to": a follow-up task for the chosen colleague, made in the same transaction as the note.
-        if (b.assignToId) {
-          const [assignee] = await tx
-            .select({ id: users.id, name: users.name, status: users.status })
-            .from(users)
-            .where(and(eq(users.id, b.assignToId), eq(users.tenantId, session.tenantId)))
-            .limit(1);
-          if (!assignee || assignee.status !== "active") return { badAssignee: true as const };
-          const toOther = assignee.id !== session.userId;
-          const mayTask = can(session.roles, "task.edit.all", session.permissions) || can(session.roles, "task.edit.assigned", session.permissions);
-          if (!mayTask || (toOther && !can(session.roles, "task.assign.others", session.permissions))) {
-            return { cannotAssign: true as const };
-          }
-          const taskId = uuid();
+        // "Assign to": a follow-up task for EACH chosen colleague, made in the same transaction as the note.
+        if (assignees.length) {
           const aboutName = sr.name ?? "the client";
           const title = (b.subject?.trim() ? `${b.subject.trim()} - ${aboutName}` : `Follow up: ${aboutName}`).slice(0, 300);
-          await tx.insert(tasks).values({
-            id: taskId,
-            tenantId: session.tenantId,
-            subjectType: b.subjectType,
-            subjectId: b.subjectId,
-            relatedInvestorId: b.subjectType === "investor" ? b.subjectId : null,
-            relatedLeadId: b.subjectType === "lead" ? b.subjectId : null,
-            type: "follow_up",
-            title,
-            description: b.notes?.trim() || null,
-            priority: "normal",
-            status: "open",
-            assigneeId: assignee.id,
-            createdById: session.userId,
-            dueAt: b.taskDueOn ? new Date(`${b.taskDueOn}T18:00:00+05:30`) : null,
-            slaDueAt: new Date(Date.now() + 72 * 3_600_000),
-            meta: { fromActivityId: id },
-          });
-          await recordAudit(tx, {
-            tenantId: session.tenantId,
-            actorUserId: session.userId,
-            action: "task.create",
-            entityType: "task",
-            entityId: taskId,
-            after: { title, assigneeId: assignee.id, fromActivityId: id },
-            ...meta,
-          });
-          if (toOther) {
-            const [actor] = await tx.select({ name: users.name }).from(users).where(eq(users.id, session.userId)).limit(1);
-            // This notification is what shows up as the "New task" pop-up for the person it is assigned to.
-            await createNotification(tx, {
+          const [actor] = await tx.select({ name: users.name }).from(users).where(eq(users.id, session.userId)).limit(1);
+          for (const assignee of assignees) {
+            const taskId = uuid();
+            await tx.insert(tasks).values({
+              id: taskId,
               tenantId: session.tenantId,
-              userId: assignee.id,
-              kind: "task.assigned",
-              title: `New task: ${title}`,
-              body: [actor?.name ? `${actor.name} assigned this to you` : "Assigned to you", b.notes?.trim()].filter(Boolean).join(" - ").slice(0, 240),
-              linkUrl: "/dashboard/tasks?view=assigned_to_me",
-              severity: "info",
-              meta: { task_id: taskId, assigned_by: session.userId, from_activity_id: id },
+              subjectType: b.subjectType,
+              subjectId: b.subjectId,
+              relatedInvestorId: b.subjectType === "investor" ? b.subjectId : null,
+              relatedLeadId: b.subjectType === "lead" ? b.subjectId : null,
+              type: "follow_up",
+              title,
+              description: b.notes?.trim() || null,
+              priority: "normal",
+              status: "open",
+              assigneeId: assignee.id,
+              createdById: session.userId,
+              dueAt: b.taskDueOn ? new Date(`${b.taskDueOn}T18:00:00+05:30`) : null,
+              slaDueAt: new Date(Date.now() + 72 * 3_600_000),
+              meta: { fromActivityId: id },
             });
+            await recordAudit(tx, {
+              tenantId: session.tenantId,
+              actorUserId: session.userId,
+              action: "task.create",
+              entityType: "task",
+              entityId: taskId,
+              after: { title, assigneeId: assignee.id, fromActivityId: id },
+              ...meta,
+            });
+            if (assignee.id !== session.userId) {
+              // This notification is what shows up as the "New task" pop-up for the person it is assigned to.
+              await createNotification(tx, {
+                tenantId: session.tenantId,
+                userId: assignee.id,
+                kind: "task.assigned",
+                title: `New task: ${title}`,
+                body: [actor?.name ? `${actor.name} assigned this to you` : "Assigned to you", b.notes?.trim()].filter(Boolean).join(" - ").slice(0, 240),
+                linkUrl: "/dashboard/tasks?view=assigned_to_me",
+                severity: "info",
+                meta: { task_id: taskId, assigned_by: session.userId, from_activity_id: id },
+              });
+            }
           }
         }
         if (b.subjectType === "investor") {
@@ -276,7 +284,7 @@ export async function POST(req: NextRequest) {
     );
 
     if (result.notFound) return NextResponse.json({ error: "subject not found" }, { status: 404 });
-    if ("badAssignee" in result) return NextResponse.json({ error: "That person is not an active member of your firm." }, { status: 400 });
+    if ("badAssignee" in result) return NextResponse.json({ error: "One of those people is not an active member of your firm." }, { status: 400 });
     if ("cannotAssign" in result) {
       return NextResponse.json(
         { error: "You do not have permission to assign tasks to other people. Ask an owner to turn on \"Assign tasks to other people\" for you." },
