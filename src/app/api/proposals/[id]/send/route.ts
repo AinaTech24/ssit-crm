@@ -30,11 +30,11 @@ import { createShareToken } from "@/lib/share-tokens";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { gateClientSend } from "@/lib/comms/guarded-send";
 import { autoAdvance, resolveLeadIdForInvestor } from "@/lib/blueprints/auto-advance";
-import { proposals, tenants, communications, investors } from "@/db/schema";
+import { proposals, tenants, communications, investors, users } from "@/db/schema";
 import { checkAlignment } from "@/lib/proposal/risk-alignment";
 import { resolveEmailSender } from "@/lib/comms/sender";
 import { emailAdapter } from "@/lib/comms/adapters/resend";
-import { brandFromTenant, renderClientProposalPdf } from "@/lib/proposal/render";
+import { brandForProposal, renderClientProposalPdf } from "@/lib/proposal/render";
 import { formatINR } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -314,7 +314,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Resend directly from an unverified "no-reply@…" From, which bounced.
         let pdf: Buffer | null = null;
         try {
-          pdf = await renderClientProposalPdf({ proposal: p as any, brand: brandFromTenant(tenant) });
+          // The client sees the RM who prepared it as the contact.
+          const [preparer] = p.preparedByUserId
+            ? await tx.select().from(users).where(eq(users.id, p.preparedByUserId)).limit(1)
+            : [];
+          pdf = await renderClientProposalPdf({ proposal: p as any, brand: brandForProposal(tenant, preparer) });
         } catch (e) {
           console.warn("[proposal.send] PDF generation failed; sending without attachment:", (e as Error)?.message);
         }

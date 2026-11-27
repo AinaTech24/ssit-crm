@@ -24,6 +24,26 @@ export function brandFromTenant(t: any): ReportBrand {
   };
 }
 
+/** The person who prepared a proposal: their details are what the client sees as the contact. */
+export type ProposalPreparer = { name?: string | null; email?: string | null; phone?: string | null; euin?: string | null } | null | undefined;
+
+/**
+ * The firm's branding with the PREPARER as the contact: their name, email and phone replace the firm's general
+ * ones (a detail the person has not filled in is simply left out, never swapped for the firm's). With no preparer
+ * on record the firm's own contact details are used.
+ */
+export function brandForProposal(t: any, preparer: ProposalPreparer): ReportBrand {
+  const brand = brandFromTenant(t);
+  if (!preparer?.email && !preparer?.phone) return { ...brand, preparedByName: preparer?.name ?? null };
+  return {
+    ...brand,
+    preparedByName: preparer.name ?? null,
+    preparedByEuin: preparer.euin ?? null,
+    email: preparer.email ?? null,
+    phone: preparer.phone ?? null,
+  };
+}
+
 export async function renderClientProposalPdf(args: { proposal: ProposalData; brand: ReportBrand; generatedAt?: string }): Promise<Buffer> {
   try {
     return await renderProposalReportPdf(args);

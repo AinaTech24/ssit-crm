@@ -45,6 +45,9 @@ export type ReportBrand = {
   email?: string | null;
   website?: string | null;
   address?: { line1?: string; line2?: string; city?: string; state?: string; pincode?: string } | string | null;
+  /** The RM who prepared this proposal; shown at the top of "Prepared by". */
+  preparedByName?: string | null;
+  preparedByEuin?: string | null;
 };
 
 const c = (r: number, g: number, b: number): RGB => rgb(r / 255, g / 255, b / 255);
@@ -290,7 +293,12 @@ export async function renderProposalReportPdf(args: {
     hr(203);
     label("PREPARED BY", 237.5);
     y = 258.5;
-    for (const l of [...wrapT(T(firm), 9.6, false, 166), ...(brand.arn ? wrapT(`AMFI Registered Mutual Fund Distributor (${arnText})`, 9.6, false, 166) : [])]) {
+    for (const l of [
+      ...(brand.preparedByName ? wrapT(T(brand.preparedByName), 9.6, false, 166) : []),
+      ...wrapT(T(firm), 9.6, false, 166),
+      ...(brand.arn ? wrapT(`AMFI Registered Mutual Fund Distributor (${arnText})`, 9.6, false, 166) : []),
+      ...(brand.preparedByEuin ? wrapT(`EUIN ${brand.preparedByEuin}`, 9.6, false, 166) : []),
+    ]) {
       side(l, y);
       y += 16.4;
     }

@@ -566,9 +566,12 @@ export default async function ProposalPrintPage({
         {/* Footer — firm credentials + contact (AMFI / BIF / ARN) */}
         {(() => {
           const bareArn = (tenant?.arn ?? "").replace(/^ARN-?/i, "");
+          // The contact is the RM who prepared the proposal; the firm's general details only when there is none.
+          const person = preparedBy as { email?: string | null; phone?: string | null } | null;
+          const own = person?.email || person?.phone;
           const contacts = [
-            (tenant as any)?.email,
-            (tenant as any)?.phone,
+            own ? person?.email : (tenant as any)?.email,
+            own ? person?.phone : (tenant as any)?.phone,
             (tenant as any)?.website,
           ].filter(Boolean);
           return (
