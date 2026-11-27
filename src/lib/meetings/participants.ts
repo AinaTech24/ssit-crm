@@ -32,6 +32,35 @@ export function isMeetingParticipantSql(alias: string, uid: string | SQL): SQL {
     OR jsonb_exists(COALESCE(${sql.raw(a)}.collaborator_ids, '[]'::jsonb), (${u})::text))`;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The "one sub-branch / one person" VIEW filter for meetings. A person's (or a desk's) meetings are the ones they
+ * booked AND the ones they were invited to - filtering on the booker alone hid every collaborator's meeting.
+ * Applied on top of the data wall, never instead of it. TRUE when nothing is chosen.
+ */
+export function meetingViewFilterSql(
+  sel: { rm: string; deskId: string | null; branchId: string | null },
+  tenantId: string,
+  alias = "m"
+): SQL {
+  const a = safeAlias(alias);
+  if (sel.rm && UUID.test(sel.rm)) return isMeetingParticipantSql(a, sel.rm);
+  const unit =
+    sel.deskId && UUID.test(sel.deskId)
+      ? sql`su.desk_id = ${sel.deskId}::uuid`
+      : sel.branchId && UUID.test(sel.branchId)
+        ? sql`su.branch_id = ${sel.branchId}::uuid`
+        : null;
+  if (!unit) return sql`TRUE`;
+  return sql`EXISTS (
+    SELECT 1 FROM users su
+     WHERE su.tenant_id = ${tenantId}::uuid AND ${unit}
+       AND (su.id = ${sql.raw(a)}.created_by_id OR su.id = ${sql.raw(a)}.rm_id
+            OR jsonb_exists(COALESCE(${sql.raw(a)}.collaborator_ids, '[]'::jsonb), su.id::text))
+  )`;
+}
+
 /**
  * `CROSS JOIN LATERAL` fragment that fans one meeting row out to one row per
  * participant (column `mp.uid`), de-duplicated so someone who booked a meeting AND

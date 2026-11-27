@@ -1,3 +1,4 @@
+import { isMeetingParticipantSql } from "@/lib/meetings/participants";
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { FlaskConical, Phone, ListChecks, CalendarClock, TrendingUp, FileSignature } from "lucide-react";
@@ -127,7 +128,7 @@ export async function RaDashboard({
       `);
       const meetingsDue = await tx.execute(sql`
         SELECT COUNT(*)::int AS n FROM review_meetings
-        WHERE tenant_id = ${session.tenantId}::uuid AND COALESCE(created_by_id, rm_id) = ${uid}::uuid
+        WHERE tenant_id = ${session.tenantId}::uuid AND ${isMeetingParticipantSql("review_meetings", uid)}
           AND status IN ('scheduled', 'confirmed') AND meeting_date >= now() AND meeting_date < now() + interval '7 days'
       `);
       salesFunnel = {

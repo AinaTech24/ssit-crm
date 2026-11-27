@@ -17,6 +17,7 @@
 
 import { sql } from "drizzle-orm";
 import { sendSystemEmail, actionEmailHtml } from "@/lib/comms/system-email";
+import { createNotification } from "@/lib/notifications/create";
 
 export type MeetingForNotice = {
   id: string;
@@ -99,6 +100,20 @@ export async function notifyMeetingCollaborators(
     "",
     `Open it: ${url}`,
   ].filter((l) => l !== "");
+
+  // In the CRM first: the pop-up and the bell, for everyone named - whether or not they have an email address.
+  for (const u of rows) {
+    await createNotification(tx, {
+      tenantId: args.tenantId,
+      userId: u.id,
+      kind: "meeting.invited",
+      title: `New meeting: ${what}`,
+      body: [`${args.organiserName} added you`, when, args.aboutName ?? ""].filter(Boolean).join(" · ").slice(0, 240),
+      linkUrl: `/dashboard/review-meetings/${m.id}`,
+      severity: "info",
+      meta: { meeting_id: m.id },
+    });
+  }
 
   let sent = 0;
   let skipped = 0;

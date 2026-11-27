@@ -63,7 +63,7 @@ export async function GET() {
                AND created_at >= now() - interval '10 minutes'
              ORDER BY created_at DESC LIMIT 8`),
           tx.execute(sql`
-            SELECT m.id, m.subject, m.meeting_date, COALESCE(i.name, l.name) AS party
+            SELECT m.id, m.subject, m.meeting_date, COALESCE(i.name, l.name, m.other_party_name) AS party
               FROM review_meetings m
               LEFT JOIN investors i ON i.id = m.investor_id
               LEFT JOIN leads l ON l.id = m.lead_id

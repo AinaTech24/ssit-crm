@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { ModuleKpis } from "@/components/modules/ModuleKpis";
 import { ScopeFilterBar } from "@/components/common/ScopeFilterBar";
-import { parseScope, scopeFilterSql, loadScopeUnits, loadScopeMembers, loadScopeBreakdown, canPickScope } from "@/lib/scope/view-filter";
+import { parseScope, loadScopeUnits, loadScopeMembers, loadScopeBreakdown, canPickScope } from "@/lib/scope/view-filter";
 import { ScopeBreakdownCards } from "@/components/common/ScopeBreakdownCards";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
@@ -19,7 +19,7 @@ import { MeetingsBulkTable } from "@/components/review-meetings/MeetingsBulkTabl
 import { MeetingsKanban } from "@/components/review-meetings/MeetingsKanban";
 import { LayoutList, KanbanSquare, CalendarClock, BarChart3 } from "lucide-react";
 import { can } from "@/lib/auth/rbac";
-import { isMeetingParticipantSql } from "@/lib/meetings/participants";
+import { isMeetingParticipantSql, meetingParticipantsLateral, meetingViewFilterSql } from "@/lib/meetings/participants";
 import { loadMeetingRmOptions } from "@/lib/meetings/export-options";
 
 const MEETINGS_COLUMNS = [
@@ -107,7 +107,7 @@ export default async function ReviewMeetingsPage({
       sql`m.tenant_id = ${session.tenantId}::uuid`,
       meetingScopeSql(meetingScope, "m.rm_id"),
       // Sub-branch view filter, layered ON the wall (never instead of it).
-      scopeFilterSql(scopeSel, session.tenantId, ["m.created_by_id", "m.rm_id"]),
+      meetingViewFilterSql(scopeSel, session.tenantId, "m"),
     ];
     if (q) {
       filters.push(
@@ -202,14 +202,17 @@ export default async function ReviewMeetingsPage({
     const rmRows = { rows: await loadMeetingRmOptions(tx, session, meetingScope) };
     const { units: scopeUnits } = showScopePicker ? await loadScopeUnits(tx, session) : { units: [] };
     const scopeMembers = showScopePicker ? await loadScopeMembers(tx, session, scopeSel) : [];
-    // Meetings per sub-branch and per person, under the same wall + filters as the list.
+    // Meetings per sub-branch and per person, under the same wall + filters as the list. Everyone ON a meeting
+    // (booker and collaborators) is credited with it; a sub-branch counts each meeting once.
     const breakdown = showScopePicker
       ? await loadScopeBreakdown(tx, {
           from: sql`review_meetings m
             LEFT JOIN investors i ON i.id = m.investor_id
             LEFT JOIN leads l ON l.id = m.lead_id
-            LEFT JOIN users u ON u.id = COALESCE(m.rm_id, m.created_by_id)`,
-          owner: "COALESCE(m.rm_id, m.created_by_id)",
+            LEFT JOIN users u ON u.id = COALESCE(m.rm_id, m.created_by_id)
+            ${meetingParticipantsLateral("m")}`,
+          owner: "mp.uid",
+          distinct: "m.id",
           where: sql`${sql.join(filters, sql` AND `)}`,
         })
       : { byDesk: [], byRm: [] };

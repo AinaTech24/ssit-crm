@@ -306,11 +306,13 @@ export type ScopeBreakdown = {
  */
 export async function loadScopeBreakdown(
   tx: any,
-  o: { from: SQL; owner: string; where: SQL }
+  /** `distinct`: count distinct values of this column - needed when `from` repeats a record per participant. */
+  o: { from: SQL; owner: string; where: SQL; distinct?: string }
 ): Promise<ScopeBreakdown> {
+  const counted = o.distinct ? sql`COUNT(DISTINCT ${sql.raw(o.distinct)})` : sql`COUNT(*)`;
   const [byDeskRes, byRmRes] = await Promise.all([
     tx.execute(sql`
-      SELECT COALESCE(sbd.name, 'No sub-branch') AS label, sbd.id AS desk_id, COUNT(*)::int AS n
+      SELECT COALESCE(sbd.name, 'No sub-branch') AS label, sbd.id AS desk_id, ${counted}::int AS n
       FROM ${o.from}
       LEFT JOIN users sbu ON sbu.id = ${sql.raw(o.owner)}
       LEFT JOIN desks sbd ON sbd.id = sbu.desk_id
@@ -320,7 +322,7 @@ export async function loadScopeBreakdown(
       LIMIT 12
     `),
     tx.execute(sql`
-      SELECT COALESCE(sbu.name, 'Unassigned') AS label, sbu.id AS rm_id, COUNT(*)::int AS n
+      SELECT COALESCE(sbu.name, 'Unassigned') AS label, sbu.id AS rm_id, ${counted}::int AS n
       FROM ${o.from}
       LEFT JOIN users sbu ON sbu.id = ${sql.raw(o.owner)}
       WHERE ${o.where}

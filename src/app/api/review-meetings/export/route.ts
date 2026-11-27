@@ -22,7 +22,8 @@ import * as XLSX from "xlsx";
 import { withTenant } from "@/db/client";
 import { requireSession } from "@/lib/auth/session";
 import { resolveMeetingScope, meetingScopeSql } from "@/lib/auth/data-scope";
-import { parseScope, scopeFilterSql } from "@/lib/scope/view-filter";
+import { parseScope } from "@/lib/scope/view-filter";
+import { meetingViewFilterSql } from "@/lib/meetings/participants";
 import { dateRangeCond } from "@/lib/filters/date-range";
 import { loadTenantLicense } from "@/lib/auth/license";
 import { isFieldAllowed } from "@/lib/auth/field-gate";
@@ -99,7 +100,7 @@ export async function GET(req: NextRequest) {
         const filters: any[] = [
           sql`m.tenant_id = ${session.tenantId}::uuid`,
           meetingScopeSql(meetingScope, "m.rm_id"),
-          scopeFilterSql(scopeSel, session.tenantId, ["m.created_by_id", "m.rm_id"]),
+          meetingViewFilterSql(scopeSel, session.tenantId, "m"),
         ];
         if (statusFilter.length) filters.push(inList("m.status", statusFilter));
         if (categoryFilter.length) filters.push(inList("m.category", categoryFilter));

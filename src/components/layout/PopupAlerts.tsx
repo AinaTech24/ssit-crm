@@ -147,6 +147,8 @@ export function PopupAlerts() {
       for (const n of notif?.notifications ?? []) {
         if (n.readAt || Date.now() - new Date(n.createdAt).getTime() > 15 * 60_000) continue;
         if (n.kind === "birthday_today") continue;
+        // The "New meeting" card already covers an invitation to a meeting that was just created.
+        if (n.kind === "meeting.invited" && (rem?.newMeetings ?? []).some((x: any) => String(n.linkUrl ?? "").endsWith(String(x.id)))) continue;
         found.push({
           key: `notice-${n.id}`,
           kind: "notice",
