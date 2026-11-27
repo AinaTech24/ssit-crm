@@ -109,12 +109,12 @@ export function parseBatch(
   return { ok: true, entries };
 }
 
-// ── One entry per day ────────────────────────────────────────────────────────
-// An ENTRY is a day's content: its date and title are fixed, and it holds one line
-// per post it went out as - each with its own platform AND type (a Reel on Instagram,
-// a Video on Facebook), stored as one row per line sharing the date and title. A day
-// may hold only ONE entry; the same platform may appear twice only with different
-// types (an Instagram Post and an Instagram Reel).
+// ── Entries ──────────────────────────────────────────────────────────────────
+// An ENTRY is one piece of content on one day: its date and title are fixed, and it holds
+// one line per post it went out as - each with its own platform AND type (a Reel on
+// Instagram, a Video on Facebook), stored as one row per line sharing the date and title.
+// A day may hold SEVERAL entries (different content titles), each with its own links and
+// video; within one entry a platform + type appears only once.
 
 const sameText = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
@@ -144,21 +144,22 @@ export function duplicateLineError(rows: Array<{ platform: string; contentType: 
 }
 
 /**
- * May `incoming` be saved onto a day that already holds `existing` (rows on that day
- * that are NOT being replaced)? One entry per day:
- *   - nothing there: fine;
- *   - the day's entry has the same title and `join` is true (adding more lines to
- *     it): fine, as long as no platform + type repeats;
- *   - anything else: refused, with a message that says what to do.
+ * May `incoming` (the lines of one content) be saved onto a day that already holds `existing`
+ * (rows on that day that are NOT being replaced)? Other content titles on the day do not matter.
+ *   - no content with this title there: fine;
+ *   - it is there and `join` is true (adding more lines to it): fine, as long as no platform +
+ *     type repeats;
+ *   - it is there and `join` is false (renaming / moving another entry onto it): refused.
  */
-export function dayRuleError(existing: DayRow[], incoming: DayRow[], opts: { join: boolean; date: string }): string | null {
-  if (existing.length === 0) return null;
-  const head = existing[0];
-  const same = incoming.every((r) => sameText(r.contentTitle, head.contentTitle));
-  if (!(opts.join && same)) {
-    return `${opts.date} already has an entry ("${head.contentTitle}"). Only one entry can be created per day - open it and add the platform there, or pick another date.`;
+export function contentRuleError(existing: DayRow[], incoming: DayRow[], opts: { join: boolean; date: string }): string | null {
+  const head = incoming[0];
+  if (!head) return null;
+  const same = existing.filter((r) => sameText(r.contentTitle, head.contentTitle));
+  if (same.length === 0) return null;
+  if (!opts.join) {
+    return `${opts.date} already has content titled "${same[0].contentTitle}" - open that one and add the platform there, or use a different title.`;
   }
-  return duplicateLineError([...existing, ...incoming]);
+  return duplicateLineError([...same, ...incoming]);
 }
 
 /** Identifies an entry: its day plus its title. */

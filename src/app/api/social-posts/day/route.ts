@@ -4,11 +4,12 @@ import { handleApiError } from "@/lib/api/error-handler";
  *
  * GET /api/social-posts/day?date=YYYY-MM-DD - the platform lines of that day's entry
  *   (needs social_tracker.view or .manage).
- * PUT /api/social-posts/day - replace that day's entry in one go: lines that carry an
- *   id are updated, lines without one are added, lines left out are removed. The date
- *   may be changed to a day with no entry. Needs social_tracker.manage.
+ * PUT /api/social-posts/day - replace ONE entry (a content title on a day) in one go: lines
+ *   that carry an id are updated, lines without one are added, lines left out are removed.
+ *   Other content on the same day is untouched. Date and title may be changed, but not onto a
+ *   title the target day already has. Needs social_tracker.manage.
  *
- * Body: { originalDate, entries: [{ id?, postDate, contentTitle, contentType, platform,
+ * Body: { originalDate, originalTitle, entries: [{ id?, postDate, contentTitle, contentType, platform,
  *         status, postLink, views, reach, likes, followersIncrease, leads }] }
  */
 
@@ -21,7 +22,7 @@ import { can, require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { socialMediaPosts } from "@/db/schema";
 import { isIsoDate } from "@/lib/dhandho/schedule";
-import { dayRuleError, duplicateLineError, parseBatch, sameEntryError } from "@/lib/social/tracker";
+import { contentRuleError, duplicateLineError, parseBatch, sameEntryError } from "@/lib/social/tracker";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
 
 const Body = z.object({
   originalDate: z.string().refine(isIsoDate, "Use a valid date"),
+  originalTitle: z.string().min(1).max(300),
   entries: z.array(z.record(z.string(), z.unknown())).min(1).max(50),
 });
 
@@ -75,7 +77,8 @@ export async function PUT(req: NextRequest) {
     const newDate = lines[0].postDate;
 
     const result = await withTenant(session.tenantId, async (tx) => {
-      const group = await tx
+      const wanted = body.data.originalTitle.trim().toLowerCase();
+      const dayRows = await tx
         .select({
           id: socialMediaPosts.id,
           contentTitle: socialMediaPosts.contentTitle,
@@ -85,17 +88,13 @@ export async function PUT(req: NextRequest) {
         })
         .from(socialMediaPosts)
         .where(and(eq(socialMediaPosts.tenantId, session.tenantId), eq(socialMediaPosts.postDate, body.data.originalDate)));
-      // A day saved before the one-entry-per-day rule may hold several different
-      // entries. Replacing "the day" would overwrite or drop the others, so refuse
-      // until the extras are deleted.
-      if (sameEntryError(group)) {
-        return { refused: "This day holds more than one entry from before the one-entry-per-day rule. Delete the extra lines first, then edit the one you want to keep." } as const;
-      }
+      // Only the lines of the entry being edited - the day's other content stays as it is.
+      const group = dayRows.filter((r) => r.contentTitle.trim().toLowerCase() === wanted);
       const groupIds = new Set(group.map((g) => g.id));
       const keep = ids.filter((i): i is string => !!i);
       if (keep.some((i) => !groupIds.has(i))) return "not_found" as const;
 
-      // Any OTHER entry already on the day this one is staying on / moving to.
+      // Other content already on the day this one is staying on / moving to.
       const onDay = await tx
         .select({
           id: socialMediaPosts.id,
@@ -106,7 +105,7 @@ export async function PUT(req: NextRequest) {
         .from(socialMediaPosts)
         .where(and(eq(socialMediaPosts.tenantId, session.tenantId), eq(socialMediaPosts.postDate, newDate)));
       const others = onDay.filter((r) => !groupIds.has(r.id));
-      const refused = dayRuleError(others, lines, { join: false, date: newDate });
+      const refused = contentRuleError(others, lines, { join: false, date: newDate });
       if (refused) return { refused } as const;
 
       // Remove the lines that were taken out.

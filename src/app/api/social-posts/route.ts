@@ -14,7 +14,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { socialMediaPosts } from "@/db/schema";
-import { dayRuleError, duplicateLineError, parseBatch, sameEntryError } from "@/lib/social/tracker";
+import { contentRuleError, duplicateLineError, parseBatch, sameEntryError } from "@/lib/social/tracker";
 import { and, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -31,9 +31,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
 
-    // One ENTRY per day: every line shares the date and title; each line has its own
-    // platform and type (a platform + type appears once). If the day already has an
-    // entry, only more lines of that same entry may be added to it.
+    // One save is ONE content: every line shares the date and title; each line has its own platform and
+    // type. A day may hold several contents; lines for a title already on the day join that content.
     const bad = sameEntryError(parsed.entries) ?? duplicateLineError(parsed.entries);
     if (bad) return NextResponse.json({ error: bad }, { status: 400 });
     const date = parsed.entries[0].postDate;
@@ -47,7 +46,7 @@ export async function POST(req: NextRequest) {
         })
         .from(socialMediaPosts)
         .where(and(eq(socialMediaPosts.tenantId, session.tenantId), eq(socialMediaPosts.postDate, date)));
-      return dayRuleError(existing, parsed.entries, { join: true, date });
+      return contentRuleError(existing, parsed.entries, { join: true, date });
     });
     if (refused) return NextResponse.json({ error: refused }, { status: 409 });
 

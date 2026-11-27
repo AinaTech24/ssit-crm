@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { can } from "@/lib/auth/rbac";
-import { MAX_ENTRIES_PER_SAVE, PostFields, dayRuleError, entryKey, groupEntries, duplicateLineError, parseBatch, sameEntryError, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
+import { MAX_ENTRIES_PER_SAVE, PostFields, contentRuleError, entryKey, groupEntries, duplicateLineError, parseBatch, sameEntryError, platformLabel, statusLabel, totalsOf, typeLabel } from "@/lib/social/tracker";
 
 const good = {
   postDate: "2026-11-10",
@@ -101,35 +101,30 @@ describe("adding several entries at once", () => {
   });
 });
 
-describe("one entry per day", () => {
+describe("several contents on one day", () => {
   const row = (title: string, platform: string, type = "reel") => ({ contentTitle: title, contentType: type, platform });
   const day = "17 Nov 2026";
 
-  it("an empty day takes any entry", () => {
-    expect(dayRuleError([], [row("A", "instagram")], { join: false, date: day })).toBeNull();
+  it("a day takes a second content with a different title", () => {
+    expect(contentRuleError([], [row("A", "instagram")], { join: false, date: day })).toBeNull();
+    expect(contentRuleError([row("Large cap", "instagram")], [row("Other post", "instagram")], { join: true, date: day })).toBeNull();
+    expect(contentRuleError([row("Large cap", "instagram")], [row("Other post", "instagram")], { join: false, date: day })).toBeNull();
   });
 
-  it("a day that has a different entry refuses a second one, and says what to do", () => {
-    const msg = dayRuleError([row("Large cap", "instagram")], [row("Other post", "facebook")], { join: true, date: day });
-    expect(msg).toMatch(/Only one entry can be created per day/);
-    expect(msg).toContain("Large cap");
+  it("more posts may join the same content (same title), each with its own type", () => {
+    expect(contentRuleError([row("Large cap", "instagram", "reel")], [row("large cap ", "facebook", "video")], { join: true, date: day })).toBeNull();
+    expect(contentRuleError([row("Large cap", "instagram", "reel")], [row("Large cap", "instagram", "post")], { join: true, date: day })).toBeNull();
   });
 
-  it("more posts may join the same entry (same title), each with its own type", () => {
-    // Instagram Reel + Facebook Video + an Instagram Post, all one day's entry.
-    expect(dayRuleError([row("Large cap", "instagram", "reel")], [row("large cap ", "facebook", "video")], { join: true, date: day })).toBeNull();
-    expect(dayRuleError([row("Large cap", "instagram", "reel")], [row("Large cap", "instagram", "post")], { join: true, date: day })).toBeNull();
+  it("the same platform with the same type twice in one content is refused", () => {
+    expect(contentRuleError([row("Large cap", "instagram", "reel")], [row("Large cap", "instagram", "reel")], { join: true, date: day })).toMatch(/twice/);
   });
 
-  it("the same platform with the same type twice is refused", () => {
-    expect(dayRuleError([row("Large cap", "instagram", "reel")], [row("Large cap", "instagram", "reel")], { join: true, date: day })).toMatch(/twice/);
+  it("renaming or moving a content onto a title the day already has is refused", () => {
+    expect(contentRuleError([row("Large cap", "instagram")], [row("Large cap", "facebook")], { join: false, date: day })).toMatch(/already has content titled/);
   });
 
-  it("when replacing an entry (join off) another entry on the target day is refused even if it looks the same", () => {
-    expect(dayRuleError([row("Large cap", "instagram")], [row("Large cap", "facebook")], { join: false, date: day })).toMatch(/already has an entry/);
-  });
-
-  it("every post of an entry shares the date and title - the type may differ", () => {
+  it("every line of one save shares the date and title", () => {
     const a = { postDate: "2026-11-17", contentTitle: "T" };
     expect(sameEntryError([a, { ...a }])).toBeNull();
     expect(sameEntryError([a, { ...a, contentTitle: "t " }])).toBeNull();
@@ -137,7 +132,7 @@ describe("one entry per day", () => {
     expect(sameEntryError([a, { ...a, postDate: "2026-11-18" }])).toMatch(/same for every platform/);
   });
 
-  it("a platform may repeat with a different type, but not with the same one", () => {
+  it("the same platform may repeat only with different types", () => {
     expect(duplicateLineError([{ platform: "instagram", contentType: "reel" }, { platform: "facebook", contentType: "reel" }])).toBeNull();
     expect(duplicateLineError([{ platform: "instagram", contentType: "reel" }, { platform: "instagram", contentType: "post" }])).toBeNull();
     expect(duplicateLineError([{ platform: "instagram", contentType: "reel" }, { platform: "instagram", contentType: "reel" }])).toMatch(/Instagram Reel/);

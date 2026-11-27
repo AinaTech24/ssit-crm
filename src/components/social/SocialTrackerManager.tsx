@@ -12,7 +12,7 @@
  */
 
 import { DriveVideoUploader } from "@/components/drive/DriveVideoUploader";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { SelectField } from "@/components/ui/SelectField";
@@ -147,6 +147,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   const [head, setHead] = useState<Head>(blankHead());
   const [lines, setLines] = useState<Line[]>([blankLine("instagram")]);
   const [originalDate, setOriginalDate] = useState<string | null>(null);
+  const [originalTitle, setOriginalTitle] = useState("");
   // The card that is open (an entry key), and the entry's FULL set of platforms -
   // the list can be filtered to one platform, the card never is.
   const [viewKey, setViewKey] = useState<string | null>(null);
@@ -157,6 +158,16 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   const [err, setErr] = useState<string | null>(null);
 
   const entries = groupEntries(rows);
+  // The days of the list, each with its contents (and how many table rows they take).
+  const byDay: Array<{ date: string; contents: EntryGroup<TrackerRow>[]; rows: number }> = [];
+  for (const g of entries) {
+    const size = g.lines.length + (g.lines.length > 1 ? 1 : 0);
+    const last = byDay.find((d) => d.date === g.postDate);
+    if (last) {
+      last.contents.push(g);
+      last.rows += size;
+    } else byDay.push({ date: g.postDate, contents: [g], rows: size });
+  }
 
   const setH = <K extends keyof Head>(k: K, v: Head[K]) => setHead((h) => ({ ...h, [k]: v }));
   const setL = <K extends keyof Line>(i: number, k: K, v: Line[K]) =>
@@ -180,8 +191,9 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
     if (all) setFull({ key, rows: all.filter((r) => entryKey(r) === key) });
   }
 
-  function openNew() {
-    setHead(blankHead());
+  /** A new entry - for today, or for a day picked from the list ("Add content"). */
+  function openNew(date?: string) {
+    setHead(date ? { ...blankHead(), postDate: date } : blankHead());
     setLines([blankLine("instagram")]);
     setOriginalDate(null);
     setReturnKey(null);
@@ -202,6 +214,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
       setHead({ postDate: first.postDate, contentTitle: first.contentTitle, driveLink: use.find((r) => r.driveLink)?.driveLink ?? "" });
       setLines(use.map(lineFromRow));
       setOriginalDate(first.postDate);
+      setOriginalTitle(first.contentTitle);
       setReturnKey(g.key);
       setMode("edit");
     } finally {
@@ -217,11 +230,8 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
   }
   const removeLine = (i: number) => setLines((ls) => (ls.length > 1 ? ls.filter((_, n) => n !== i) : ls));
 
-  // A day already shown in the list (the list can be filtered, so the server has the
-  // final say) - warn before the person has typed everything for nothing.
-  const dayRows = mode === "new" ? rows.filter((r) => r.postDate === head.postDate) : [];
-  const dayTaken = dayRows[0];
-  const dayConflict = !!dayTaken && !!head.contentTitle.trim() && !sameText(dayTaken.contentTitle, head.contentTitle);
+  // Typing a title the chosen day already has adds these lines to that content.
+  const joins = mode === "new" && !!head.contentTitle.trim() && rows.some((r) => r.postDate === head.postDate && sameText(r.contentTitle, head.contentTitle));
   // The same platform AND type twice in one entry (an Instagram Reel and an Instagram
   // Post are fine; two Instagram Reels are not).
   const seenLine = new Set<string>();
@@ -249,7 +259,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
       const res = await fetch(adding ? "/api/social-posts" : "/api/social-posts/day", {
         method: adding ? "POST" : "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(adding ? { entries: entriesBody } : { originalDate, entries: entriesBody }),
+        body: JSON.stringify(adding ? { entries: entriesBody } : { originalDate, originalTitle, entries: entriesBody }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -311,7 +321,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
     <div className="space-y-4">
       {canManage && mode === null && (
         <button
-          onClick={openNew}
+          onClick={() => openNew()}
           className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1.5"
         >
           <Plus className="size-4" /> Add entry
@@ -358,15 +368,9 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
             <DriveVideoUploader folderDate={head.postDate} onDone={(url) => setH("driveLink", url)} />
           </div>
 
-          {isNew && dayTaken && (
-            <div
-              className={`rounded-md border p-2 text-xs ${
-                dayConflict ? "border-rose-300 bg-rose-50 text-rose-900" : "border-sky-300 bg-sky-50 text-sky-900"
-              }`}
-            >
-              {dayConflict
-                ? `${fmtDate(head.postDate)} already has an entry ("${dayTaken.contentTitle}"). Only one entry can be created per day - open that entry and use Add platform, or pick another date.`
-                : `${fmtDate(head.postDate)} already has this entry - the platforms you add here are added to it.`}
+          {joins && (
+            <div className="rounded-md border border-sky-300 bg-sky-50 text-sky-900 p-2 text-xs">
+              {fmtDate(head.postDate)} already has this content - the platforms you add here are added to it.
             </div>
           )}
 
@@ -453,7 +457,7 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
           <div className="flex items-center gap-2">
             <button
               onClick={save}
-              disabled={busy || dayConflict}
+              disabled={busy}
               className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-sm font-medium inline-flex items-center gap-1.5 disabled:opacity-50"
             >
               {busy && <Loader2 className="size-3.5 animate-spin" />} {isNew ? "Save entry" : "Save changes"}
@@ -488,13 +492,18 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                 <th className="py-2 pr-4" />
               </tr>
             </thead>
-            {entries.map((g) => {
+            {byDay.map((day) => (
+              <tbody key={day.date} className="border-b-2 last:border-0">
+                {day.contents.map((g, gi) => {
               const total = totalsOf(g.lines);
               const multi = g.lines.length > 1;
               const span = g.lines.length + (multi ? 1 : 0);
               const open = () => void openCard(g.key, g.postDate);
+              const video = g.lines.find((l) => l.driveLink)?.driveLink;
+              // A line above every content after the first, so each one's links stay with it.
+              const edge = gi > 0 ? "border-t border-border" : "";
               return (
-                <tbody key={g.key} className="border-b last:border-0">
+                <Fragment key={g.key}>
                   {g.lines.map((r, i) => (
                     <tr
                       key={r.id}
@@ -504,17 +513,31 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                       }}
                       tabIndex={0}
                       aria-label={`Open ${g.contentTitle} - ${platformLabel(r.platform)} ${typeLabel(r.contentType)}`}
-                      className="align-top cursor-pointer hover:bg-accent/40 focus:bg-accent/40 outline-none"
+                      className={`align-top cursor-pointer hover:bg-accent/40 focus:bg-accent/40 outline-none ${i === 0 ? edge : ""}`}
                     >
                       {i === 0 && (
                         <>
-                          <td rowSpan={span} className="px-4 py-2 whitespace-nowrap text-muted-foreground align-top">{fmtDate(g.postDate)}</td>
+                          {gi === 0 && (
+                            <td rowSpan={day.rows} className="px-4 py-2 whitespace-nowrap text-muted-foreground align-top cursor-default" onClick={(e) => e.stopPropagation()}>
+                              <div>{fmtDate(g.postDate)}</div>
+                              {day.contents.length > 1 && <div className="text-xs">{day.contents.length} contents</div>}
+                              {canManage && (
+                                <button
+                                  type="button"
+                                  onClick={() => openNew(day.date)}
+                                  className="mt-1 text-xs text-brand-cyan hover:underline inline-flex items-center gap-1"
+                                >
+                                  <Plus className="size-3" /> Add content
+                                </button>
+                              )}
+                            </td>
+                          )}
                           <td rowSpan={span} className="py-2 pr-3 max-w-[20rem] align-top">
                             <div className="font-medium break-words">{g.contentTitle}</div>
                             {multi && <div className="text-xs text-muted-foreground">{g.lines.length} posts</div>}
-                            {g.lines.find((l) => l.driveLink)?.driveLink && (
+                            {video && (
                               <a
-                                href={g.lines.find((l) => l.driveLink)!.driveLink!}
+                                href={video}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={(e) => e.stopPropagation()}
@@ -582,9 +605,11 @@ export function SocialTrackerManager({ rows, canManage }: { rows: TrackerRow[]; 
                       <td />
                     </tr>
                   )}
-                </tbody>
+                </Fragment>
               );
-            })}
+                })}
+              </tbody>
+            ))}
           </table>
         )}
       </div>
