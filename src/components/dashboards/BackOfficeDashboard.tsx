@@ -1,3 +1,5 @@
+import { taskScopeSql } from "@/lib/tasks/access";
+import { istDay } from "@/lib/dates/ist";
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { ClipboardList, AlertCircle, FileWarning } from "lucide-react";
@@ -25,18 +27,21 @@ type BackOfficeBook = {
  *   Minor to major cases · SIP rejection cases · Document pending list
  */
 export async function BackOfficeDashboard({ session }: { session: SessionUser }) {
+  const today = istDay();
   const data = await withTenant(session.tenantId, async (tx) => {
+    // The task counts follow the same wall as the Tasks page (a shared back-office pool sees its own).
+    const taskWall = await taskScopeSql(tx, session, "tasks");
     const r = await tx.execute(sql`
       SELECT
         (SELECT COUNT(*)::int FROM investors WHERE kyc_status IN ('pending', 'expired') AND deleted_at IS NULL) AS kyc_pending,
         (SELECT COUNT(*)::int FROM mandates WHERE status = 'pending') AS mandate_pending,
         (SELECT COUNT(*)::int FROM sips WHERE status = 'pending') AS sip_reg_pending,
         (SELECT COUNT(*)::int FROM sips WHERE status IN ('rejected', 'paused')) AS sip_issues,
-        (SELECT COUNT(*)::int FROM transactions WHERE status = 'rejected'
-            AND created_at >= now() - interval '7 days') AS rejected_tx_7d,
-        (SELECT COUNT(*)::int FROM service_requests WHERE status IN ('open', 'in_progress')) AS sr_pending,
+        (SELECT COUNT(*)::int FROM sip_rejections
+            WHERE rejection_date >= ${today}::date - 6) AS rejected_tx_7d,
+        (SELECT COUNT(*)::int FROM service_requests WHERE status NOT IN ('resolved', 'closed')) AS sr_pending,
         (SELECT COUNT(*)::int FROM service_requests
-            WHERE status IN ('open', 'in_progress')
+            WHERE status NOT IN ('resolved', 'closed')
               AND sla_resolution_at < now()) AS sr_breached,
         (SELECT COUNT(*)::int FROM investors WHERE (nominee_name IS NULL OR nominee_name = '') AND deleted_at IS NULL) AS nominee_pending,
         (SELECT COUNT(*)::int FROM investors WHERE is_minor = true
@@ -54,7 +59,7 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
              i.name AS investor_name
       FROM service_requests sr
       LEFT JOIN investors i ON i.id = sr.investor_id
-      WHERE sr.status IN ('open', 'in_progress')
+      WHERE sr.status NOT IN ('resolved', 'closed')
       ORDER BY sr.sla_resolution_at ASC NULLS LAST
       LIMIT 10
     `);
@@ -65,7 +70,7 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
       FROM lead_blueprint_instances lbi
       INNER JOIN leads l ON l.id = lbi.lead_id
       WHERE lbi.status = 'in_progress'
-        AND l.converted_investor_id IS NOT NULL
+        AND l.converted_investor_id IS NOT NULL AND l.deleted_at IS NULL
       GROUP BY current_stage_key
     `);
 
@@ -81,7 +86,7 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
       { name: "2. Docs Received", value: getCount(["documents_received"]), percentage: 0 },
       { name: "3. KYC Process", value: getCount(["kyc_validated", "kyc_registered", "kyc_pending", "modify_kyc", "physical_kyc", "online_kyc"]), percentage: 0 },
       { name: "4. UCC BSE/NSE", value: getCount(["ucc_create", "ucc_activated"]), percentage: 0 },
-      { name: "5. SIP Mandate", value: getCount(["mandate_create", "mandate_activated", "mandate_rejected"]), percentage: 0 },
+      { name: "5. SIP Mandate", value: getCount(["mandate_create", "mandate_activated", "mandate_reject", "mandate_rejected"]), percentage: 0 },
       { name: "6. First Purchase", value: getCount(["make_transaction", "transaction_successful", "transaction_failed", "family_mapping", "update_information", "add_in_review_sheet"]), percentage: 0 },
     ];
 
@@ -110,18 +115,19 @@ export async function BackOfficeDashboard({ session }: { session: SessionUser })
           (SELECT count(*)::int FROM investors
             WHERE status = 'active' AND deleted_at IS NULL)                       AS clients,
           (SELECT count(*)::int FROM tasks
-            WHERE status IN ('open', 'in_progress') AND deleted_at IS NULL)       AS tasks_open,
+            WHERE status IN ('open', 'in_progress', 'blocked') AND deleted_at IS NULL AND ${taskWall})  AS tasks_open,
           (SELECT count(*)::int FROM tasks
-            WHERE status IN ('open', 'in_progress') AND deleted_at IS NULL
+            WHERE status IN ('open', 'in_progress', 'blocked') AND deleted_at IS NULL AND ${taskWall}
               AND due_at IS NOT NULL AND due_at < now())                          AS tasks_overdue,
           (SELECT count(*)::int FROM service_requests
             WHERE status NOT IN ('resolved', 'closed'))                           AS sr_open,
           (SELECT count(*)::int FROM business_entries
             WHERE status <> 'cancelled'
-              AND business_date >= date_trunc('month', current_date))             AS entries_mtd,
-          (SELECT COALESCE(SUM(total_amount), 0)::numeric FROM business_entries
-            WHERE status <> 'cancelled'
-              AND business_date >= date_trunc('month', current_date))             AS gross_mtd
+              AND business_date >= date_trunc('month', ${today}::date) AND business_date <= ${today}::date) AS entries_mtd,
+          (SELECT COALESCE(SUM(l.amount::numeric), 0)::numeric
+             FROM business_entries e JOIN business_entry_lines l ON l.entry_id = e.id
+            WHERE e.status <> 'cancelled' AND l.txn_type IN ('sip','sip_topup','lumpsum','additional_purchase')
+              AND e.business_date >= date_trunc('month', ${today}::date) AND e.business_date <= ${today}::date) AS gross_mtd
       `)).rows[0] as unknown as BackOfficeBook | undefined,
     };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });

@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { Briefcase, FileSignature, Gauge, HeartHandshake, ListChecks, CalendarClock } from "lucide-react";
+import { Briefcase, FileSignature, Gauge, HeartHandshake, CalendarClock } from "lucide-react";
 import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
-import { dataScopeSqlFor } from "@/lib/auth/data-scope";
 import { formatINR, formatDate, formatRelative } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
+import { FollowUpsBox, OpenTasksBox, loadMyDay } from "./MyDay";
 import { loadTenantLicense } from "@/lib/auth/license";
 import { tenantAccessibleNavKeys } from "@/config/nav-access";
 
@@ -27,7 +27,6 @@ type PlanRow = { id: string; plan_number: string; status: string; client_name: s
 type RiskGapRow = { id: string; name: string; avatar_url: string | null; last_profiled: string | null };
 type CountRow = { n: number | string | null };
 type ReviewDueRow = { id: string; name: string; avatar_url: string | null; next_review_at: string; segment_tag: string | null };
-type TaskRow = { id: string; title: string; priority: string; due_at: string | null };
 
 export async function RiaDashboard({ session }: { session: SessionUser }) {
   // Only show a section/link for a module this firm actually has turned on —
@@ -49,10 +48,8 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
     // Every query below aliases the table as "i" — the scope predicate must
     // use the SAME alias, or Postgres can't resolve it ("invalid reference to
     // FROM-clause entry for table investors").
-    const clientScope = await dataScopeSqlFor(tx, session, {
-      branch: "i.branch_id",
-      owner: ["i.rm_id", "i.service_rm_id"],
-    });
+    // "My" clients: the ones this adviser is the relationship or servicing person for.
+    const clientScope = sql`i.tenant_id = ${session.tenantId}::uuid AND (i.rm_id = ${session.userId}::uuid OR i.service_rm_id = ${session.userId}::uuid)`;
 
     const kpi = await tx.execute(sql`
       SELECT
@@ -110,13 +107,13 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
 
     // Reviews due — same cadence field every book uses.
     const reviewsDue = await tx.execute(sql`
-      SELECT i.id, i.name, i.avatar_url, i.next_review_at, i.segment_tag
+      SELECT i.id, i.name, i.avatar_url, i.next_review_at, i.segment_tag, COUNT(*) OVER ()::int AS total_count
       FROM investors i
       WHERE i.status = 'active' AND i.deleted_at IS NULL AND ${clientScope}
         AND i.next_review_at IS NOT NULL
         AND i.next_review_at <= now() + interval '7 days'
       ORDER BY i.next_review_at ASC
-      LIMIT 8
+      LIMIT 200
     `);
 
     // Families under advice — RIA holds family.manage; a household view of the
@@ -126,15 +123,8 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
       WHERE tenant_id = ${session.tenantId}::uuid AND rm_id = ${session.userId}::uuid
     `);
 
-    // My open tasks — same shape every dashboard shows.
-    const tasks = await tx.execute(sql`
-      SELECT id, title, priority, due_at
-      FROM tasks
-      WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${session.userId}::uuid
-        AND status NOT IN ('completed', 'cancelled') AND deleted_at IS NULL
-      ORDER BY due_at ASC NULLS LAST
-      LIMIT 8
-    `);
+    // Follow-ups due today and every open task.
+    const myDay = await loadMyDay(tx, session.tenantId, session.userId);
 
     return {
       clients: Number(k.clients ?? 0),
@@ -146,7 +136,8 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
       riskGapTotal: Number((riskGapTotal.rows[0] as unknown as CountRow | undefined)?.n ?? 0),
       reviewsDue: reviewsDue.rows as unknown as ReviewDueRow[],
       families: Number((families.rows[0] as unknown as CountRow | undefined)?.n ?? 0),
-      tasks: tasks.rows as unknown as TaskRow[],
+      myDay,
+      reviewsDueTotal: Number((reviewsDue.rows[0] as { total_count?: number } | undefined)?.total_count ?? 0),
     };
   });
 
@@ -172,7 +163,7 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
             <Kpi label="Risk profile gaps" value={String(data.riskGapTotal)} sub="No response in 12 months" tone={data.riskGapTotal > 0 ? "amber" : undefined} />
           )}
           {showNav("/dashboard/investors") && (
-            <Kpi label="Reviews due" value={String(data.reviewsDue.length)} sub="Next 7 days" />
+            <Kpi label="Reviews due" value={String(data.reviewsDueTotal)} sub="Overdue and next 7 days" />
           )}
           {showNav("/dashboard/families") && (
             <Kpi label="Families" value={String(data.families)} sub="Under advice" />
@@ -183,7 +174,7 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
       {(showNav("/dashboard/financial-plans") || showNav("/dashboard/risk-profiles")) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {showNav("/dashboard/financial-plans") && (
-            <Section title="Financial plans" count={data.plans.length} icon={FileSignature}>
+            <Section title="Financial plans" count={data.draftPlans + data.finalizedPlans} icon={FileSignature}>
               {data.plans.length === 0 ? (
                 <DashboardEmptyState
                   compact
@@ -210,7 +201,7 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
           )}
 
           {showNav("/dashboard/risk-profiles") && (
-            <Section title="Risk profile gaps" count={data.riskGaps.length} icon={Gauge}>
+            <Section title="Risk profile gaps" count={data.riskGapTotal} icon={Gauge}>
               {data.riskGaps.length === 0 ? (
                 <DashboardEmptyState compact title="Every client is covered 🎉" hint="No client is missing a risk profile from the last 12 months." />
               ) : (
@@ -235,11 +226,11 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {showNav("/dashboard/investors") && (
-          <Section title="Reviews due" count={data.reviewsDue.length} icon={CalendarClock}>
+          <Section title="Reviews overdue and due this week" count={data.reviewsDueTotal} icon={CalendarClock}>
             {data.reviewsDue.length === 0 ? (
               <DashboardEmptyState compact title="Nothing due this week 🎉" hint="No client review falls in the next 7 days." />
             ) : (
-              <ul className="divide-y">
+              <ul className="divide-y max-h-80 overflow-y-auto scrollbar-thin">
                 {data.reviewsDue.map((c: ReviewDueRow) => (
                   <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
                     <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
@@ -254,22 +245,8 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
           </Section>
         )}
 
-        {showNav("/dashboard/tasks") && (
-          <Section title="My open tasks" count={data.tasks.length} icon={ListChecks}>
-            {data.tasks.length === 0 ? (
-              <DashboardEmptyState compact title="No open tasks 🎉" hint="Your task list is clear." />
-            ) : (
-              <ul className="divide-y">
-                {data.tasks.map((t: TaskRow) => (
-                  <li key={t.id} className="py-2 flex items-center justify-between text-sm">
-                    <span className="truncate">{t.title}</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{t.due_at ? formatRelative(t.due_at) : "no due"}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-        )}
+        <FollowUpsBox data={data.myDay} />
+        {showNav("/dashboard/tasks") && <OpenTasksBox data={data.myDay} title="My open tasks" />}
       </div>
 
       <div className="flex flex-wrap gap-2">

@@ -22,6 +22,7 @@ import type { SessionUser } from "@/lib/auth/session";
 import { Suspense } from "react";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
 import { SipIssuesCard } from "@/components/dashboards/SipIssuesCard";
+import { istDay } from "@/lib/dates/ist";
 
 
 
@@ -60,6 +61,8 @@ export async function BranchCockpit({
   deskId?: string;
   deskName?: string;
 }) {
+  const today = istDay();
+  const monthStart = `${today.slice(0, 7)}-01`;
   const data = await withTenant(session.tenantId, async (tx) => {
     const [headRes, totalsRes, membersRes] = await Promise.all([
       // unnest() so a user holding several roles is counted under each — an
@@ -101,39 +104,31 @@ export async function BranchCockpit({
             WHERE (i.rm_id IN (SELECT id FROM scope_members)
                    OR i.service_rm_id IN (SELECT id FROM scope_members))
               AND i.deleted_at IS NULL AND i.status = 'active')                                AS clients,
-          (SELECT COALESCE(SUM(f.aum), 0)::numeric FROM folios f
-            JOIN investors i ON i.id = f.investor_id
-           WHERE (i.rm_id IN (SELECT id FROM scope_members)
-                  OR i.service_rm_id IN (SELECT id FROM scope_members))
-             AND i.deleted_at IS NULL)                                                         AS aum,
-          (SELECT COALESCE(SUM(s.amount), 0)::numeric FROM sips s
-            JOIN investors i ON i.id = s.investor_id
-           WHERE (i.rm_id IN (SELECT id FROM scope_members)
-                  OR i.service_rm_id IN (SELECT id FROM scope_members))
-             AND i.deleted_at IS NULL
-             AND s.status = 'active')                                                          AS sip_book,
-          (SELECT COALESCE(SUM(CASE WHEN tr.direction = 'inflow' THEN tr.amount::numeric
-                                     ELSE -tr.amount::numeric END), 0)::numeric
-             FROM transactions tr
-             JOIN investors i ON i.id = tr.investor_id
+          (SELECT COALESCE(SUM(i.aum::numeric), 0)::numeric FROM investors i
             WHERE (i.rm_id IN (SELECT id FROM scope_members)
                    OR i.service_rm_id IN (SELECT id FROM scope_members))
-              AND tr.status IN ('processed', 'successful')
-              AND tr.order_date >= date_trunc('month', current_date))                           AS net_mtd,
-          (SELECT COALESCE(SUM(tr.amount) FILTER (WHERE tr.direction = 'inflow'), 0)::numeric
-             FROM transactions tr
-             JOIN investors i ON i.id = tr.investor_id
+              AND i.deleted_at IS NULL AND i.status = 'active')                                AS aum,
+          (SELECT COALESCE(SUM(i.active_sip_amount::numeric), 0)::numeric FROM investors i
             WHERE (i.rm_id IN (SELECT id FROM scope_members)
                    OR i.service_rm_id IN (SELECT id FROM scope_members))
-              AND tr.status IN ('processed', 'successful')
-              AND tr.order_date >= date_trunc('month', current_date))                           AS gross_mtd,
+              AND i.deleted_at IS NULL AND i.status = 'active')                                AS sip_book,
+          (SELECT COALESCE(SUM(ln.amount::numeric) FILTER (WHERE ln.txn_type IN ('sip','sip_topup','lumpsum','additional_purchase')), 0)
+                  - COALESCE(SUM(ln.amount::numeric) FILTER (WHERE ln.txn_type IN ('redemption','swp')), 0)
+             FROM business_entries e JOIN business_entry_lines ln ON ln.entry_id = e.id
+            WHERE e.tenant_id = ${session.tenantId}::uuid AND e.rm_id IN (SELECT id FROM scope_members)
+              AND e.status <> 'cancelled' AND e.business_date >= ${monthStart}::date AND e.business_date <= ${today}::date) AS net_mtd,
+          (SELECT COALESCE(SUM(ln.amount::numeric) FILTER (WHERE ln.txn_type IN ('sip','sip_topup','lumpsum','additional_purchase')), 0)
+             FROM business_entries e JOIN business_entry_lines ln ON ln.entry_id = e.id
+            WHERE e.tenant_id = ${session.tenantId}::uuid AND e.rm_id IN (SELECT id FROM scope_members)
+              AND e.status <> 'cancelled' AND e.business_date >= ${monthStart}::date AND e.business_date <= ${today}::date) AS gross_mtd,
           (SELECT count(*)::int FROM leads l
             WHERE l.owner_id IN (SELECT id FROM scope_members)
-              AND l.converted_investor_id IS NULL
-              AND l.stage NOT IN ('lost', 'not_interested'))                                    AS open_leads,
+              AND l.converted_investor_id IS NULL AND l.deleted_at IS NULL
+              AND l.lost_reason IS DISTINCT FROM '__deleted__'
+              AND l.stage NOT IN ('converted', 'lost', 'cold', 'not_interested', 'not_qualified'))    AS open_leads,
           (SELECT count(*)::int FROM tasks t
             WHERE t.assignee_id IN (SELECT id FROM scope_members)
-              AND t.status IN ('open', 'in_progress') AND t.deleted_at IS NULL)                 AS tasks_open,
+              AND t.status IN ('open', 'in_progress', 'blocked') AND t.deleted_at IS NULL)      AS tasks_open,
           (SELECT count(*)::int FROM service_requests sr
             LEFT JOIN investors i ON i.id = sr.investor_id
            WHERE (sr.assigned_to_user_id IN (SELECT id FROM scope_members)
@@ -146,9 +141,8 @@ export async function BranchCockpit({
         SELECT u.id, u.name, u.roles,
                (SELECT count(*)::int FROM investors i
                  WHERE i.rm_id = u.id AND i.deleted_at IS NULL AND i.status = 'active')        AS clients,
-               (SELECT COALESCE(SUM(f.aum), 0)::numeric FROM folios f
-                 JOIN investors i2 ON i2.id = f.investor_id
-                WHERE i2.rm_id = u.id AND i2.deleted_at IS NULL)                                AS aum
+               (SELECT COALESCE(SUM(i2.aum::numeric), 0)::numeric FROM investors i2
+                 WHERE i2.rm_id = u.id AND i2.deleted_at IS NULL AND i2.status = 'active')      AS aum
           FROM users u
          WHERE u.tenant_id = ${session.tenantId}::uuid
            AND u.branch_id = ${branchId}::uuid
@@ -189,13 +183,13 @@ export async function BranchCockpit({
         </h1>
         <p className="text-muted-foreground text-sm">
           {deskName
-            ? "Team for this desk, and the book of the branch it sits in. Pick a name to open their own dashboard."
+            ? "This desk's team and their book. Pick a name to open their own dashboard."
             : "Team and book for this branch. Pick a name from the Member dropdown to open their own dashboard."}
         </p>
       </div>
 
       <Suspense fallback={null}>
-        <SipIssuesCard session={session} />
+        <SipIssuesCard session={session} unit={{ branchId, deskId }} />
       </Suspense>
 
       {/* What the branch is carrying. */}

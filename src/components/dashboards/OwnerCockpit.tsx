@@ -152,7 +152,8 @@ async function OwnerCockpitBody({
   // use this start instead of the hard-coded startOfMonth, and the net-sales
   // chart honours the SAME window so it matches the KPI tiles.
   const range = resolvePeriodRange(period, now, { customStart, from: customFrom, to: customTo });
-  const { fromISO: startOfPeriodISO, toISO: endOfPeriodISO, label: periodLabel, days: rangeDays } = range;
+  // ...ISO are instants (timestamp columns); fromDay / toDay are calendar days (DATE columns).
+  const { fromISO: startOfPeriodISO, toISO: endOfPeriodISO, fromDay, toDay, label: periodLabel, days: rangeDays } = range;
   // Keep the original variable name so existing SQL template literals stay unchanged.
   const startOfMonthISO = startOfPeriodISO;
 
@@ -181,7 +182,7 @@ async function OwnerCockpitBody({
       const headline = await tx.execute(sql`
         SELECT
           (SELECT COUNT(*)::int FROM investors WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND deleted_at IS NULL) AS total_clients,
-          (SELECT COUNT(*)::int FROM leads WHERE tenant_id = ${session.tenantId}::uuid AND converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold', 'not_interested')) AS total_leads,
+          (SELECT COUNT(*)::int FROM leads WHERE tenant_id = ${session.tenantId}::uuid AND converted_investor_id IS NULL AND deleted_at IS NULL AND lost_reason IS DISTINCT FROM '__deleted__' AND stage NOT IN ('converted', 'lost', 'cold', 'not_interested', 'not_qualified')) AS total_leads,
           (SELECT COALESCE(SUM(active_sip_amount::numeric), 0)::numeric FROM investors WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND deleted_at IS NULL) AS sip_book,
           (SELECT COALESCE(SUM(aum::numeric), 0)::numeric FROM investors WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND deleted_at IS NULL) AS total_aum,
           -- trajectory: clients onboarded this period
@@ -212,12 +213,13 @@ async function OwnerCockpitBody({
           COUNT(*) FILTER (WHERE l.txn_type = 'sip_stop')::int AS sip_stopped_count,
           (SELECT COUNT(*)::int FROM sip_rejections sr
              WHERE sr.tenant_id = ${session.tenantId}::uuid
-               AND sr.rejection_date >= ${startOfMonthISO}::date) AS sip_rejected_count
+               AND sr.rejection_date >= ${fromDay}::date AND sr.rejection_date <= ${toDay}::date) AS sip_rejected_count
         FROM business_entry_lines l
         JOIN business_entries e ON e.id = l.entry_id
         WHERE e.tenant_id = ${session.tenantId}::uuid
           AND e.status <> 'cancelled'
-          AND e.business_date >= ${startOfMonthISO}::date
+          AND e.business_date >= ${fromDay}::date
+          AND e.business_date <= ${toDay}::date
       `);
 
       // ---------- 2c. Business summary — net flows by asset class + product ----------
@@ -234,8 +236,8 @@ async function OwnerCockpitBody({
           JOIN business_entries e ON e.id = l.entry_id
           WHERE e.tenant_id = ${session.tenantId}::uuid
             AND e.status <> 'cancelled'
-            AND e.business_date >= ${startOfPeriodISO}::date
-            AND e.business_date <= ${endOfPeriodISO}::date
+            AND e.business_date >= ${fromDay}::date
+            AND e.business_date <= ${toDay}::date
         )
         SELECT
           COALESCE(SUM(amt) FILTER (WHERE mf AND txn_type IN ('sip','sip_topup')), 0)::numeric AS new_sip,
@@ -255,8 +257,8 @@ async function OwnerCockpitBody({
         FROM business_entries
         WHERE tenant_id = ${session.tenantId}::uuid
           AND status <> 'cancelled'
-          AND business_date >= ${startOfPeriodISO}::date
-          AND business_date <= ${endOfPeriodISO}::date
+          AND business_date >= ${fromDay}::date
+          AND business_date <= ${toDay}::date
       `);
       const insBiz = await tx.execute(sql`
         SELECT COALESCE(SUM(annual_premium::numeric), 0)::numeric AS premium, COUNT(*)::int AS cnt
@@ -264,8 +266,8 @@ async function OwnerCockpitBody({
         WHERE tenant_id = ${session.tenantId}::uuid
           AND status <> 'cancelled'
           AND policy_start_date IS NOT NULL
-          AND policy_start_date >= ${startOfPeriodISO}::date
-          AND policy_start_date <= ${endOfPeriodISO}::date
+          AND policy_start_date >= ${fromDay}::date
+          AND policy_start_date <= ${toDay}::date
       `);
 
       // NB: "SIP stopped this period" is already computed as stopped_sips_period
@@ -278,21 +280,23 @@ async function OwnerCockpitBody({
               WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND deleted_at IS NULL AND next_review_at IS NOT NULL
                 AND next_review_at <= now()) AS reviews_due,
           (SELECT COUNT(*)::int FROM service_requests
-              WHERE tenant_id = ${session.tenantId}::uuid AND status IN ('open', 'in_progress')) AS sr_pending,
+              WHERE tenant_id = ${session.tenantId}::uuid AND status NOT IN ('resolved', 'closed')) AS sr_pending,
           (SELECT COUNT(*)::int FROM service_requests
-              WHERE tenant_id = ${session.tenantId}::uuid AND status IN ('open', 'in_progress') AND type = 'complaint') AS complaints_open,
+              WHERE tenant_id = ${session.tenantId}::uuid AND status NOT IN ('resolved', 'closed') AND type = 'complaint') AS complaints_open,
           (SELECT COUNT(*)::int FROM investors
               WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND deleted_at IS NULL AND service_tier = 'A'
                 AND (last_review_at IS NULL OR last_review_at < now() - make_interval(days => ${thresholds.hniReviewDays}))) AS hni_not_reviewed,
           (SELECT COUNT(*)::int FROM investors
               WHERE tenant_id = ${session.tenantId}::uuid AND status = 'active' AND deleted_at IS NULL
-                AND (last_transaction_at IS NULL OR last_transaction_at < ${dormantCutoff})) AS dormant_clients
+                AND (last_transaction_at IS NULL OR last_transaction_at < ${dormantCutoff})
+                AND NOT EXISTS (SELECT 1 FROM business_entries be WHERE be.investor_id = investors.id
+                      AND be.status <> 'cancelled' AND be.business_date >= ${dormantCutoff}::timestamptz::date)) AS dormant_clients
       `);
 
       // ---------- 4. Team & health ----------
       const team = await tx.execute(sql`
         SELECT
-          (SELECT COUNT(*)::int FROM tasks WHERE tenant_id = ${session.tenantId}::uuid AND status = 'open') AS team_tasks,
+          (SELECT COUNT(*)::int FROM tasks WHERE tenant_id = ${session.tenantId}::uuid AND deleted_at IS NULL AND status IN ('open', 'in_progress', 'blocked')) AS team_tasks,
           (SELECT COUNT(*)::int FROM campaigns WHERE tenant_id = ${session.tenantId}::uuid AND status IN ('sending', 'scheduled')) AS campaigns_running,
           (SELECT overall_score::numeric FROM ddq_scores WHERE tenant_id = ${session.tenantId}::uuid ORDER BY computed_at DESC LIMIT 1) AS ddq_score,
           (SELECT (
@@ -313,59 +317,41 @@ async function OwnerCockpitBody({
           COUNT(*) FILTER (WHERE converted_investor_id IS NOT NULL)::int AS converted_mtd
         FROM leads
         WHERE tenant_id = ${session.tenantId}::uuid
-          AND created_at >= ${startOfMonthISO}
+          AND deleted_at IS NULL AND lost_reason IS DISTINCT FROM '__deleted__'
+          AND created_at >= ${startOfMonthISO} AND created_at <= ${endOfPeriodISO}
       `);
 
       // ---------- 6. Net-sales series — period-scoped, day or week buckets ----------
       // Generates a continuous bucket series across the SELECTED window (so the
       // chart matches the KPI tiles), then LEFT JOINs transactions onto it so
       // gaps render as zeros rather than missing points.
-      const netSeries = await tx.execute(
-        netSalesGranularity === "week"
-          ? sql`
-              WITH buckets AS (
-                SELECT generate_series(
-                  date_trunc('week', ${startOfPeriodISO}::timestamptz),
-                  date_trunc('week', ${endOfPeriodISO}::timestamptz),
-                  interval '1 week'
-                )::date AS b
-              )
-              SELECT buckets.b::text AS day,
-                COALESCE(SUM(CASE WHEN t.direction = 'inflow' THEN t.amount::numeric END), 0)::numeric AS gross,
-                COALESCE(SUM(CASE WHEN t.direction = 'outflow' THEN t.amount::numeric END), 0)::numeric AS redemption,
-                COALESCE(SUM(CASE WHEN t.direction = 'inflow' THEN t.amount::numeric ELSE -t.amount::numeric END), 0)::numeric AS net
-              FROM buckets LEFT JOIN transactions t
-                ON date_trunc('week', t.order_date)::date = buckets.b
-                AND t.tenant_id = ${session.tenantId}::uuid
-                AND t.status IN ('processed', 'successful')
-              GROUP BY buckets.b ORDER BY buckets.b
-            `
-          : sql`
-              WITH buckets AS (
-                SELECT generate_series(
-                  ${startOfPeriodISO}::date,
-                  ${endOfPeriodISO}::date,
-                  interval '1 day'
-                )::date AS b
-              )
-              SELECT buckets.b::text AS day,
-                COALESCE(SUM(CASE WHEN t.direction = 'inflow' THEN t.amount::numeric END), 0)::numeric AS gross,
-                COALESCE(SUM(CASE WHEN t.direction = 'outflow' THEN t.amount::numeric END), 0)::numeric AS redemption,
-                COALESCE(SUM(CASE WHEN t.direction = 'inflow' THEN t.amount::numeric ELSE -t.amount::numeric END), 0)::numeric AS net
-              FROM buckets LEFT JOIN transactions t
-                ON t.order_date = buckets.b
-                AND t.tenant_id = ${session.tenantId}::uuid
-                AND t.status IN ('processed', 'successful')
-              GROUP BY buckets.b ORDER BY buckets.b
-            `
-      );
+      const bucket = netSalesGranularity === "week" ? sql`'week'` : sql`'day'`;
+      const step = netSalesGranularity === "week" ? sql`interval '1 week'` : sql`interval '1 day'`;
+      const netSeries = await tx.execute(sql`
+        WITH buckets AS (
+          SELECT generate_series(date_trunc(${bucket}, ${fromDay}::date::timestamp),
+                                 date_trunc(${bucket}, ${toDay}::date::timestamp), ${step})::date AS b
+        ), booked AS (
+          SELECT date_trunc(${bucket}, e.business_date::timestamp)::date AS b, l.txn_type, l.amount::numeric AS amt
+            FROM business_entries e JOIN business_entry_lines l ON l.entry_id = e.id
+           WHERE e.tenant_id = ${session.tenantId}::uuid AND e.status <> 'cancelled'
+             AND e.business_date >= ${fromDay}::date AND e.business_date <= ${toDay}::date
+        )
+        SELECT buckets.b::text AS day,
+          COALESCE(SUM(amt) FILTER (WHERE txn_type IN ('sip','sip_topup','lumpsum','additional_purchase')), 0)::numeric AS gross,
+          COALESCE(SUM(amt) FILTER (WHERE txn_type IN ('redemption','swp')), 0)::numeric AS redemption,
+          (COALESCE(SUM(amt) FILTER (WHERE txn_type IN ('sip','sip_topup','lumpsum','additional_purchase')), 0)
+            - COALESCE(SUM(amt) FILTER (WHERE txn_type IN ('redemption','swp')), 0))::numeric AS net
+        FROM buckets LEFT JOIN booked ON booked.b = buckets.b
+        GROUP BY buckets.b ORDER BY buckets.b
+      `);
 
       // ---------- 7. Hero sparkline series — per-day net business across the period ----------
       // Cheap daily roll-up from the business-entries ledger (same source the
       // Net Business KPI uses): one row per day, net = sip + lumpsum - redemption.
       const netBizDaily = await tx.execute(sql`
         WITH days AS (
-          SELECT generate_series(${startOfPeriodISO}::date, ${endOfPeriodISO}::date, interval '1 day')::date AS d
+          SELECT generate_series(${fromDay}::date, ${toDay}::date, interval '1 day')::date AS d
         )
         SELECT days.d::text AS day,
           COALESCE(SUM(
@@ -390,7 +376,7 @@ async function OwnerCockpitBody({
       // would need historical snapshots we don't store.
       const sipAddDaily = await tx.execute(sql`
         WITH days AS (
-          SELECT generate_series(${startOfPeriodISO}::date, ${endOfPeriodISO}::date, interval '1 day')::date AS d
+          SELECT generate_series(${fromDay}::date, ${toDay}::date, interval '1 day')::date AS d
         )
         SELECT days.d::text AS day,
           COALESCE(SUM(s.amount::numeric), 0)::numeric AS amt
@@ -532,7 +518,7 @@ async function OwnerCockpitBody({
           sparkStrokeClass="text-emerald-500"
         />}
         {show("kpi.net_business") && <Kpi
-          href={withPeriod("/dashboard/reports/net_sales", periodQuery)}
+          href="/dashboard/business-entries/dashboard"
           icon={TrendingUp}
           label={`Net Business ${period.toUpperCase()}`}
           value={formatINR(data.netBusiness)}

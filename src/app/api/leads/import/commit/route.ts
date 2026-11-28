@@ -14,6 +14,7 @@ import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
 import { scoreFields } from "@/lib/leads/score";
 import { loadCustomFieldDefs, sanitizeCustomFields } from "@/lib/custom-fields/values";
+import { localDay } from "@/lib/dates/ist";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ function dateOrNull(v: string): string | null {
     return null;
   }
   const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return isNaN(d.getTime()) ? null : localDay(d);
 }
 
 export async function POST(req: NextRequest) {

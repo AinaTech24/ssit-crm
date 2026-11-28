@@ -44,12 +44,14 @@ export async function MarketingInsightsSection({ session }: { session: SessionUs
         await tx.execute(sql`
           SELECT
             (SELECT COUNT(*)::int FROM investors WHERE status = 'active' AND deleted_at IS NULL) AS total_active,
-            (SELECT COUNT(DISTINCT investor_id)::int FROM consents
-              WHERE channel = 'whatsapp' AND status = 'granted'
-                AND scope IN ('marketing', 'all')) AS wa_opted_in,
-            (SELECT COUNT(DISTINCT investor_id)::int FROM consents
-              WHERE channel = 'email' AND status = 'granted'
-                AND scope IN ('marketing', 'all')) AS email_opted_in,
+            (SELECT COUNT(DISTINCT c.investor_id)::int FROM consents c
+              JOIN investors i ON i.id = c.investor_id AND i.status = 'active' AND i.deleted_at IS NULL
+              WHERE c.channel = 'whatsapp' AND c.status = 'granted'
+                AND c.scope IN ('marketing', 'all')) AS wa_opted_in,
+            (SELECT COUNT(DISTINCT c.investor_id)::int FROM consents c
+              JOIN investors i ON i.id = c.investor_id AND i.status = 'active' AND i.deleted_at IS NULL
+              WHERE c.channel = 'email' AND c.status = 'granted'
+                AND c.scope IN ('marketing', 'all')) AS email_opted_in,
             (SELECT COUNT(*)::int FROM communications
               WHERE status = 'unsubscribed'
                 AND created_at >= ${startOfMonth}) AS unsubs_mtd,
@@ -152,14 +154,14 @@ export async function MarketingInsightsSection({ session }: { session: SessionUs
             />
             <div
               className="bg-violet-500"
-              style={{ width: `${100 - data.commsSplit.servicePct}%` }}
+              style={{ width: `${data.commsSplit.marketing > 0 ? 100 - data.commsSplit.servicePct : 0}%` }}
             />
           </div>
           <div className="flex items-center justify-between text-xs">
             <span className="font-medium">Marketing</span>
             <span className="tabular-nums font-semibold text-violet-700">
               {data.commsSplit.marketing.toLocaleString("en-IN")} (
-              {(100 - data.commsSplit.servicePct).toFixed(0)}%)
+              {(data.commsSplit.marketing > 0 ? 100 - data.commsSplit.servicePct : 0).toFixed(0)}%)
             </span>
           </div>
         </div>

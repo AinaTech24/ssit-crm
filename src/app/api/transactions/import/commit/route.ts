@@ -16,6 +16,7 @@ import { requireSession } from "@/lib/auth/session";
 import { require as requireCap } from "@/lib/auth/rbac";
 import { assertActiveLicense } from "@/lib/auth/license";
 import { recordAudit, clientMetaFromHeaders } from "@/lib/audit";
+import { localDay } from "@/lib/dates/ist";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ function normaliseDate(s: string): string {
   }
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   const d = new Date(s);
-  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  if (!isNaN(d.getTime())) return localDay(d);
   return new Date().toISOString().slice(0, 10);
 }
 

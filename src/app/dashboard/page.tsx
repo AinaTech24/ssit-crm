@@ -20,6 +20,7 @@ import { OwnerCockpit } from "@/components/dashboards/OwnerCockpit";
 import { DashboardHeaderBar } from "@/components/dashboards/DashboardHeaderBar";
 import { resolvePeriodRange } from "@/lib/dashboard/period";
 import { RmDashboard } from "@/components/dashboards/RmDashboard";
+import { MyDayPanel } from "@/components/dashboards/MyDay";
 import { RiaDashboard } from "@/components/dashboards/RiaDashboard";
 import { RaDashboard } from "@/components/dashboards/RaDashboard";
 import { BackOfficeDashboard } from "@/components/dashboards/BackOfficeDashboard";
@@ -77,7 +78,11 @@ export default async function DashboardPage({
   ) : null;
   // "b:<branchId>" or "d:<deskId>" — one param for both levels of the org.
   // ?as=ra — a firm admin looking at the research dashboard instead of the firm.
-  const asResearch = (sp.as ?? "") === "ra";
+  const asResearch = (sp.as ?? "") === "ra" && roles.includes("owner");
+  // A branch head sees their own day above their team's numbers.
+  const isHeadOnly = !roles.includes("owner") && roles.includes("branch_head");
+  // Compliance holds the firm-view capability too, but has its own dashboard.
+  const complianceOnly = roles.includes("compliance") && !roles.includes("owner") && !roles.includes("branch_head");
   let unitParam = (sp.unit ?? "").trim();
   // A branch head landing on /dashboard cold (no ?unit= yet — that's every
   // normal login) fell through every "is a unit selected?" check below to
@@ -148,7 +153,9 @@ export default async function DashboardPage({
   // the server log to say which cockpit or session hit it). Catching it here
   // lets us fall back to a working dashboard and log exactly who/what failed.
   try {
-    if (can(roles, "dashboard.view.owner", perms)) {
+    if (complianceOnly) {
+      dash = await ComplianceCockpit({ session, period, customStart: pstart });
+    } else if (can(roles, "dashboard.view.owner", perms)) {
       // Branch list drives the first dropdown; the member list is loaded only for
       // the branch in scope, so the second dropdown is a team, not a directory.
       // Both queries are tenant-scoped by RLS.
@@ -253,11 +260,19 @@ export default async function DashboardPage({
       // A research analyst has no book — no SIP, no net sales — so picking one
       // must open THEIR dashboard, not the RM one that is all about those.
       const selectedIsRa = selectedRoles.some((r) => r === "ra_research" || r === "ra_sales");
+      // Someone without a client book (back office, marketing, RIA…) is shown their day.
+      const selectedHasBook =
+        !selectedRoles.length || selectedRoles.some((r) => ["rm", "sub_broker", "insurance", "branch_head", "owner"].includes(r));
       dash = selected
         ? selectedIsRa
           ? await RaDashboard({ session, deskId: scopeDeskId, target: { userId: selected.id, name: selected.name, roles: selectedRoles } })
-          : await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
-        : asResearch
+          : selectedHasBook
+            ? await RmDashboard({ session, targetUserId: selected.id, targetName: selected.name, from: dateFrom, to: dateTo })
+            : await MyDayPanel({ session, target: { userId: selected.id, name: selected.name } })
+        : isHeadOnly && !scope.branch
+          ? // never the firm-wide view for a head asking about a branch that is not theirs
+            await RmDashboard({ session, from: dateFrom, to: dateTo })
+          : asResearch
           ? await RaDashboard({ session, asAdmin: true, deskId: scopeDeskId })
           : scope.branch
           ? await BranchCockpit({
@@ -268,8 +283,17 @@ export default async function DashboardPage({
               deskName: scope.desk?.name,
             })
           : await OwnerCockpit({ session, period, customStart: pstart, customFrom: pfrom, customTo: pto });
-      showReviewOverdue = !selected && !scope.branch && !asResearch;
-      if (!selected && !scope.branch) {
+      if (isHeadOnly && !selected && scope.branch) {
+        const team = dash;
+        dash = (
+          <>
+            {await MyDayPanel({ session })}
+            {team}
+          </>
+        );
+      }
+      showReviewOverdue = !selected && !scope.branch && !asResearch && !isHeadOnly;
+      if (!selected && !scope.branch && !isHeadOnly) {
         headerControls = <DashboardHeaderBar period={period} currentLabel={periodLabel} variant="light" />;
       }
     } else if (can(roles, "dashboard.view.compliance", perms)) {
@@ -322,6 +346,11 @@ export default async function DashboardPage({
     }
   }
 
+  const queueDashboard =
+    complianceOnly ||
+    (!can(roles, "dashboard.view.owner", perms) &&
+      (can(roles, "dashboard.view.compliance", perms) || can(roles, "dashboard.view.marketing", perms) || can(roles, "dashboard.view.ops", perms)));
+
   return (
     <>
       {/* Live-refresh the dashboard data periodically (no manual reload).
@@ -339,6 +368,10 @@ export default async function DashboardPage({
           fetching — stream them in behind a skeleton so the shell (sidebar,
           topbar, announcements) paints immediately. */}
       <Suspense fallback={null}>{await MyTargetsCard({ session })}</Suspense>
+      {/* Dashboards built around firm queues also open on the person's own follow-ups and tasks. */}
+      {queueDashboard && (
+        <Suspense fallback={null}>{await MyDayPanel({ session, noLink: true })}</Suspense>
+      )}
       <Suspense fallback={<DashboardPageSkeleton />}>{dash}</Suspense>
       {/* Firm-wide worklist: reviews that have slipped and stayed slipped. Only
           on the admin cockpit — a single RM's dashboard already lists their
@@ -362,7 +395,7 @@ export default async function DashboardPage({
       {(can(session.roles, "task.view.all", session.permissions) || can(session.roles, "task.view.assigned", session.permissions)) && (
         <div className="mt-6">
           <Suspense fallback={null}>
-            {await TasksByPersonSection({ session, rmId: rmParam || undefined })}
+            {await TasksByPersonSection({ session, rmId: rmParam || undefined, unit: unitParam || undefined })}
           </Suspense>
         </div>
       )}

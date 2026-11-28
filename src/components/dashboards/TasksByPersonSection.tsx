@@ -17,6 +17,7 @@ import { ArrowRight, ListChecks } from "lucide-react";
 import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
 import { resolveDataScope, dataScopeSqlViaOwnerBranch } from "@/lib/auth/data-scope";
+import { parseScope, scopeFilterSql } from "@/lib/scope/view-filter";
 
 type Row = {
   person_id: string | null;
@@ -28,7 +29,7 @@ type Row = {
   total: number;
 };
 
-export async function TasksByPersonSection({ session, rmId }: { session: SessionUser; rmId?: string }) {
+export async function TasksByPersonSection({ session, rmId, unit }: { session: SessionUser; rmId?: string; unit?: string }) {
   const onlyPerson = rmId && /^[0-9a-f-]{36}$/i.test(rmId) ? rmId : undefined;
   let rows: Row[] = [];
   try {
@@ -53,6 +54,7 @@ export async function TasksByPersonSection({ session, rmId }: { session: Session
              AND t.deleted_at IS NULL
              AND t.type <> 'other_activity'
              AND ${wall}
+             AND ${scopeFilterSql(parseScope({ unit }), session.tenantId, ["t.assignee_id"])}
              AND ${onlyPerson ? sql`t.assignee_id = ${onlyPerson}::uuid` : sql`TRUE`}
            GROUP BY t.assignee_id, u.name
           HAVING COUNT(*) FILTER (WHERE t.status <> 'cancelled') > 0

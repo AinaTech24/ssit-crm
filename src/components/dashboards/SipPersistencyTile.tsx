@@ -245,14 +245,6 @@ export async function SipPersistencyTile({ session }: { session: SessionUser }) 
             <div className="text-[10px] text-muted-foreground">
               {data.activeCount.toLocaleString("en-IN")} active SIPs
             </div>
-            <div
-              className={`text-[10px] font-semibold flex items-center gap-1 ${
-                data.bookDelta >= 0 ? "text-emerald-700" : "text-rose-700"
-              }`}
-            >
-              {data.bookDelta >= 0 ? "↑" : "↓"}{" "}
-              {formatINR(Math.abs(data.bookDelta))} vs last month
-            </div>
           </div>
 
           {/* MTD SIP flow + rejection reasons */}

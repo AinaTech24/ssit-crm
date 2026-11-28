@@ -53,8 +53,9 @@ export async function loadUserActuals(
 ): Promise<Map<string, Map<string, number>>> {
   const { from, to } = monthRange(period);
   const t = tenantId;
-  const lo = sql`${from}::date`;
-  const hi = sql`(${to}::date + interval '1 day')`;
+  // The month's first and last moments in Indian time.
+  const lo = sql`(${from}::date::timestamp AT TIME ZONE 'Asia/Kolkata')`;
+  const hi = sql`((${to}::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata')`;
 
   const q = async (query: any) => {
     const m = new Map<string, number>();
@@ -67,8 +68,9 @@ export async function loadUserActuals(
     q(sql`SELECT owner_id AS uid, count(*) AS v FROM leads WHERE tenant_id=${t}::uuid AND owner_id IS NOT NULL AND deleted_at IS NULL AND lost_reason IS DISTINCT FROM '__deleted__' AND created_at >= ${lo} AND created_at < ${hi} GROUP BY owner_id`),
     q(sql`SELECT mp.uid AS uid, count(*) AS v FROM review_meetings m ${meetingParticipantsLateral("m")} WHERE m.tenant_id=${t}::uuid AND m.status IN ('completed','confirmed') AND m.meeting_date >= ${lo} AND m.meeting_date < ${hi} GROUP BY mp.uid`),
     q(sql`SELECT rm_id AS uid, count(*) AS v FROM investors WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND merged_into_id IS NULL AND deleted_at IS NULL AND created_at >= ${lo} AND created_at < ${hi} GROUP BY rm_id`),
-    q(sql`SELECT assignee_id AS uid, count(*) AS v FROM tasks WHERE tenant_id=${t}::uuid AND assignee_id IS NOT NULL AND status='completed' AND completed_at >= ${lo} AND completed_at < ${hi} GROUP BY assignee_id`),
-    q(sql`SELECT rm_id AS uid, COALESCE(SUM(total_amount),0) AS v FROM business_entries WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND status <> 'cancelled' AND business_date BETWEEN ${from}::date AND ${to}::date GROUP BY rm_id`),
+    q(sql`SELECT assignee_id AS uid, count(*) AS v FROM tasks WHERE tenant_id=${t}::uuid AND deleted_at IS NULL AND assignee_id IS NOT NULL AND status='completed' AND completed_at >= ${lo} AND completed_at < ${hi} GROUP BY assignee_id`),
+    // Money booked: redemptions, SWPs, SIP stops, switches and change-of-broker lines are not business won.
+    q(sql`SELECT e.rm_id AS uid, COALESCE(SUM(l.amount::numeric),0) AS v FROM business_entries e JOIN business_entry_lines l ON l.entry_id = e.id WHERE e.tenant_id=${t}::uuid AND e.rm_id IS NOT NULL AND e.status <> 'cancelled' AND l.txn_type NOT IN ('redemption','swp','sip_stop','cob','switch','stp') AND e.business_date BETWEEN ${from}::date AND ${to}::date GROUP BY e.rm_id`),
     q(sql`SELECT i.rm_id AS uid, COALESCE(SUM(s.amount),0) AS v FROM sips s JOIN investors i ON i.id = s.investor_id WHERE s.tenant_id=${t}::uuid AND i.rm_id IS NOT NULL AND s.start_date BETWEEN ${from}::date AND ${to}::date GROUP BY i.rm_id`),
     q(sql`SELECT rm_id AS uid, COALESCE(SUM(aum),0) AS v FROM investors WHERE tenant_id=${t}::uuid AND rm_id IS NOT NULL AND status='active' AND merged_into_id IS NULL AND deleted_at IS NULL GROUP BY rm_id`),
   ]);

@@ -55,7 +55,7 @@ export async function BackOfficeInsightsSection({ session }: { session: SessionU
             FROM new_investors ni
             LEFT JOIN tasks t
               ON (t.related_investor_id = ni.id OR (t.subject_type = 'investor' AND t.subject_id = ni.id))
-              AND t.workflow_run_id IS NOT NULL
+              AND t.workflow_run_id IS NOT NULL AND t.deleted_at IS NULL
             GROUP BY ni.id
           )
           SELECT

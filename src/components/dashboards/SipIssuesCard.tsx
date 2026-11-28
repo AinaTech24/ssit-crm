@@ -14,6 +14,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { AlertTriangle } from "lucide-react";
 import { withTenant } from "@/db/client";
+import { istDay } from "@/lib/dates/ist";
 import type { SessionUser } from "@/lib/auth/session";
 import { investorScopeSqlOrOwn } from "@/lib/investors/access";
 import { SIP_OPEN_STATUSES } from "@/db/schema/sip_rejections";
@@ -24,14 +25,29 @@ const inr = (n: number) =>
 const fmtDate = (v: unknown) =>
   v ? new Date(String(v)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—";
 
-export async function SipIssuesCard({ session, targetUserId }: { session: SessionUser; targetUserId?: string }) {
+export async function SipIssuesCard({
+  session,
+  targetUserId,
+  unit,
+}: {
+  session: SessionUser;
+  /** One person's clients only. */
+  targetUserId?: string;
+  /** One branch's (or desk's) clients only. */
+  unit?: { branchId: string; deskId?: string };
+}) {
   let d: { bouncedRows: Rec[]; rejectedRows: Rec[]; bounced: number; rejected: number; rejectedOpen: number; atStake: number };
   try {
     d = await withTenant(
       session.tenantId,
       async (tx) => {
         const wall = await investorScopeSqlOrOwn(tx, session, "inv");
-        const rmOnly = targetUserId && /^[0-9a-f-]{36}$/i.test(targetUserId) ? sql`inv.rm_id = ${targetUserId}::uuid` : sql`TRUE`;
+        const person = targetUserId && /^[0-9a-f-]{36}$/i.test(targetUserId) ? sql`inv.rm_id = ${targetUserId}::uuid` : sql`TRUE`;
+        const team = unit
+          ? sql`inv.rm_id IN (SELECT u.id FROM users u WHERE u.tenant_id = ${session.tenantId}::uuid AND u.branch_id = ${unit.branchId}::uuid
+                ${unit.deskId ? sql`AND u.desk_id = ${unit.deskId}::uuid` : sql``})`
+          : sql`TRUE`;
+        const rmOnly = sql`${person} AND ${team} AND inv.deleted_at IS NULL`;
         const open = sql.join(SIP_OPEN_STATUSES.map((s) => sql`${s}`), sql`, `);
         const [b, r] = await Promise.all([
           tx.execute(sql`
@@ -55,20 +71,33 @@ export async function SipIssuesCard({ session, targetUserId }: { session: Sessio
               JOIN investors inv ON inv.id = sr.investor_id
               LEFT JOIN users rm ON rm.id = inv.rm_id
              WHERE sr.tenant_id = ${session.tenantId}::uuid
-               AND sr.rejection_date >= current_date - 90
+               AND sr.rejection_date >= ${istDay()}::date - 90
                AND ${wall} AND ${rmOnly}
              ORDER BY sr.rejection_date DESC LIMIT 25`),
         ]);
         const bounced = b.rows as Rec[];
         const rejected = r.rows as Rec[];
-        const openRows = rejected.filter((x) => x.is_open);
+        // The headline figures count everything, not just the rows shown.
+        const totals = (
+          await tx.execute(sql`
+            SELECT
+              (SELECT COUNT(*)::int FROM sip_installment_marks m JOIN sips s ON s.id = m.sip_id JOIN investors inv ON inv.id = s.investor_id
+                WHERE m.tenant_id = ${session.tenantId}::uuid AND m.status = 'bounced'
+                  AND m.updated_at >= now() - interval '90 days' AND ${wall} AND ${rmOnly}) AS bounced,
+              COUNT(*)::int AS rejected,
+              COUNT(*) FILTER (WHERE sr.recovery_status IN (${open}))::int AS rejected_open,
+              COALESCE(SUM(sr.rejection_amount::numeric) FILTER (WHERE sr.recovery_status IN (${open})), 0) AS at_stake
+              FROM sip_rejections sr JOIN investors inv ON inv.id = sr.investor_id
+             WHERE sr.tenant_id = ${session.tenantId}::uuid AND sr.rejection_date >= ${istDay()}::date - 90
+               AND ${wall} AND ${rmOnly}`)
+        ).rows[0] as Rec;
         return {
           bouncedRows: bounced.slice(0, 12),
           rejectedRows: rejected.slice(0, 12),
-          bounced: bounced.length,
-          rejected: rejected.length,
-          rejectedOpen: openRows.length,
-          atStake: openRows.reduce((s, x) => s + Number(x.amount ?? 0), 0),
+          bounced: Number(totals.bounced),
+          rejected: Number(totals.rejected),
+          rejectedOpen: Number(totals.rejected_open),
+          atStake: Number(totals.at_stake),
         };
       },
       { userId: session.userId, branchId: session.branchId, roles: session.roles }

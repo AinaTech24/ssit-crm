@@ -1,3 +1,4 @@
+import { localDay } from "@/lib/dates/ist";
 /**
  * Dashboard period helpers — server-safe (NO "use client").
  *
@@ -28,7 +29,7 @@ export function resolvePeriodRange(
   period: Period,
   now = new Date(),
   opts?: { customStart?: string; from?: string; to?: string }
-): { fromISO: string; toISO: string; fromDate: Date; toDate: Date; label: string; period: Period; days: number } {
+): { fromISO: string; toISO: string; fromDay: string; toDay: string; fromDate: Date; toDate: Date; label: string; period: Period; days: number } {
   const iso = /^\d{4}-\d{2}-\d{2}$/;
   // Explicit custom range wins (used by RmDashboard / Team / Command Center).
   if (period === "custom" && opts?.from && iso.test(opts.from)) {
@@ -50,7 +51,8 @@ export function resolvePeriodRange(
 
 function pack(fromDate: Date, toDate: Date, label: string, period: Period) {
   const days = Math.max(1, Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000));
-  return { fromISO: fromDate.toISOString(), toISO: toDate.toISOString(), fromDate, toDate, label, period, days };
+  // fromISO / toISO are instants (timestamp columns); fromDay / toDay are calendar days (DATE columns).
+  return { fromISO: fromDate.toISOString(), toISO: toDate.toISOString(), fromDay: localDay(fromDate), toDay: localDay(toDate), fromDate, toDate, label, period, days };
 }
 
 function rangeLabel(from: Date, to: Date): string {

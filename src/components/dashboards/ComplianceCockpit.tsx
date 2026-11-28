@@ -1,3 +1,4 @@
+import { ddqReadiness } from "@/lib/compliance/amfi-ddq-checklist";
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import {
@@ -76,10 +77,9 @@ export async function ComplianceCockpit({
         //    dashboard reflects the chosen window.
         await tx.execute(sql`
           SELECT
-            (SELECT COUNT(*)::int FROM templates WHERE status = 'pending_approval' AND category = 'marketing'
-                AND created_at >= ${fromISO} AND created_at <= ${toISO}) AS pending_marketing,
-            (SELECT COUNT(*)::int FROM templates WHERE status = 'pending_approval' AND category = 'transactional'
-                AND created_at >= ${fromISO} AND created_at <= ${toISO}) AS pending_tx,
+            -- everything still waiting, however long ago it was submitted
+            (SELECT COUNT(*)::int FROM templates WHERE status = 'pending_approval' AND category = 'marketing') AS pending_marketing,
+            (SELECT COUNT(*)::int FROM templates WHERE status = 'pending_approval' AND category = 'transactional') AS pending_tx,
             (SELECT COUNT(*)::int FROM whatsapp_templates WHERE meta_status = 'PENDING') AS meta_pending,
             (SELECT COUNT(*)::int FROM whatsapp_templates WHERE meta_status = 'REJECTED') AS meta_rejected
         `),
@@ -96,17 +96,17 @@ export async function ComplianceCockpit({
 
         // 5. Active Circulars (AMFI)
         await tx.execute(sql`
-          SELECT id, title, circular_no, issued_at, source_url
+          SELECT id, title, circular_no, published_on AS issued_at, source_url
           FROM amfi_circulars
-          ORDER BY issued_at DESC
+          ORDER BY published_on DESC NULLS LAST, created_at DESC
           LIMIT 4
         `),
 
         // 6. DDQ Checklist status summary
         await tx.execute(sql`
-          SELECT status, COUNT(*)::int AS count
+          SELECT item_key, status
           FROM ddq_checklist_status
-          GROUP BY status
+          WHERE tenant_id = ${session.tenantId}::uuid
         `)
       ]);
 
@@ -144,11 +144,10 @@ export async function ComplianceCockpit({
     Number(exp.pan_aadhaar_unlinked ?? 0) +
     Number(exp.expired_docs ?? 0);
 
-  const checklistCounts = Object.fromEntries(
-    data.checklist.map((r) => [r.status, Number(r.count)])
-  );
-  const checklistTotal = data.checklist.reduce((sum, r) => sum + r.count, 0);
-  const checklistInPlace = checklistCounts["in_place"] ?? 0;
+  // Measured against every checklist item, not just the ones somebody has touched.
+  const readiness = ddqReadiness(Object.fromEntries(data.checklist.map((r) => [r.item_key, r.status])));
+  const checklistTotal = readiness.counted;
+  const checklistInPlace = readiness.inPlace;
 
   const today = now.toLocaleDateString("en-IN", {
     weekday: "long",
@@ -206,7 +205,7 @@ export async function ComplianceCockpit({
           href="/dashboard/templates"
           label="Pending approvals"
           value={String(Number(tpl.pending_marketing ?? 0) + Number(tpl.pending_tx ?? 0))}
-          sub={`${tpl.pending_marketing ?? 0} mktg · ${tpl.pending_tx ?? 0} txn · ${range.label}`}
+          sub={`${tpl.pending_marketing ?? 0} mktg · ${tpl.pending_tx ?? 0} txn · waiting now`}
           tone={Number(tpl.pending_marketing ?? 0) + Number(tpl.pending_tx ?? 0) > 0 ? "amber" : "muted"}
           icon={FileCheck}
         />
@@ -298,7 +297,7 @@ export async function ComplianceCockpit({
             </h2>
             <div className="space-y-2.5 text-xs">
               <ExpiryRow label="KYC Expiring (30d)" count={exp.kyc_30} href="/dashboard/investors?kyc_expiring=30" tone="rose" />
-              <ExpiryRow label="KYC Expiring (90d)" count={exp.kyc_90} href="/dashboard/investors?kyc_expiring=90" tone="amber" />
+              <ExpiryRow label="KYC Expiring (31-90 days)" count={exp.kyc_90} href="/dashboard/investors?kyc_expiring=90" tone="amber" />
               <ExpiryRow label="FATCA Stale (30d)" count={exp.fatca_30} href="/dashboard/investors?fatca_expiring=30" tone="rose" />
               <ExpiryRow label="Risk Profile Stale" count={exp.risk_profile_stale} href="/dashboard/risk-profiles" tone="amber" />
               <ExpiryRow label="Nominee Missing" count={exp.nominee_missing} href="/dashboard/investors?nominee=missing" tone="rose" />

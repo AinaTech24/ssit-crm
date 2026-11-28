@@ -21,6 +21,7 @@ import { LEAVE_TYPE_LABELS } from "@/lib/leave/policy";
 import { TeamMemberFilter } from "@/components/dashboards/TeamMemberFilter";
 import { TeamRangePicker } from "@/components/dashboards/TeamRangePicker";
 import { AutoRefresh } from "@/components/common/AutoRefresh";
+import { localDay } from "@/lib/dates/ist";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ function inrCompact(n: number): string {
 }
 
 function ymd(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return localDay(d);
 }
 
 export default async function TeamDashboardPage({

@@ -57,6 +57,13 @@ export function formatRelative(d: Date | string | null | undefined): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
   const diff = (Date.now() - date.getTime()) / 1000;
+  if (diff <= -60) {
+    const ahead = -diff;
+    if (ahead < 3600) return `in ${Math.floor(ahead / 60)}m`;
+    if (ahead < 86400) return `in ${Math.floor(ahead / 3600)}h`;
+    if (ahead < 604800) return `in ${Math.floor(ahead / 86400)}d`;
+    return formatDate(date);
+  }
   if (diff < 60) return "just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;

@@ -18,9 +18,9 @@ export async function TaskLeaderboard({ session }: { session: SessionUser }) {
     async (tx) => {
       const res = await tx.execute(sql`
         SELECT u.id, u.name,
-               COUNT(t.id) FILTER (WHERE t.status IN ('open', 'in_progress'))::int AS open_count,
+               COUNT(t.id) FILTER (WHERE t.status IN ('open', 'in_progress', 'blocked'))::int AS open_count,
                COUNT(t.id) FILTER (
-                 WHERE t.status IN ('open', 'in_progress') AND t.due_at < now()
+                 WHERE t.status IN ('open', 'in_progress', 'blocked') AND t.due_at < now()
                )::int AS overdue_count
           FROM users u
           LEFT JOIN tasks t
@@ -30,7 +30,7 @@ export async function TaskLeaderboard({ session }: { session: SessionUser }) {
          WHERE u.tenant_id = ${session.tenantId}::uuid
            AND u.status = 'active'
          GROUP BY u.id, u.name
-         HAVING COUNT(t.id) FILTER (WHERE t.status IN ('open', 'in_progress')) > 0
+         HAVING COUNT(t.id) FILTER (WHERE t.status IN ('open', 'in_progress', 'blocked')) > 0
          ORDER BY overdue_count DESC, open_count DESC
          LIMIT 8
       `);

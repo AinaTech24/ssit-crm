@@ -50,10 +50,11 @@ export async function MarketingDashboard({
         (SELECT COUNT(*)::int FROM campaigns WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS campaigns_mtd,
         (SELECT COUNT(*)::int FROM campaigns WHERE status IN ('sending', 'scheduled')) AS active_campaigns,
         (SELECT COUNT(*)::int FROM tasks t
-          WHERE t.status = 'completed' AND t.completed_at >= ${fromISO} AND t.completed_at <= ${toISO}
+          WHERE t.status = 'completed' AND t.deleted_at IS NULL AND t.completed_at >= ${fromISO} AND t.completed_at <= ${toISO}
             AND (t.department = 'marketing'
                  OR EXISTS (SELECT 1 FROM users u WHERE u.id = t.assignee_id AND 'marketing' = ANY(u.roles)))) AS content_done,
-        (SELECT COALESCE(SUM(sent_count), 0)::int FROM campaigns WHERE created_at >= ${fromISO} AND created_at <= ${toISO}) AS sent_mtd,
+        (SELECT COUNT(*)::int FROM communications WHERE direction = 'outbound'
+            AND sent_at >= ${fromISO} AND sent_at <= ${toISO}) AS sent_mtd,
         (SELECT COUNT(*)::int FROM templates WHERE status = 'pending_approval' AND category = 'marketing') AS pending_approval
     `);
     const s = r.rows[0] as any;

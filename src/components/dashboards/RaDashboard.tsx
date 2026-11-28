@@ -1,12 +1,12 @@
 import { isMeetingParticipantSql } from "@/lib/meetings/participants";
 import Link from "next/link";
 import { sql } from "drizzle-orm";
-import { FlaskConical, Phone, ListChecks, CalendarClock, TrendingUp, FileSignature } from "lucide-react";
+import { FlaskConical, CalendarClock, TrendingUp, FileSignature } from "lucide-react";
 import { withTenant } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
-import { leadScopeSql } from "@/lib/leads/access";
-import { formatRelative, formatDate } from "@/lib/utils";
-import { Avatar } from "@/components/ui/Avatar";
+import { formatDate } from "@/lib/utils";
+import { istDay } from "@/lib/dates/ist";
+import { FollowUpsBox, OpenTasksBox, loadMyDay, openLeadSql, totalOf } from "./MyDay";
 import { ResearchCoverageSection } from "./ResearchCoverageSection";
 import { DashboardEmptyState } from "@/components/dashboards/DashboardEmptyState";
 import { formatTrackerItems, type TrackerItem } from "@/db/schema/activity_entries";
@@ -29,10 +29,8 @@ import { tenantAccessibleNavKeys } from "@/config/nav-access";
  */
 type ResearchCountRow = { week_count: number | string | null; month_count: number | string | null };
 type ResearchEntryRow = { id: string; title: string; topic: string | null; items: TrackerItem[] | null; item_type: string | null; status: string; assigned_date: string };
-type FunnelRow = { open: number | string | null; converted_mtd: number | string | null; follow_ups_today: number | string | null };
-type LeadRow = { id: string; name: string; avatar_url: string | null; stage: string; next_follow_up_at: string };
+type FunnelRow = { open: number | string | null; converted_mtd: number | string | null };
 type CountRow = { n: number | string | null };
-type TaskRow = { id: string; title: string; priority: string; due_at: string | null };
 
 export async function RaDashboard({
   session,
@@ -71,61 +69,45 @@ export async function RaDashboard({
   const showNav = (href: string) => navKeys.has(href);
 
   const data = await withTenant(session.tenantId, async (tx) => {
-    const tasks = await tx.execute(sql`
-      SELECT id, title, priority, due_at
-      FROM tasks
-      WHERE tenant_id = ${session.tenantId}::uuid AND assignee_id = ${uid}::uuid
-        AND status NOT IN ('completed', 'cancelled') AND deleted_at IS NULL
-      ORDER BY due_at ASC NULLS LAST
-      LIMIT 8
-    `);
+    // The person's own follow-ups and tasks. The admin's firm-wide research view has no "my day".
+    const myDay = asAdmin && !target ? null : await loadMyDay(tx, session.tenantId, uid);
+    const today = istDay();
 
     let research: { weekCount: number; monthCount: number; recent: ResearchEntryRow[] } | null = null;
     if (isResearch) {
+      // One analyst's research, or - on the admin's research view - every research analyst's.
+      const owner =
+        asAdmin && !target
+          ? sql`owner_user_id IN (SELECT u.id FROM users u WHERE u.tenant_id = ${session.tenantId}::uuid AND 'ra_research' = ANY(u.roles))`
+          : sql`owner_user_id = ${uid}::uuid`;
       const counts = await tx.execute(sql`
         SELECT
-          COUNT(*) FILTER (WHERE assigned_date >= date_trunc('week', current_date))::int AS week_count,
-          COUNT(*) FILTER (WHERE assigned_date >= date_trunc('month', current_date))::int AS month_count
+          COUNT(*) FILTER (WHERE assigned_date >= date_trunc('week', ${today}::date))::int AS week_count,
+          COUNT(*) FILTER (WHERE assigned_date >= date_trunc('month', ${today}::date))::int AS month_count
         FROM activity_entries
-        WHERE tenant_id = ${session.tenantId}::uuid AND owner_user_id = ${uid}::uuid AND kind = 'research'
+        WHERE tenant_id = ${session.tenantId}::uuid AND ${owner} AND kind = 'research'
       `);
       const c = counts.rows[0] as unknown as ResearchCountRow;
       const recent = await tx.execute(sql`
         SELECT id, title, topic, items, item_type, status, assigned_date
         FROM activity_entries
-        WHERE tenant_id = ${session.tenantId}::uuid AND owner_user_id = ${uid}::uuid AND kind = 'research'
+        WHERE tenant_id = ${session.tenantId}::uuid AND ${owner} AND kind = 'research'
         ORDER BY assigned_date DESC, created_at DESC
         LIMIT 8
       `);
       research = { weekCount: Number(c.week_count ?? 0), monthCount: Number(c.month_count ?? 0), recent: recent.rows as unknown as ResearchEntryRow[] };
     }
 
-    let salesFunnel: { open: number; convertedMtd: number; followUpsToday: number; leads: LeadRow[]; meetingsDue: number } | null = null;
+    let salesFunnel: { open: number; convertedMtd: number; meetingsDue: number } | null = null;
     if (isSales) {
-      const leadScope = target
-        ? sql`leads.owner_id = ${uid}::uuid`
-        : await leadScopeSql(tx, session, "leads");
-      const endOfDay = new Date();
-      endOfDay.setHours(23, 59, 59, 999);
       const funnel = await tx.execute(sql`
         SELECT
-          COUNT(*) FILTER (WHERE converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold'))::int AS open,
-          COUNT(*) FILTER (WHERE converted_investor_id IS NOT NULL
-            AND converted_at >= date_trunc('month', current_date))::int AS converted_mtd,
-          COUNT(*) FILTER (WHERE next_follow_up_at <= ${endOfDay.toISOString()}
-            AND converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold'))::int AS follow_ups_today
-        FROM leads WHERE ${leadScope}
+          COUNT(*) FILTER (WHERE ${openLeadSql})::int AS open,
+          COUNT(*) FILTER (WHERE l.converted_investor_id IS NOT NULL AND l.deleted_at IS NULL
+            AND l.converted_at >= (date_trunc('month', ${today}::date)::timestamp AT TIME ZONE 'Asia/Kolkata'))::int AS converted_mtd
+        FROM leads l WHERE l.tenant_id = ${session.tenantId}::uuid AND l.owner_id = ${uid}::uuid
       `);
       const f = funnel.rows[0] as unknown as FunnelRow;
-      const followUps = await tx.execute(sql`
-        SELECT id, name, avatar_url, stage, next_follow_up_at
-        FROM leads
-        WHERE ${leadScope}
-          AND next_follow_up_at <= ${endOfDay.toISOString()}
-          AND converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold')
-        ORDER BY next_follow_up_at ASC
-        LIMIT 8
-      `);
       const meetingsDue = await tx.execute(sql`
         SELECT COUNT(*)::int AS n FROM review_meetings
         WHERE tenant_id = ${session.tenantId}::uuid AND ${isMeetingParticipantSql("review_meetings", uid)}
@@ -134,13 +116,11 @@ export async function RaDashboard({
       salesFunnel = {
         open: Number(f.open ?? 0),
         convertedMtd: Number(f.converted_mtd ?? 0),
-        followUpsToday: Number(f.follow_ups_today ?? 0),
-        leads: followUps.rows as unknown as LeadRow[],
         meetingsDue: Number((meetingsDue.rows[0] as unknown as CountRow | undefined)?.n ?? 0),
       };
     }
 
-    return { tasks: tasks.rows as unknown as TaskRow[], research, salesFunnel };
+    return { myDay, research, salesFunnel };
   });
 
   return (
@@ -170,13 +150,15 @@ export async function RaDashboard({
             <>
               <Kpi label="Open leads" value={String(data.salesFunnel!.open)} sub="In pipeline" />
               <Kpi label="Converted" value={String(data.salesFunnel!.convertedMtd)} sub="This month" />
-              <Kpi label="Follow-ups today" value={String(data.salesFunnel!.followUpsToday)} tone={data.salesFunnel!.followUpsToday > 0 ? "amber" : undefined} />
+              {data.myDay && (
+                <Kpi label="Follow-ups today" value={String(totalOf(data.myDay.followUps))} tone={totalOf(data.myDay.followUps) > 0 ? "amber" : undefined} />
+              )}
             </>
           )}
           {isSales && showNav("/dashboard/review-meetings") && (
             <Kpi label="Meetings this week" value={String(data.salesFunnel!.meetingsDue)} />
           )}
-          {showNav("/dashboard/tasks") && <Kpi label="Open tasks" value={String(data.tasks.length)} />}
+          {showNav("/dashboard/tasks") && data.myDay && <Kpi label="Open tasks" value={String(totalOf(data.myDay.myTasks))} />}
         </div>
       </div>
 
@@ -217,41 +199,11 @@ export async function RaDashboard({
         </Section>
       )}
 
-      {isSales && showNav("/dashboard/leads") && (
-        <Section title="Follow-ups today" count={data.salesFunnel!.leads.length} icon={Phone}>
-          {data.salesFunnel!.leads.length === 0 ? (
-            <DashboardEmptyState compact title="No follow-ups due today 🎉" hint="You're caught up on the pipeline." />
-          ) : (
-            <ul className="divide-y">
-              {data.salesFunnel!.leads.map((l: LeadRow) => (
-                <li key={l.id} className="py-2 flex items-center justify-between text-sm gap-2">
-                  <Link href={`/dashboard/leads/${l.id}`} className="flex items-center gap-2 hover:underline min-w-0">
-                    <Avatar src={l.avatar_url ? `/api/leads/${l.id}/avatar` : null} name={l.name} size={26} />
-                    <span className="truncate">{l.name}</span>
-                  </Link>
-                  <span className="text-xs uppercase text-muted-foreground whitespace-nowrap">{l.stage}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-      )}
-
-      {showNav("/dashboard/tasks") && (
-        <Section title="My open tasks" count={data.tasks.length} icon={ListChecks}>
-          {data.tasks.length === 0 ? (
-            <DashboardEmptyState compact title="No open tasks 🎉" hint="Your task list is clear." />
-          ) : (
-            <ul className="divide-y">
-              {data.tasks.map((t: TaskRow) => (
-                <li key={t.id} className="py-2 flex items-center justify-between text-sm">
-                  <span className="truncate">{t.title}</span>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{t.due_at ? formatRelative(t.due_at) : "no due"}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+      {data.myDay && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FollowUpsBox data={data.myDay} />
+          {showNav("/dashboard/tasks") && <OpenTasksBox data={data.myDay} title={target ? `${target.name.split(" ")[0]}'s open tasks` : "My open tasks"} />}
+        </div>
       )}
 
       <div className="flex flex-wrap gap-2">

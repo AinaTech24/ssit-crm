@@ -27,34 +27,33 @@ export async function SchemeHoldingsSection({ session }: { session: SessionUser 
     session.tenantId,
     async (tx) => {
       const schemesRes = await tx.execute(sql`
-        SELECT
-          t.scheme_name,
-          MAX(t.amc_name) AS amc_name,
-          MAX(t.scheme_category) AS scheme_category,
-          COUNT(DISTINCT t.investor_id)::int AS clients,
-          COALESCE(SUM(
-            CASE WHEN t.direction = 'inflow' THEN t.amount::numeric
-                 WHEN t.direction = 'outflow' THEN -t.amount::numeric
-                 ELSE 0 END
-          ), 0)::numeric AS net_invested
-        FROM transactions t
-        JOIN investors i ON i.id = t.investor_id AND i.tenant_id = t.tenant_id
-        WHERE t.status IN ('processed', 'successful')
-          AND t.scheme_name IS NOT NULL
-          AND i.deleted_at IS NULL
-        GROUP BY t.scheme_name
-        HAVING COALESCE(SUM(
-          CASE WHEN t.direction = 'inflow' THEN t.amount::numeric
-               WHEN t.direction = 'outflow' THEN -t.amount::numeric
-               ELSE 0 END
-        ), 0) <> 0
+        WITH flows AS (
+          SELECT l.scheme_name, l.amc_name, l.asset_category AS scheme_category, e.investor_id,
+                 CASE WHEN l.txn_type IN ('sip','sip_topup','lumpsum','additional_purchase','switch','stp') THEN l.amount::numeric
+                      WHEN l.txn_type IN ('redemption','swp') THEN -l.amount::numeric ELSE 0 END AS amt
+            FROM business_entry_lines l JOIN business_entries e ON e.id = l.entry_id
+           WHERE e.status <> 'cancelled'
+          UNION ALL
+          -- money leaving the scheme switched out of
+          SELECT l.from_scheme_name, NULL, NULL, e.investor_id, -l.amount::numeric
+            FROM business_entry_lines l JOIN business_entries e ON e.id = l.entry_id
+           WHERE e.status <> 'cancelled' AND l.txn_type IN ('switch','stp') AND l.from_scheme_name IS NOT NULL
+        )
+        SELECT scheme_name, MAX(amc_name) AS amc_name, MAX(scheme_category) AS scheme_category,
+               COUNT(DISTINCT investor_id)::int AS clients, COALESCE(SUM(amt), 0)::numeric AS net_invested
+          FROM flows
+         WHERE scheme_name IS NOT NULL
+         GROUP BY scheme_name
+        HAVING COALESCE(SUM(amt), 0) <> 0
         ORDER BY net_invested DESC
         LIMIT 12
       `);
 
       const sifRes = await tx.execute(sql`
         SELECT
-          COALESCE(SUM(be.total_amount::numeric), 0)::numeric AS total,
+          COALESCE(SUM((SELECT COALESCE(SUM(CASE WHEN l.txn_type IN ('redemption','swp') THEN -l.amount::numeric
+                                                 WHEN l.txn_type IN ('sip_stop','cob') THEN 0 ELSE l.amount::numeric END), 0)
+                          FROM business_entry_lines l WHERE l.entry_id = be.id)), 0)::numeric AS total,
           COUNT(*)::int AS entries,
           COUNT(DISTINCT be.investor_id)::int AS clients
         FROM business_entries be
@@ -81,7 +80,7 @@ export async function SchemeHoldingsSection({ session }: { session: SessionUser 
           </div>
           Scheme-wise client holdings
         </h2>
-        <Link href="/dashboard/transactions" className="text-xs text-brand-cyan-deep hover:underline font-medium">
+        <Link href="/dashboard/business-entries" className="text-xs text-brand-cyan-deep hover:underline font-medium">
           All transactions →
         </Link>
       </div>
@@ -104,7 +103,7 @@ export async function SchemeHoldingsSection({ session }: { session: SessionUser 
 
       {data.schemes.length === 0 ? (
         <p className="text-xs text-muted-foreground py-6 text-center">
-          No scheme holdings yet — they appear once transactions are imported.
+          No scheme holdings yet — they appear as business is booked in Transactions.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -113,7 +112,7 @@ export async function SchemeHoldingsSection({ session }: { session: SessionUser 
               <tr>
                 <th className="text-left py-2 font-medium">Scheme</th>
                 <th className="text-right py-2 font-medium">Clients</th>
-                <th className="text-right py-2 font-medium">Net invested</th>
+                <th className="text-right py-2 font-medium">Net booked</th>
                 <th className="text-right py-2 font-medium w-24">Share</th>
               </tr>
             </thead>

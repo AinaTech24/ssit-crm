@@ -1,3 +1,5 @@
+import { taskMineSql } from "@/lib/tasks/access";
+import { istDay } from "@/lib/dates/ist";
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import {
@@ -56,7 +58,7 @@ export async function RmInsightsSection({
         await tx.execute(sql`
           SELECT i.id, i.name, i.segment_tag, i.service_tier, i.aum,
             i.last_contact_at,
-            EXTRACT(DAY FROM (now() - COALESCE(i.last_contact_at, i.onboarded_at, now() - interval '999 days')))::int AS days_silent
+            EXTRACT(DAY FROM (now() - COALESCE(i.last_contact_at, i.onboarded_at)))::int AS days_silent
           FROM investors i
           WHERE i.rm_id = ${userId} AND i.status = 'active' AND i.deleted_at IS NULL
             AND (i.last_contact_at IS NULL OR i.last_contact_at < ${last90})
@@ -87,7 +89,6 @@ export async function RmInsightsSection({
           SELECT f.id, f.folio_number, f.amc_name, f.opened_at, f.aum,
             i.id AS investor_id, i.name AS investor_name,
             CASE
-              WHEN f.opened_at < current_date - interval '36 months' THEN 'elss_unlock'
               WHEN f.opened_at < current_date - interval '11 months'
                 AND f.opened_at > current_date - interval '13 months' THEN 'exit_load_expiring'
               ELSE 'other'
@@ -98,11 +99,8 @@ export async function RmInsightsSection({
             AND i.status = 'active'
             AND i.deleted_at IS NULL
             AND f.closed_at IS NULL
-            AND (
-              (f.opened_at < current_date - interval '11 months'
-                 AND f.opened_at > current_date - interval '13 months')
-              OR f.opened_at < current_date - interval '36 months'
-            )
+            AND f.opened_at < current_date - interval '11 months'
+            AND f.opened_at > current_date - interval '13 months'
           ORDER BY f.aum::numeric DESC NULLS LAST
           LIMIT 6
         `),
@@ -154,15 +152,12 @@ export async function RmInsightsSection({
           (
             SELECT 'lead' AS kind, l.id::text AS id, l.name AS title,
               ('Stage: ' || COALESCE(l.stage, 'new')) AS subtitle,
-              -- intended_amount is free text ("12.5 lakh", "15-20L", "₹10,00,000") — stripping
-              -- everything but digits/dots can still leave something like "12.515.5" (multiple
-              -- dots from a typed range), which is not a valid numeric literal and throws
-              -- "invalid input syntax for type numeric" mid-query, taking the whole dashboard
-              -- down for that RM. Validate the cleaned text is a well-formed decimal before the
-              -- cast; anything else (including empty) falls back to 0 rather than erroring.
-              CASE WHEN regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g') ~ '^[0-9]+(\.[0-9]+)?$'
-                THEN regexp_replace(COALESCE(l.intended_amount, ''), '[^0-9.]', '', 'g')::numeric
-                ELSE 0
+              -- Free text such as 12.5 lakh, 15-20L or 1.2 cr: the first number, scaled by its unit.
+              COALESCE(substring(lower(regexp_replace(COALESCE(l.intended_amount, ''), '[,₹ ]', '', 'g')) from '^[0-9]+(?:\\.[0-9]+)?')::numeric, 0)
+              * CASE WHEN lower(regexp_replace(COALESCE(l.intended_amount, ''), '[,₹ ]', '', 'g')) ~ '^[0-9.-]+(cr|crore)' THEN 10000000
+                     WHEN lower(regexp_replace(COALESCE(l.intended_amount, ''), '[,₹ ]', '', 'g')) ~ '^[0-9.-]+(l|lac|lakh)' THEN 100000
+                     WHEN lower(regexp_replace(COALESCE(l.intended_amount, ''), '[,₹ ]', '', 'g')) ~ '^[0-9.-]+(k|thousand)' THEN 1000
+                     ELSE 1
               END AS impact_value,
               CASE WHEN l.next_follow_up_at <= now() THEN 100
                    WHEN l.next_follow_up_at <= now() + interval '2 days' THEN 80
@@ -171,7 +166,8 @@ export async function RmInsightsSection({
             FROM leads l
             WHERE l.owner_id = ${userId}
               AND l.converted_investor_id IS NULL
-              AND l.stage NOT IN ('lost', 'cold', 'not_interested', 'won_lead', 'converted')
+              AND l.stage NOT IN ('lost', 'cold', 'not_interested', 'not_qualified', 'won_lead', 'converted')
+              AND l.deleted_at IS NULL AND l.lost_reason IS DISTINCT FROM '__deleted__'
               AND l.next_follow_up_at IS NOT NULL
               AND l.next_follow_up_at <= ${next30d}
           )
@@ -188,7 +184,7 @@ export async function RmInsightsSection({
             INNER JOIN investors i ON i.id = sr.investor_id
             WHERE i.rm_id = ${userId}
               AND i.deleted_at IS NULL
-              AND sr.status IN ('open', 'in_progress')
+              AND sr.status NOT IN ('resolved', 'closed')
           )
           UNION ALL
           (
@@ -201,8 +197,8 @@ export async function RmInsightsSection({
                    ELSE 40 END AS urgency,
               t.due_at AS when_at
             FROM tasks t
-            WHERE t.assignee_id = ${userId}
-              AND t.status = 'open'
+            WHERE ${taskMineSql("t", userId)}
+              AND t.status IN ('open', 'in_progress', 'blocked') AND t.deleted_at IS NULL
           )
           ORDER BY urgency DESC, impact_value DESC NULLS LAST, when_at ASC NULLS LAST
           LIMIT 5
@@ -210,24 +206,17 @@ export async function RmInsightsSection({
 
         // 7. Upcoming touchpoints — birthdays + anniversaries in next 30 days
         await tx.execute(sql`
-          (
-            SELECT 'birthday' AS kind, id, name, dob AS event_date, segment_tag,
-              to_char(dob, 'MM-DD') AS md
-            FROM investors
-            WHERE rm_id = ${userId} AND status = 'active' AND deleted_at IS NULL AND dob IS NOT NULL
-              AND to_char(dob, 'MM-DD') BETWEEN to_char(current_date, 'MM-DD')
-                                            AND to_char(current_date + interval '30 days', 'MM-DD')
-          )
-          UNION ALL
-          (
-            SELECT 'anniversary' AS kind, id, name, onboarded_at::date AS event_date, segment_tag,
-              to_char(onboarded_at, 'MM-DD') AS md
-            FROM investors
-            WHERE rm_id = ${userId} AND status = 'active' AND deleted_at IS NULL AND onboarded_at IS NOT NULL
-              AND to_char(onboarded_at, 'MM-DD') BETWEEN to_char(current_date, 'MM-DD')
-                                                    AND to_char(current_date + interval '30 days', 'MM-DD')
-          )
-          ORDER BY md ASC
+          SELECT x.kind, x.id, x.name, x.event_date, x.segment_tag, to_char(x.event_date, 'MM-DD') AS md
+            FROM (
+              SELECT 'birthday' AS kind, id, name, dob::date AS event_date, segment_tag
+                FROM investors WHERE rm_id = ${userId} AND status = 'active' AND deleted_at IS NULL AND dob IS NOT NULL
+              UNION ALL
+              SELECT 'anniversary', id, name, onboarded_at::date, segment_tag
+                FROM investors WHERE rm_id = ${userId} AND status = 'active' AND deleted_at IS NULL AND onboarded_at IS NOT NULL
+                 AND onboarded_at < now() - interval '11 months'
+            ) x
+            JOIN generate_series(0, 30) g(n) ON to_char(${istDay()}::date + g.n, 'MM-DD') = to_char(x.event_date, 'MM-DD')
+           ORDER BY g.n, x.name
           LIMIT 12
         `),
       ]);
@@ -366,7 +355,7 @@ export async function RmInsightsSection({
                   </Link>
                   <div className="text-right">
                     <div className="text-xs text-rose-600 font-semibold tabular-nums">
-                      {c.days_silent}d
+                      {c.days_silent == null ? "Never contacted" : `${c.days_silent}d`}
                     </div>
                     <div className="text-[10px] text-muted-foreground">silent</div>
                   </div>

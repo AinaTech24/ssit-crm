@@ -39,6 +39,7 @@ import { parseUccCell } from "@/lib/investors/ucc";
 import { loadCustomFieldDefs, sanitizeCustomFields } from "@/lib/custom-fields/values";
 import { applyRiskCategory, normalizeRiskCategory } from "@/lib/risk-profile/apply";
 import { investors } from "@/db/schema";
+import { localDay } from "@/lib/dates/ist";
 
 export const dynamic = "force-dynamic";
 
@@ -691,7 +692,7 @@ function parseDate(v: string): string | null {
   }
   // ISO / anything the JS engine can parse (YYYY-MM-DD, "Jan 5 1990", …).
   const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  return isNaN(d.getTime()) ? null : localDay(d);
 }
 
 function parseTimestamp(v: string): Date | null {

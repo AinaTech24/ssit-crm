@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { Sparkles } from "lucide-react";
 import { withTenant } from "@/db/client";
 import { LeadFunnelChart } from "./LeadFunnelChart";
-import { resolvePeriodDates, type Period } from "@/lib/dashboard/period";
+import { resolvePeriodRange, type Period } from "@/lib/dashboard/period";
 import type { SessionUser } from "@/lib/auth/session";
 
 export async function LeadFunnelSection({
@@ -15,7 +15,7 @@ export async function LeadFunnelSection({
   period?: Period;
 }) {
   const now = new Date();
-  const { startISO: startOfPeriodISO } = resolvePeriodDates(period, now);
+  const { fromISO, toISO } = resolvePeriodRange(period, now);
 
   const data = await withTenant(
     session.tenantId,
@@ -27,7 +27,8 @@ export async function LeadFunnelSection({
           COUNT(*) FILTER (WHERE stage IN ('meeting_scheduled', 'meeting_pending', 'meeting_done', 'won_lead', 'converted', 'post_meeting_qualified'))::int AS meetings,
           COUNT(*) FILTER (WHERE stage IN ('won_lead', 'converted'))::int AS converted
         FROM leads
-        WHERE created_at >= ${startOfPeriodISO} AND converted_investor_id IS NULL
+        WHERE created_at >= ${fromISO} AND created_at <= ${toISO}
+          AND deleted_at IS NULL AND lost_reason IS DISTINCT FROM '__deleted__'
       `);
       return res.rows[0] as any;
     },

@@ -17,15 +17,17 @@ export async function AttentionQueuesSection({ session }: { session: SessionUser
               WHERE status = 'active' AND deleted_at IS NULL AND next_review_at IS NOT NULL
                 AND next_review_at <= now()) AS reviews_due,
           (SELECT COUNT(*)::int FROM service_requests
-              WHERE status IN ('open', 'in_progress')) AS sr_pending,
+              WHERE status NOT IN ('resolved', 'closed')) AS sr_pending,
           (SELECT COUNT(*)::int FROM service_requests
-              WHERE status IN ('open', 'in_progress') AND type = 'complaint') AS complaints_open,
+              WHERE status NOT IN ('resolved', 'closed') AND type = 'complaint') AS complaints_open,
           (SELECT COUNT(*)::int FROM investors
               WHERE status = 'active' AND deleted_at IS NULL AND service_tier = 'A'
                 AND (last_review_at IS NULL OR last_review_at < now() - interval '120 days')) AS hni_not_reviewed,
           (SELECT COUNT(*)::int FROM investors
               WHERE status = 'active' AND deleted_at IS NULL
-                AND (last_transaction_at IS NULL OR last_transaction_at < ${dormantCutoff})) AS dormant_clients,
+                AND (last_transaction_at IS NULL OR last_transaction_at < ${dormantCutoff})
+                AND NOT EXISTS (SELECT 1 FROM business_entries be WHERE be.investor_id = investors.id
+                      AND be.status <> 'cancelled' AND be.business_date >= ${dormantCutoff}::timestamptz::date)) AS dormant_clients,
           (SELECT COUNT(*)::int FROM investors
               WHERE status = 'active' AND deleted_at IS NULL AND service_tier = 'A') AS tier_a,
           (SELECT COUNT(*)::int FROM investors

@@ -17,7 +17,7 @@ export async function AumSegmentSection({ session }: { session: SessionUser }) {
           COALESCE(SUM(aum::numeric), 0)::numeric AS total_aum
         FROM investors
         WHERE status = 'active' AND deleted_at IS NULL
-        GROUP BY segment_tag
+        GROUP BY 1
       `);
       return res.rows as any[];
     },

@@ -73,7 +73,8 @@ export async function loadVisibleTargets(tx: any, session: SessionUser, period: 
     if (isOwner) return true;
     if (!r.visible) return false;
     if (r.subject_type === "user") return allowedUsers.has(r.subject_id);
-    if (r.subject_type === "branch") return r.subject_id === myBranch;
+    // A head confined to one desk does not see the whole branch's target.
+    if (r.subject_type === "branch") return r.subject_id === myBranch && !(isHead && myDesk);
     return r.subject_id === myDesk;
   };
   const shown = rows.filter(mayShow);

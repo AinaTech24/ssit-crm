@@ -21,6 +21,7 @@
  * which neutralises embedded commas inside quoted fields.
  */
 import * as XLSX from "xlsx";
+import { localDay } from "@/lib/dates/ist";
 
 const SPREADSHEET_EXT = new Set(["xls", "xlsx", "xlsb", "xlsm", "ods", "dbf"]);
 
@@ -30,7 +31,8 @@ function cellToStr(c: unknown): string {
   if (c instanceof Date) {
     // Guard against Excel's 1899/1900 epoch noise — only emit a real date.
     const t = c.getTime();
-    return Number.isFinite(t) ? c.toISOString().slice(0, 10) : "";
+    // The sheet reader builds dates at local midnight (sometimes seconds short of it).
+    return Number.isFinite(t) ? localDay(new Date(t + 2 * 3_600_000)) : "";
   }
   return String(c).replace(/\r?\n/g, " ").trim();
 }

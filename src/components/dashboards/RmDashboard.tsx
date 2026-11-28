@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { and, eq, sql, desc, isNotNull, gte, lte } from "drizzle-orm";
-import { Calendar, Users, TrendingUp, AlertCircle, Phone } from "lucide-react";
+import { sql, type SQL } from "drizzle-orm";
+import { Calendar, Users, TrendingUp, AlertCircle } from "lucide-react";
 import { withTenant } from "@/db/client";
-import { investors, leads, tasks, communications, sips } from "@/db/schema";
-import { formatINR, formatRelative, formatDate } from "@/lib/utils";
+import { SIP_OPEN_STATUSES } from "@/db/schema/sip_rejections";
+import { FollowUpsBox, OpenTasksBox, ScrollList, Section, loadMyDay, openLeadSql, totalOf } from "./MyDay";
+import { istDayBounds } from "@/lib/dates/ist";
+import { formatINR, formatDate } from "@/lib/utils";
 import type { SessionUser } from "@/lib/auth/session";
 import { RmInsightsSection } from "./RmInsightsSection";
 import { SipIssuesCard } from "./SipIssuesCard";
@@ -46,8 +48,10 @@ export async function RmDashboard({
   // "Aman's clients" instead of "My clients".
   const who = viewingOther ? `${(targetName ?? "Member").split(" ")[0]}'s` : "My";
   const today = new Date();
-  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-  const next7 = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  // "Today" is the Indian calendar day.
+  const { day: todayStr, start: dayStart, end: dayEnd } = istDayBounds();
+  const weekEnd = new Date(dayEnd.getTime() + 7 * 86_400_000);
+  const monthStartDay = `${todayStr.slice(0, 7)}-01`;
   // Normalize the period window through the shared resolver so RmDashboard uses
   // the same {fromISO,toISO,label} foundation as OwnerCockpit. We still accept
   // from/to props (so existing deep-links keep working) — a given range resolves
@@ -56,135 +60,105 @@ export async function RmDashboard({
   const range = hasRange
     ? resolvePeriodRange("custom", today, { from, to })
     : resolvePeriodRange("mtd", today);
-  const { fromISO, toISO, label: periodLabel } = range;
+  const { fromISO, toISO, fromDay, toDay, label: periodLabel } = range;
 
   // Per-tenant business thresholds (SIP-rejection look-back, etc.).
   const thresholds = getDashboardThresholds(session.tenantId);
   const sipRejectionWindowDays = thresholds.sipRejectionWindowDays;
+  // Lists scroll; the number beside each title is always the true total (COUNT(*) OVER ()).
+  const LIST_CAP = 200;
 
   const data = await withTenant(session.tenantId, async (tx) => {
+    const rowsOf = async (q: SQL) => (await tx.execute(q)).rows as any[];
+    const myClient = sql`i.rm_id = ${userId}::uuid AND i.deleted_at IS NULL AND i.status = 'active'`;
+
     // My clients + AUM
-    const clientStats = await tx.execute(sql`
+    const [c] = await rowsOf(sql`
       SELECT
         COUNT(*)::int AS my_clients,
-        COALESCE(SUM(aum::numeric), 0)::numeric AS my_aum,
-        COALESCE(SUM(active_sip_amount::numeric), 0)::numeric AS my_sip_book
-      FROM investors WHERE rm_id = ${userId} AND status = 'active' AND deleted_at IS NULL
+        COALESCE(SUM(i.aum::numeric), 0)::numeric AS my_aum,
+        COALESCE(SUM(i.active_sip_amount::numeric), 0)::numeric AS my_sip_book
+      FROM investors i WHERE ${myClient}
     `);
-    const c = clientStats.rows[0] as any;
 
-    // My leads by stage
-    const leadStats = await tx.execute(sql`
+    // My leads
+    const [l] = await rowsOf(sql`
       SELECT
-        COUNT(*) FILTER (WHERE converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold'))::int AS open_leads,
-        COUNT(*) FILTER (WHERE converted_investor_id IS NOT NULL AND converted_at >= ${fromISO} AND converted_at <= ${toISO})::int AS converted_mtd,
-        COUNT(*) FILTER (WHERE next_follow_up_at <= ${endOfDay.toISOString()} AND converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold'))::int AS follow_ups_today
-      FROM leads WHERE owner_id = ${userId}
-    `);
-    const l = leadStats.rows[0] as any;
-
-    // My monthly business (from transactions)
-    const businessStats = await tx.execute(sql`
-      SELECT
-        COALESCE(SUM(CASE WHEN direction = 'inflow' THEN amount::numeric ELSE 0 END), 0) AS gross,
-        COALESCE(SUM(CASE WHEN direction = 'outflow' THEN amount::numeric ELSE 0 END), 0) AS redemption
-      FROM transactions t
-      WHERE t.status IN ('processed', 'successful')
-        AND t.order_date >= ${fromISO.slice(0, 10)}::date
-        AND t.order_date <= ${toISO.slice(0, 10)}::date
-        AND t.investor_id IN (SELECT id FROM investors WHERE rm_id = ${userId})
-    `);
-    const b = businessStats.rows[0] as any;
-
-    // Per-day net-sales series across the resolved window — drives the
-    // "My net sales" hero-tile sparkline. Cheap aggregate over the same rows
-    // businessStats already scans; ordered ascending so the line reads L→R.
-    const netSeriesRes = await tx.execute(sql`
-      SELECT t.order_date::date AS d,
-             COALESCE(SUM(CASE WHEN t.direction = 'inflow' THEN t.amount::numeric ELSE 0 END), 0)
-               - COALESCE(SUM(CASE WHEN t.direction = 'outflow' THEN t.amount::numeric ELSE 0 END), 0) AS net
-      FROM transactions t
-      WHERE t.status IN ('processed', 'successful')
-        AND t.order_date >= ${fromISO.slice(0, 10)}::date
-        AND t.order_date <= ${toISO.slice(0, 10)}::date
-        AND t.investor_id IN (SELECT id FROM investors WHERE rm_id = ${userId})
-      GROUP BY t.order_date::date
-      ORDER BY t.order_date::date ASC
-    `);
-    const netSeries = (netSeriesRes.rows as any[]).map((r) => Number(r.net));
-
-    // Reviews: everything already overdue, plus what falls due in the next 7
-    // days. The window has no lower bound on purpose — a review missed six
-    // months ago still needs doing — but it USED to be labelled "due this week"
-    // with nothing distinguishing the two, so a long-overdue client read as a
-    // routine one. The row now says which it is and overdue sorts first.
-    const reviewsDue = await tx
-      .select()
-      .from(investors)
-      .where(
-        and(
-          eq(investors.rmId, userId),
-          isNotNull(investors.nextReviewAt),
-          sql`next_review_at <= ${next7.toISOString()}`
-        )
-      )
-      .orderBy(investors.nextReviewAt)
-      .limit(12);
-
-    // Today's follow-ups (leads + tasks)
-    const followUps = await tx.execute(sql`
-      SELECT 'lead' AS kind, id, name AS title, next_follow_up_at AS due_at FROM leads
-      WHERE owner_id = ${userId} AND next_follow_up_at IS NOT NULL
-        AND next_follow_up_at <= ${endOfDay.toISOString()}
-        AND converted_investor_id IS NULL AND stage NOT IN ('lost', 'cold')
-      UNION ALL
-      SELECT 'task', id, title, due_at FROM tasks
-      WHERE assignee_id = ${userId} AND status = 'open'
-        AND due_at IS NOT NULL AND due_at <= ${endOfDay.toISOString()}
-      ORDER BY due_at ASC LIMIT 10
+        COUNT(*) FILTER (WHERE ${openLeadSql})::int AS open_leads,
+        COUNT(*) FILTER (WHERE l.converted_investor_id IS NOT NULL AND l.deleted_at IS NULL
+          AND l.converted_at >= ${fromISO} AND l.converted_at <= ${toISO})::int AS converted_in_period
+      FROM leads l WHERE l.owner_id = ${userId}::uuid
     `);
 
-    // Birthdays this week (DOB month-day matches today + 7)
-    const birthdays = await tx.execute(sql`
-      SELECT id, name, dob, segment_tag, avatar_url FROM investors
-      WHERE rm_id = ${userId} AND dob IS NOT NULL
-        AND to_char(dob, 'MM-DD') BETWEEN to_char(current_date, 'MM-DD')
-                                       AND to_char(current_date + interval '7 days', 'MM-DD')
-      LIMIT 8
+    // My business, from the Transactions entries I am the RM of (what the firm actually books).
+    const mine = sql`e.tenant_id = ${session.tenantId}::uuid AND e.rm_id = ${userId}::uuid
+      AND e.status <> 'cancelled' AND e.deleted_at IS NULL`;
+    const bought = sql`ln.txn_type IN ('sip', 'sip_topup', 'lumpsum', 'additional_purchase')`;
+    const sold = sql`ln.txn_type IN ('redemption', 'swp')`;
+    const sums = sql`
+      COALESCE(SUM(ln.amount::numeric) FILTER (WHERE ${bought}), 0) AS gross,
+      COALESCE(SUM(ln.amount::numeric) FILTER (WHERE ${sold}), 0) AS redemption,
+      COALESCE(SUM(ln.amount::numeric) FILTER (WHERE ln.txn_type IN ('sip', 'sip_topup')), 0) AS sip_booked`;
+    const lines = sql`business_entry_lines ln JOIN business_entries e ON e.id = ln.entry_id`;
+    const [b] = await rowsOf(sql`
+      SELECT ${sums} FROM ${lines}
+       WHERE ${mine} AND e.business_date >= ${fromDay}::date AND e.business_date <= ${toDay}::date
+    `);
+    // The quota ring is always month-to-date, whatever range is picked above.
+    const [month] = await rowsOf(sql`
+      SELECT ${sums} FROM ${lines}
+       WHERE ${mine} AND e.business_date >= ${monthStartDay}::date AND e.business_date <= ${todayStr}::date
+    `);
+    const series = await rowsOf(sql`
+      SELECT e.business_date AS d, ${sums} FROM ${lines}
+       WHERE ${mine} AND e.business_date >= ${fromDay}::date AND e.business_date <= ${toDay}::date
+       GROUP BY e.business_date ORDER BY e.business_date ASC
+    `);
+    const netSeries = series.map((r) => Number(r.gross) - Number(r.redemption));
+
+    // Reviews: everything already overdue, plus what falls due in the next 7 days.
+    const reviewsDue = await rowsOf(sql`
+      SELECT i.id, i.name, i.segment_tag, i.avatar_url, i.next_review_at, COUNT(*) OVER ()::int AS total_count
+        FROM investors i
+       WHERE ${myClient} AND i.next_review_at IS NOT NULL AND i.next_review_at < ${weekEnd}
+       ORDER BY i.next_review_at ASC LIMIT ${LIST_CAP}
     `);
 
-    // My open tasks
-    const myTasks = await tx
-      .select()
-      .from(tasks)
-      .where(and(eq(tasks.assigneeId, userId), eq(tasks.status, "open")))
-      .orderBy(desc(tasks.priority), tasks.dueAt)
-      .limit(8);
+    // Today's follow-ups, earlier overdue ones and every open task.
+    const myDay = await loadMyDay(tx, session.tenantId, userId);
+
+    // Birthdays in the next 7 days (works across the year end).
+    const birthdays = await rowsOf(sql`
+      SELECT i.id, i.name, i.dob, i.segment_tag, i.avatar_url, COUNT(*) OVER ()::int AS total_count
+        FROM investors i
+        JOIN generate_series(0, 7) g(n) ON to_char(${todayStr}::date + g.n, 'MM-DD') = to_char(i.dob, 'MM-DD')
+       WHERE ${myClient} AND i.dob IS NOT NULL
+       ORDER BY g.n, i.name LIMIT ${LIST_CAP}
+    `);
 
     // SIP top-up opportunities (HNI / Affluent with active SIPs that haven't increased in 12mo)
-    const topUpRes = await tx.execute(sql`
-      SELECT i.id, i.name, i.segment_tag, i.active_sip_amount, i.avatar_url
-      FROM investors i
-      WHERE i.rm_id = ${userId}
-        AND i.segment_tag IN ('HNI', 'Affluent')
-        AND i.active_sip_amount::numeric > 0
-        AND NOT EXISTS (
-          SELECT 1 FROM sips s
-          WHERE s.investor_id = i.id
-            AND s.created_at >= now() - interval '12 months'
-        )
-      LIMIT 5
+    const topUps = await rowsOf(sql`
+      SELECT i.id, i.name, i.segment_tag, i.active_sip_amount, i.avatar_url, COUNT(*) OVER ()::int AS total_count
+        FROM investors i
+       WHERE ${myClient}
+         AND i.segment_tag IN ('HNI', 'Affluent')
+         AND i.active_sip_amount::numeric > 0
+         AND NOT EXISTS (
+           SELECT 1 FROM sips s
+            WHERE s.investor_id = i.id AND s.created_at >= now() - interval '12 months'
+         )
+       ORDER BY i.active_sip_amount::numeric DESC LIMIT ${LIST_CAP}
     `);
 
     // Clients not MET in over 100 days. Counts actual meetings, not calls or
     // emails: a review conversation is the thing that slips quietly, and a
     // client with no meeting on record at all counts from when they onboarded
     // (otherwise the people never met once would be the only ones missing).
-    const meetingOverdueRes = await tx.execute(sql`
+    const meetingOverdue = await rowsOf(sql`
       SELECT i.id, i.name, i.segment_tag, i.avatar_url,
              m.last_met,
-             COALESCE(m.last_met, i.onboarded_at::date) AS since,
-             (CURRENT_DATE - COALESCE(m.last_met, i.onboarded_at::date)) AS days_since
+             (${todayStr}::date - COALESCE(m.last_met, i.onboarded_at::date)) AS days_since,
+             COUNT(*) OVER ()::int AS total_count
         FROM investors i
         LEFT JOIN LATERAL (
           SELECT MAX(rm.meeting_date)::date AS last_met
@@ -193,128 +167,122 @@ export async function RmDashboard({
              AND rm.tenant_id = i.tenant_id
              AND rm.status = 'completed'
         ) m ON true
-       WHERE i.rm_id = ${userId}
-         AND i.status = 'active'
-         AND i.deleted_at IS NULL
+       WHERE ${myClient}
          AND COALESCE(m.last_met, i.onboarded_at::date) IS NOT NULL
          AND COALESCE(m.last_met, i.onboarded_at::date)
-             < CURRENT_DATE - ${thresholds.meetingOverdueDays}::int
+             < ${todayStr}::date - ${thresholds.meetingOverdueDays}::int
        ORDER BY days_since DESC
-       LIMIT 8
+       LIMIT ${LIST_CAP}
     `);
 
     // SIPs running a year or more at the same amount — the step-up conversation
     // nobody schedules. Keyed on the SIP's own start date rather than the
     // client record, so a client with one old SIP and one new one still shows
     // the old one.
-    const stepUpRes = await tx.execute(sql`
+    const stepUps = await rowsOf(sql`
       SELECT s.id, s.scheme_name, s.amount, s.start_date,
              i.id AS investor_id, i.name AS investor_name, i.avatar_url,
-             (CURRENT_DATE - s.start_date::date) AS days_running
+             (${todayStr}::date - s.start_date::date) AS days_running,
+             COUNT(*) OVER ()::int AS total_count
         FROM sips s
         JOIN investors i ON i.id = s.investor_id AND i.tenant_id = s.tenant_id
-       WHERE i.rm_id = ${userId}
-         AND i.deleted_at IS NULL
+       WHERE ${myClient}
          AND s.status = 'active'
          AND s.start_date IS NOT NULL
-         AND s.start_date::date <= CURRENT_DATE - INTERVAL '1 year'
+         AND s.start_date::date <= ${todayStr}::date - INTERVAL '1 year'
          AND s.updated_at < now() - INTERVAL '1 year'
        ORDER BY s.start_date ASC
-       LIMIT 8
+       LIMIT ${LIST_CAP}
     `);
 
     // Dormant money: no transaction in years. Distinct from the dormancy FLAG
     // the scanner sets (that one closes the client); this is a live nudge for
     // accounts still counted as active.
-    const staleRes = await tx.execute(sql`
-      SELECT i.id, i.name, i.segment_tag, i.avatar_url, i.aum, i.last_transaction_at,
-             (CURRENT_DATE - i.last_transaction_at::date) AS days_since
+    const staleClients = await rowsOf(sql`
+      SELECT i.id, i.name, i.segment_tag, i.avatar_url, i.aum, i.last_transaction_at, COUNT(*) OVER ()::int AS total_count
         FROM investors i
-       WHERE i.rm_id = ${userId}
-         AND i.status = 'active'
-         AND i.deleted_at IS NULL
+       WHERE ${myClient}
          AND i.last_transaction_at IS NOT NULL
          AND i.last_transaction_at < now() - (${thresholds.staleTransactionYears}::int * INTERVAL '1 year')
        ORDER BY i.last_transaction_at ASC
-       LIMIT 8
+       LIMIT ${LIST_CAP}
     `);
 
-    // SIP rejection follow-ups — rejected SIPs within the configured look-back
-    // window (getDashboardThresholds.sipRejectionWindowDays) for my clients.
-    const sipRejections = await tx.execute(sql`
-      SELECT t.id, t.scheme_name, t.amount, t.reason_code, t.created_at,
-             i.id AS investor_id, i.name AS investor_name, i.avatar_url AS investor_avatar_url
-      FROM transactions t
-      JOIN investors i ON i.id = t.investor_id
-      WHERE i.rm_id = ${userId}
-        AND t.type = 'sip'
-        AND t.status = 'rejected'
-        AND t.created_at >= now() - make_interval(days => ${sipRejectionWindowDays})
-      ORDER BY t.created_at DESC
-      LIMIT 8
+    // Rejected SIPs still to be recovered (the SIP rejections register), within the look-back window.
+    const sipRejections = await rowsOf(sql`
+      SELECT r.id, r.scheme_name, r.rejection_amount AS amount, r.rejection_reason, r.rejection_date,
+             i.id AS investor_id, i.name AS investor_name, i.avatar_url AS investor_avatar_url,
+             COUNT(*) OVER ()::int AS total_count
+        FROM sip_rejections r
+        JOIN investors i ON i.id = r.investor_id
+       WHERE r.tenant_id = ${session.tenantId}::uuid AND i.deleted_at IS NULL
+         AND (r.assigned_rm_id = ${userId}::uuid OR i.rm_id = ${userId}::uuid)
+         AND r.recovery_status IN (${sql.join(SIP_OPEN_STATUSES.map((s) => sql`${s}`), sql`, `)})
+         AND r.rejection_date >= ${todayStr}::date - ${sipRejectionWindowDays}::int
+       ORDER BY r.rejection_date DESC
+       LIMIT ${LIST_CAP}
     `);
 
-    // Anniversaries (investor onboarded_at month-day matches today + 7)
-    const anniversaries = await tx.execute(sql`
-      SELECT id, name, onboarded_at, avatar_url,
-             EXTRACT(YEAR FROM age(current_date, onboarded_at))::int AS years
-      FROM investors
-      WHERE rm_id = ${userId} AND onboarded_at IS NOT NULL
-        AND to_char(onboarded_at, 'MM-DD') BETWEEN to_char(current_date, 'MM-DD')
-                                                AND to_char(current_date + interval '7 days', 'MM-DD')
-      LIMIT 8
+    // Onboarding anniversaries in the next 7 days (works across the year end).
+    const anniversaries = await rowsOf(sql`
+      SELECT i.id, i.name, i.avatar_url,
+             (EXTRACT(YEAR FROM ${todayStr}::date + g.n) - EXTRACT(YEAR FROM i.onboarded_at))::int AS years,
+             g.n AS days_away, COUNT(*) OVER ()::int AS total_count
+        FROM investors i
+        JOIN generate_series(0, 7) g(n) ON to_char(${todayStr}::date + g.n, 'MM-DD') = to_char(i.onboarded_at, 'MM-DD')
+       WHERE ${myClient} AND i.onboarded_at IS NOT NULL
+         AND EXTRACT(YEAR FROM ${todayStr}::date + g.n) > EXTRACT(YEAR FROM i.onboarded_at)
+       ORDER BY g.n, i.name LIMIT ${LIST_CAP}
     `);
 
-    // Pending service requests for assigned clients
-    const myServiceReqs = await tx.execute(sql`
+    // Service requests still open: my clients', or assigned to me.
+    const myServiceReqs = await rowsOf(sql`
       SELECT sr.id, sr.ticket_no, sr.subject, sr.type, sr.status, sr.sla_resolution_at,
-             i.id AS investor_id, i.name AS investor_name, i.avatar_url AS investor_avatar_url
-      FROM service_requests sr
-      JOIN investors i ON i.id = sr.investor_id
-      WHERE i.rm_id = ${userId}
-        AND sr.status IN ('open', 'in_progress')
-      ORDER BY sr.sla_resolution_at ASC NULLS LAST
-      LIMIT 8
+             i.id AS investor_id, COALESCE(i.name, sr.client_name) AS investor_name, i.avatar_url AS investor_avatar_url,
+             COUNT(*) OVER ()::int AS total_count
+        FROM service_requests sr
+        LEFT JOIN investors i ON i.id = sr.investor_id
+       WHERE sr.tenant_id = ${session.tenantId}::uuid
+         AND (i.rm_id = ${userId}::uuid OR sr.assigned_to_user_id = ${userId}::uuid)
+         AND sr.status IN ('open', 'in_progress', 'waiting_customer', 'escalated')
+       ORDER BY sr.sla_resolution_at ASC NULLS LAST
+       LIMIT ${LIST_CAP}
     `);
 
     // RM personal targets — annual_target / 12 = monthly sales target
     // sip_monthly_target = monthly SIP mobilisation target
-    const myTargets = await tx.execute(sql`
+    const [t] = await rowsOf(sql`
       SELECT
         COALESCE(annual_target::numeric, 0) AS annual_target,
         COALESCE(sip_monthly_target::numeric, 0) AS sip_monthly_target
-      FROM users WHERE id = ${userId}
+      FROM users WHERE id = ${userId}::uuid
     `);
-    const t = myTargets.rows[0] as any;
     const annualTarget = Number(t?.annual_target ?? 0);
-    // Monthly sales target = annualTarget / 12; fallback 0 (no target set)
-    const monthlyTarget = annualTarget > 0 ? annualTarget / 12 : 0;
-    const sipMonthlyTarget = Number(t?.sip_monthly_target ?? 0);
 
     return {
       myClients: Number(c.my_clients),
       myAum: Number(c.my_aum),
       mySipBook: Number(c.my_sip_book),
       openLeads: Number(l.open_leads),
-      convertedMtd: Number(l.converted_mtd),
-      followUpsToday: Number(l.follow_ups_today),
-      grossMtd: Number(b.gross),
-      netMtd: Number(b.gross) - Number(b.redemption),
+      converted: Number(l.converted_in_period),
+      gross: Number(b.gross),
+      net: Number(b.gross) - Number(b.redemption),
+      sipBooked: Number(b.sip_booked),
+      netMonth: Number(month.gross) - Number(month.redemption),
       netSeries,
       reviewsDue,
-      followUps: followUps.rows as any[],
-      birthdays: birthdays.rows as any[],
-      myTasks,
-      topUps: topUpRes.rows as any[],
-      meetingOverdue: meetingOverdueRes.rows as any[],
-      stepUps: stepUpRes.rows as any[],
-      staleClients: staleRes.rows as any[],
-      sipRejections: sipRejections.rows as any[],
-      anniversaries: anniversaries.rows as any[],
-      myServiceReqs: myServiceReqs.rows as any[],
-      monthlyTarget,
-      sipMonthlyTarget,
-      annualTarget,
+      myDay,
+      birthdays,
+      topUps,
+      meetingOverdue,
+      stepUps,
+      staleClients,
+      sipRejections,
+      anniversaries,
+      myServiceReqs,
+      // Monthly sales target = annualTarget / 12; 0 = no target set
+      monthlyTarget: annualTarget > 0 ? annualTarget / 12 : 0,
+      sipMonthlyTarget: Number(t?.sip_monthly_target ?? 0),
     };
   }, { userId: session.userId, branchId: session.branchId, roles: session.roles });
 
@@ -336,33 +304,7 @@ export async function RmDashboard({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Section title="Follow-ups today" count={data.followUps.length}>
-          {data.followUps.length === 0 ? (
-            <DashboardEmptyState
-              compact
-              title="No follow-ups due today 🎉"
-              hint="You're all caught up — nothing on your plate for today."
-            />
-          ) : (
-            <ul className="divide-y">
-              {data.followUps.map((f: any) => (
-                <li key={`${f.kind}-${f.id}`} className="py-2 flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className={f.kind === "lead" ? "pulse-warning-dot" : "pulse-danger-dot"} />
-                    {f.kind === "lead" ? (
-                      <Phone className="size-3.5 text-blue-600" />
-                    ) : (
-                      <AlertCircle className="size-3.5 text-amber-600" />
-                    )}
-                    <span>{f.title}</span>
-                    <span className="text-xs uppercase text-muted-foreground">{f.kind}</span>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{formatRelative(f.due_at)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+        <FollowUpsBox data={data.myDay} />
 
         {/* The five KPI cards used to sit in their own full-width container
             above this row. They live here now, two-across so they still read
@@ -370,22 +312,22 @@ export async function RmDashboard({
         <Section title={viewingOther ? `${targetName ?? "Team member"} at glance` : "At glance"}>
           <div className="grid grid-cols-2 gap-3">
         <Kpi label={`${who} clients`} value={String(data.myClients)} sub={formatINR(data.myAum) + " AUM"} href="/dashboard/investors" />
-        <Kpi label={`${who} SIP book`} value={formatINR(data.mySipBook)} sub="per month" href="/dashboard/sips" />
+        <Kpi label={`${who} SIP book`} value={formatINR(data.mySipBook)} sub={data.sipBooked > 0 ? `per month · ${formatINR(data.sipBooked)} SIP booked · ${periodLabel}` : "per month"} href="/dashboard/sips" />
         <Kpi
           label={`${who} net sales`}
-          value={formatINR(data.netMtd)}
-          sub={`Gross ${formatINR(data.grossMtd)} · ${periodLabel}`}
-          href="/dashboard/transactions"
+          value={formatINR(data.net)}
+          sub={`Gross ${formatINR(data.gross)} · ${periodLabel}`}
+          href="/dashboard/business-entries"
         >
           {data.netSeries.length >= 2 && (
             <Sparkline
               data={data.netSeries}
               className="mt-2 w-full"
-              strokeClass={data.netMtd >= 0 ? "text-emerald-500" : "text-rose-500"}
+              strokeClass={data.net >= 0 ? "text-emerald-500" : "text-rose-500"}
             />
           )}
         </Kpi>
-        <Kpi label="Open leads" value={String(data.openLeads)} sub={`${data.convertedMtd} converted · ${periodLabel}`} href="/dashboard/leads" />
+        <Kpi label="Open leads" value={String(data.openLeads)} sub={`${data.converted} converted · ${periodLabel}`} href="/dashboard/leads" />
         {/* Sales Quota Ring — driven by users.annual_target / 12 */}
         {data.monthlyTarget > 0 ? (
           <Link
@@ -407,28 +349,28 @@ export async function RmDashboard({
                   cy="32"
                   r="26"
                   className={`fill-none ${
-                    data.netMtd >= data.monthlyTarget
+                    data.netMonth >= data.monthlyTarget
                       ? "stroke-emerald-500"
-                      : data.netMtd >= data.monthlyTarget * 0.75
+                      : data.netMonth >= data.monthlyTarget * 0.75
                       ? "stroke-amber-500"
                       : "stroke-brand-cyan"
                   }`}
                   strokeWidth="5"
                   strokeDasharray={`${2 * Math.PI * 26}`}
-                  strokeDashoffset={`${2 * Math.PI * 26 * (1 - Math.min(100, Math.max(0, data.netMtd > 0 ? (data.netMtd / data.monthlyTarget) * 100 : 0)) / 100)}`}
+                  strokeDashoffset={`${2 * Math.PI * 26 * (1 - Math.min(100, Math.max(0, data.netMonth > 0 ? (data.netMonth / data.monthlyTarget) * 100 : 0)) / 100)}`}
                   strokeLinecap="round"
                 />
               </svg>
               <div className="absolute text-center">
                 <span className={`text-xs font-bold ${
-                  data.netMtd >= data.monthlyTarget ? "text-emerald-600" : "text-gradient"
+                  data.netMonth >= data.monthlyTarget ? "text-emerald-600" : "text-gradient"
                 }`}>
-                  {Math.min(100, Math.round(data.netMtd > 0 ? (data.netMtd / data.monthlyTarget) * 100 : 0))}%
+                  {Math.min(100, Math.round(data.netMonth > 0 ? (data.netMonth / data.monthlyTarget) * 100 : 0))}%
                 </span>
               </div>
             </div>
             <div className="text-[9px] text-muted-foreground mt-2 font-medium">
-              Target {formatINR(data.monthlyTarget)} · Got {formatINR(data.netMtd)}
+              Target {formatINR(data.monthlyTarget)} · Got {formatINR(data.netMonth)}
             </div>
             {data.sipMonthlyTarget > 0 && (
               <div className="text-[9px] text-muted-foreground mt-1">
@@ -457,7 +399,7 @@ export async function RmDashboard({
               Reviews — overdue &amp; due this week
             </span>
             <span className="chip bg-brand-cyan-light text-brand-cyan-deep text-xs font-semibold px-2 py-0.5">
-              {data.reviewsDue.length}
+              {totalOf(data.reviewsDue)}
             </span>
           </div>
           {data.reviewsDue.length === 0 ? (
@@ -467,17 +409,17 @@ export async function RmDashboard({
               hint="No client portfolio reviews are scheduled in the next 7 days."
             />
           ) : (
-            <ul className="divide-y">
-              {data.reviewsDue.map((i) => {
-                const due = i.nextReviewAt ? new Date(i.nextReviewAt as any) : null;
+            <ScrollList>
+              {data.reviewsDue.map((i: any) => {
+                const due = i.next_review_at ? new Date(i.next_review_at) : null;
                 const overdueDays = due
-                  ? Math.floor((Date.now() - due.getTime()) / 86_400_000)
+                  ? Math.floor((dayStart.getTime() - due.getTime()) / 86_400_000) + 1
                   : 0;
                 const overdue = overdueDays > 0;
                 return (
                   <li key={i.id} className="py-2 flex items-center justify-between text-sm gap-2">
                     <Link href={`/dashboard/investors/${i.id}`} className="flex items-center gap-2 hover:underline min-w-0">
-                      <Avatar src={(i as any).avatarUrl ? `/api/investors/${i.id}/avatar` : null} name={i.name} size={26} />
+                      <Avatar src={i.avatar_url ? `/api/investors/${i.id}/avatar` : null} name={i.name} size={26} />
                       <span className="truncate">{i.name}</span>
                     </Link>
                     <span className="text-xs whitespace-nowrap text-right">
@@ -485,46 +427,23 @@ export async function RmDashboard({
                         {overdue ? `Overdue ${overdueDays}d` : "Upcoming"}
                       </span>
                       <span className="block text-[11px] text-muted-foreground">
-                        {i.segmentTag} · {due ? formatDate(due) : "—"}
+                        {i.segment_tag} · {due ? formatDate(due) : "—"}
                       </span>
                     </span>
                   </li>
                 );
               })}
-            </ul>
+            </ScrollList>
           )}
         </Section>
       </div>
 
-      <Section title={`${who} open tasks`} count={data.myTasks.length}>
-        {data.myTasks.length === 0 ? (
-          <DashboardEmptyState
-            compact
-            title="No open tasks 🎉"
-            hint="Your task list is clear. Nice work staying on top of things."
-          />
-        ) : (
-          <ul className="divide-y">
-            {data.myTasks.map((t) => (
-              <li key={t.id} className="py-2 flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" className="size-3.5 rounded" />
-                  <span>{t.title}</span>
-                  <span className="text-xs uppercase text-muted-foreground">{t.priority}</span>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {t.dueAt ? formatRelative(t.dueAt) : "no due"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
+      <OpenTasksBox data={data.myDay} title={`${who} open tasks`} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Not MET in over 100 days. Meetings only — a client you have emailed
             but not sat with is exactly the one this is looking for. */}
-        <Section title={`Client meetings overdue (${thresholds.meetingOverdueDays}+ days)`} count={data.meetingOverdue.length}>
+        <Section title={`Client meetings overdue (${thresholds.meetingOverdueDays}+ days)`} count={totalOf(data.meetingOverdue)}>
           {data.meetingOverdue.length === 0 ? (
             <DashboardEmptyState
               compact
@@ -532,7 +451,7 @@ export async function RmDashboard({
               hint={`No client of yours has gone ${thresholds.meetingOverdueDays} days without a completed meeting.`}
             />
           ) : (
-            <ul className="divide-y">
+            <ScrollList>
               {data.meetingOverdue.map((c: any) => (
                 <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
                   <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
@@ -545,12 +464,12 @@ export async function RmDashboard({
                   </span>
                 </li>
               ))}
-            </ul>
+            </ScrollList>
           )}
         </Section>
 
         {/* SIPs a year old at the same amount — the step-up nobody schedules. */}
-        <Section title="SIP step-ups pending (1 yr+)" count={data.stepUps.length}>
+        <Section title="SIP step-ups pending (1 yr+)" count={totalOf(data.stepUps)}>
           {data.stepUps.length === 0 ? (
             <DashboardEmptyState
               compact
@@ -558,7 +477,7 @@ export async function RmDashboard({
               hint="No SIP of yours has been running a year or more at an unchanged amount."
             />
           ) : (
-            <ul className="divide-y">
+            <ScrollList>
               {data.stepUps.map((sp: any) => (
                 <li key={sp.id} className="py-2 flex items-center justify-between text-sm gap-2">
                   <Link href={`/dashboard/investors/${sp.investor_id}`} className="flex items-center gap-2 hover:underline min-w-0">
@@ -574,7 +493,7 @@ export async function RmDashboard({
                   </span>
                 </li>
               ))}
-            </ul>
+            </ScrollList>
           )}
         </Section>
       </div>
@@ -582,7 +501,7 @@ export async function RmDashboard({
       {/* Active clients whose money has not moved in years. */}
       <Section
         title={`No transaction in ${thresholds.staleTransactionYears}+ years`}
-        count={data.staleClients.length}
+        count={totalOf(data.staleClients)}
       >
         {data.staleClients.length === 0 ? (
           <DashboardEmptyState
@@ -591,7 +510,7 @@ export async function RmDashboard({
             hint={`No active client of yours has been silent for ${thresholds.staleTransactionYears} years or more.`}
           />
         ) : (
-          <ul className="divide-y">
+          <ScrollList>
             {data.staleClients.map((c: any) => (
               <li key={c.id} className="py-2 flex items-center justify-between text-sm gap-2">
                 <Link href={`/dashboard/investors/${c.id}`} className="flex items-center gap-2 hover:underline min-w-0">
@@ -606,14 +525,14 @@ export async function RmDashboard({
                 </span>
               </li>
             ))}
-          </ul>
+          </ScrollList>
         )}
       </Section>
 
       {!limited && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Section title={`SIP rejection follow-ups (${sipRejectionWindowDays}d)`} count={data.sipRejections.length}>
+            <Section title={`SIP rejection follow-ups (${sipRejectionWindowDays}d)`} count={totalOf(data.sipRejections)}>
               {data.sipRejections.length === 0 ? (
                 <DashboardEmptyState
                   compact
@@ -621,7 +540,7 @@ export async function RmDashboard({
                   hint={`No SIPs were rejected for your clients in the last ${sipRejectionWindowDays} days.`}
                 />
               ) : (
-                <ul className="divide-y">
+                <ScrollList>
                   {data.sipRejections.map((r: any) => (
                     <li key={r.id} className="py-2 flex items-center justify-between text-sm">
                       <Link href={`/dashboard/investors/${r.investor_id}`} className="flex items-center gap-2 hover:underline">
@@ -629,21 +548,21 @@ export async function RmDashboard({
                         <div>
                           <div className="font-medium">{r.investor_name}</div>
                           <div className="text-xs text-muted-foreground">
-                            {r.scheme_name ?? "—"} · {r.reason_code ?? "unknown reason"}
+                            {r.scheme_name ?? "—"} · {r.rejection_reason ?? "unknown reason"}
                           </div>
                         </div>
                       </Link>
                       <div className="text-right">
                         <div className="text-xs text-rose-600 font-medium">{formatINR(Number(r.amount))}</div>
-                        <div className="text-xs text-muted-foreground">{formatRelative(r.created_at)}</div>
+                        <div className="text-xs text-muted-foreground">{formatDate(r.rejection_date)}</div>
                       </div>
                     </li>
                   ))}
-                </ul>
+                </ScrollList>
               )}
             </Section>
 
-            <Section title="Pending service requests" count={data.myServiceReqs.length}>
+            <Section title="Pending service requests" count={totalOf(data.myServiceReqs)}>
               {data.myServiceReqs.length === 0 ? (
                 <DashboardEmptyState
                   compact
@@ -651,7 +570,7 @@ export async function RmDashboard({
                   hint="None of your clients have an open or in-progress ticket."
                 />
               ) : (
-                <ul className="divide-y">
+                <ScrollList>
                   {data.myServiceReqs.map((sr: any) => {
                     const slaMs = sr.sla_resolution_at
                       ? new Date(sr.sla_resolution_at).getTime() - Date.now()
@@ -674,13 +593,13 @@ export async function RmDashboard({
                       </li>
                     );
                   })}
-                </ul>
+                </ScrollList>
               )}
             </Section>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Section title="Birthdays this week" count={data.birthdays.length}>
+            <Section title="Birthdays this week" count={totalOf(data.birthdays)}>
               {data.birthdays.length === 0 ? (
                 <DashboardEmptyState
                   compact
@@ -688,7 +607,7 @@ export async function RmDashboard({
                   hint="No client birthdays fall in the next 7 days."
                 />
               ) : (
-                <ul className="divide-y">
+                <ScrollList>
                   {data.birthdays.map((b: any) => (
                     <li key={b.id} className="py-2 flex items-center justify-between text-sm">
                       <Link href={`/dashboard/investors/${b.id}`} className="flex items-center gap-2 hover:underline">
@@ -698,11 +617,11 @@ export async function RmDashboard({
                       <span className="text-xs text-muted-foreground">{formatDate(b.dob)}</span>
                     </li>
                   ))}
-                </ul>
+                </ScrollList>
               )}
             </Section>
 
-            <Section title="Anniversaries this week" count={data.anniversaries.length}>
+            <Section title="Anniversaries this week" count={totalOf(data.anniversaries)}>
               {data.anniversaries.length === 0 ? (
                 <DashboardEmptyState
                   compact
@@ -710,7 +629,7 @@ export async function RmDashboard({
                   hint="No client onboarding anniversaries fall in the next 7 days."
                 />
               ) : (
-                <ul className="divide-y">
+                <ScrollList>
                   {data.anniversaries.map((a: any) => (
                     <li key={a.id} className="py-2 flex items-center justify-between text-sm">
                       <Link href={`/dashboard/investors/${a.id}`} className="flex items-center gap-2 hover:underline">
@@ -718,15 +637,15 @@ export async function RmDashboard({
                         <span>{a.name}</span>
                       </Link>
                       <span className="text-xs text-muted-foreground">
-                        {a.years > 0 ? `${a.years} yr` : "today"}
+                        {a.years} yr · {Number(a.days_away) === 0 ? "today" : Number(a.days_away) === 1 ? "tomorrow" : `in ${a.days_away} days`}
                       </span>
                     </li>
                   ))}
-                </ul>
+                </ScrollList>
               )}
             </Section>
 
-            <Section title="SIP top-up opportunities" count={data.topUps.length}>
+            <Section title="SIP top-up opportunities" count={totalOf(data.topUps)}>
               {data.topUps.length === 0 ? (
                 <DashboardEmptyState
                   compact
@@ -734,7 +653,7 @@ export async function RmDashboard({
                   hint="No HNI/Affluent clients are due for a SIP step-up at the moment."
                 />
               ) : (
-                <ul className="divide-y">
+                <ScrollList>
                   {data.topUps.map((t: any) => (
                     <li key={t.id} className="py-2 flex items-center justify-between text-sm">
                       <Link href={`/dashboard/investors/${t.id}`} className="flex items-center gap-2 hover:underline">
@@ -746,7 +665,7 @@ export async function RmDashboard({
                       </span>
                     </li>
                   ))}
-                </ul>
+                </ScrollList>
               )}
             </Section>
           </div>
@@ -756,7 +675,7 @@ export async function RmDashboard({
 
       {!limited && (
         <Suspense fallback={null}>
-          <SipIssuesCard session={session} targetUserId={targetUserId} />
+          <SipIssuesCard session={session} targetUserId={userId} />
         </Suspense>
       )}
 
@@ -799,22 +718,6 @@ function Kpi({
     </div>
   );
   return href ? <Link href={href}>{inner}</Link> : inner;
-}
-
-function Section({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
-  return (
-    <div className="card-surface glass-card p-5">
-      <div className="font-semibold flex items-center justify-between mb-3">
-        <span className="text-sm font-semibold tracking-tight text-foreground/90">{title}</span>
-        {count !== undefined && (
-          <span className="chip bg-brand-cyan-light text-brand-cyan-deep text-xs font-semibold px-2 py-0.5">
-            {count}
-          </span>
-        )}
-      </div>
-      {children}
-    </div>
-  );
 }
 
 /**

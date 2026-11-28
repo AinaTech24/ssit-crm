@@ -14,6 +14,7 @@ import { loadScorecard, type MemberRow, type Kpi } from "@/lib/team/scorecard";
 import { resolvePeriodDates, type Period } from "@/lib/dashboard/period";
 import { PeriodSelector } from "@/components/dashboards/PeriodSelector";
 import { AutoRefresh } from "@/components/common/AutoRefresh";
+import { localDay } from "@/lib/dates/ist";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +65,7 @@ export default async function ScorecardPage({
   const pstart = sp.pstart;
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const { startISO, label } = resolvePeriodDates(period, new Date(), pstart);
-  const from = startISO.slice(0, 10);
+  const from = localDay(new Date(startISO));
 
   const data = await withTenant(session.tenantId, async (tx) => loadScorecard(tx as any, session.tenantId, from, today));
 

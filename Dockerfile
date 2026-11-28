@@ -47,6 +47,9 @@ RUN npm run build
 FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
+# The firm works in India: server-rendered times, "today" and the daily jobs must follow Indian time
+# (the base image runs on UTC, which showed a 12:30 pm meeting as 7:00 am).
+ENV TZ=Asia/Kolkata
 # curl for the container healthcheck; run as non-root.
 # fontconfig + DejaVu/Liberation fonts so server-side SVG→PNG branding
 # (sharp/librsvg, used by the content-library co-brand strip) actually renders

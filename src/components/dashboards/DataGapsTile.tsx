@@ -12,8 +12,6 @@
  * Fetches client-side so the cockpit page render isn't blocked by an
  * 8-aggregate query against a 100K-row table. Shows a small skeleton
  * while loading; surfaces total + each gap as a chip.
- *
- * Updated: Adds a direct WhatsApp/Email dispatch option to automate reminders.
  */
 
 import { useEffect, useState } from "react";
@@ -24,10 +22,6 @@ import {
   ShieldAlert,
   Database,
   ArrowUpRight,
-  Send,
-  Check,
-  Loader2,
-  X
 } from "lucide-react";
 
 type Gap = {
@@ -41,11 +35,6 @@ type Gap = {
 export function DataGapsTile() {
   const [data, setData] = useState<{ total: number; gaps: Gap[] } | null>(null);
   const [err, setErr] = useState<string | null>(null);
-
-  // Quick Action Modal states
-  const [activeGap, setActiveGap] = useState<Gap | null>(null);
-  const [sending, setSending] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,27 +53,6 @@ export function DataGapsTile() {
       cancelled = true;
     };
   }, []);
-
-  const handleNotify = (gap: Gap) => {
-    setActiveGap(gap);
-    setSuccess(false);
-    setSending(false);
-  };
-
-  const executeBulkNotify = () => {
-    if (!activeGap) return;
-    setSending(true);
-    // Simulate campaign initiation using the standard workflow recipes
-    setTimeout(() => {
-      setSending(false);
-      setSuccess(true);
-      // Automatically close modal after 2.5 seconds
-      setTimeout(() => {
-        setActiveGap(null);
-        setSuccess(false);
-      }, 2500);
-    }, 1500);
-  };
 
   if (err) {
     return (
@@ -136,7 +104,7 @@ export function DataGapsTile() {
             <div className="text-sm font-semibold">Client master — data gaps</div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
               {totalGaps.toLocaleString("en-IN")} fixes across {data.total.toLocaleString("en-IN")} clients.
-              Click a chip to inspect, or click the <Send className="inline size-2.5 mx-0.5" /> icon to bulk-remind.
+              Click a chip to see those clients.
             </div>
           </div>
         </div>
@@ -155,7 +123,7 @@ export function DataGapsTile() {
           </div>
           <div className="flex flex-wrap gap-2">
             {highSev.map((g) => (
-              <GapChip key={g.key} gap={g} tone="rose" onNotify={handleNotify} />
+              <GapChip key={g.key} gap={g} tone="rose" />
             ))}
           </div>
         </div>
@@ -168,103 +136,30 @@ export function DataGapsTile() {
           </div>
           <div className="flex flex-wrap gap-2">
             {medSev.map((g) => (
-              <GapChip key={g.key} gap={g} tone="amber" onNotify={handleNotify} />
+              <GapChip key={g.key} gap={g} tone="amber" />
             ))}
           </div>
         </div>
       )}
 
-      {/* Bulk Notification Confirm Modal */}
-      {activeGap && (
-        <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 flex flex-col justify-center p-5 z-20 transition-all duration-300 animate-in fade-in">
-          <button
-            onClick={() => setActiveGap(null)}
-            className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
-          
-          <div className="max-w-md mx-auto space-y-3 text-center">
-            {success ? (
-              <div className="space-y-2 animate-in zoom-in-50">
-                <div className="size-12 rounded-full bg-emerald-50 text-emerald-600 grid place-items-center mx-auto border border-emerald-100">
-                  <Check className="size-6" />
-                </div>
-                <h3 className="font-semibold text-sm">Reminders Queued Successfully!</h3>
-                <p className="text-xs text-muted-foreground">
-                  Automated notifications requesting missing <span className="font-semibold">{activeGap.label}</span> have been sent to the outbox for {activeGap.count} clients.
-                </p>
-              </div>
-            ) : (
-              <>
-                <h3 className="font-semibold text-sm">Send Bulk Reminders?</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  This will trigger the campaign recipe for missing <span className="font-semibold">{activeGap.label}</span>, fanning out WhatsApp and Email templates to <span className="font-bold text-foreground">{activeGap.count} clients</span>.
-                </p>
-                <div className="flex gap-2 justify-center pt-2">
-                  <button
-                    disabled={sending}
-                    onClick={() => setActiveGap(null)}
-                    className="px-3 py-1.5 text-xs border rounded-md hover:bg-secondary font-medium disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    disabled={sending}
-                    onClick={executeBulkNotify}
-                    className="btn-accent text-xs font-semibold px-3 py-1.5 inline-flex items-center gap-1.5"
-                  >
-                    {sending ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin" /> Queuing...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="size-3" /> Trigger Reminders
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-function GapChip({
-  gap,
-  tone,
-  onNotify
-}: {
-  gap: Gap;
-  tone: "rose" | "amber";
-  onNotify: (gap: Gap) => void;
-}) {
+function GapChip({ gap, tone }: { gap: Gap; tone: "rose" | "amber" }) {
   const cls =
     tone === "rose"
       ? "border-rose-200 bg-rose-50/60 text-rose-900 hover:bg-rose-100 dark:border-rose-950/40 dark:bg-rose-950/20 dark:text-rose-200"
       : "border-amber-200 bg-amber-50/60 text-amber-900 hover:bg-amber-100 dark:border-amber-950/40 dark:bg-amber-950/20 dark:text-amber-200";
 
   return (
-    <div className="inline-flex items-stretch rounded-md shadow-sm">
-      <Link
-        href={gap.href}
-        className={`flex items-center gap-1.5 rounded-l-md border border-r-0 px-2.5 py-1 text-xs ${cls} transition-colors`}
-      >
-        <span className="font-semibold">{gap.label}</span>
-        <span className="tabular-nums font-bold opacity-80">{gap.count.toLocaleString("en-IN")}</span>
-        <ChevronRight className="size-3 opacity-40" />
-      </Link>
-      <button
-        onClick={() => onNotify(gap)}
-        title={`Queue automated notifications for missing ${gap.label}`}
-        className={`flex items-center justify-center rounded-r-md border px-2 text-xs transition-colors hover:bg-brand-cyan-light dark:hover:bg-cyan-950/40 hover:text-brand-cyan-deep ${cls}`}
-      >
-        <Send className="size-3" />
-      </button>
-    </div>
+    <Link
+      href={gap.href}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs shadow-sm ${cls} transition-colors`}
+    >
+      <span className="font-semibold">{gap.label}</span>
+      <span className="tabular-nums font-bold opacity-80">{gap.count.toLocaleString("en-IN")}</span>
+      <ChevronRight className="size-3 opacity-40" />
+    </Link>
   );
 }

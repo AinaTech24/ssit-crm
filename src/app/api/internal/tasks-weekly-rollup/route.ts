@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { withSystem } from "@/db/client";
+import { localDay } from "@/lib/dates/ist";
 
 export const dynamic = "force-dynamic";
 
@@ -95,8 +96,8 @@ export async function POST(req: NextRequest) {
     const prevOpen = Number((previous.rows[0] as any)?.prev_open ?? 0);
 
     return {
-      week_start: weekStart.toISOString().slice(0, 10),
-      week_end: weekEnd.toISOString().slice(0, 10),
+      week_start: localDay(weekStart),
+      week_end: localDay(weekEnd),
       open_total: Number(c?.open_total ?? 0),
       overdue_count: Number(c?.overdue_count ?? 0),
       sla_at_risk: Number(c?.sla_at_risk ?? 0),
