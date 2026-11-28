@@ -292,6 +292,16 @@ export default async function DashboardPage({
           </>
         );
       }
+      // The owner too: work assigned to them is listed above the firm figures.
+      if (roles.includes("owner") && !selected && !scope.branch && !asResearch) {
+        const firm = dash;
+        dash = (
+          <>
+            {await MyDayPanel({ session, noLink: true })}
+            {firm}
+          </>
+        );
+      }
       showReviewOverdue = !selected && !scope.branch && !asResearch && !isHeadOnly;
       if (!selected && !scope.branch && !isHeadOnly) {
         headerControls = <DashboardHeaderBar period={period} currentLabel={periodLabel} variant="light" />;
