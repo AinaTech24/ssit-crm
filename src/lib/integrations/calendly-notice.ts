@@ -18,7 +18,7 @@ export function meetingCreatedNotice(
   calendly: CalendlyResult
 ): { type: "success" | "warning" | "info"; title: string; message: string } {
   const date = when.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-  const time = when.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+  const time = when.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
   const base = `Meeting created on ${date} at ${time}.`;
   if (!calendly) return { type: "success", title: "Meeting created", message: base };
   if (calendly.status === "not_connected") {

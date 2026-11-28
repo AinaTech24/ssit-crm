@@ -103,7 +103,7 @@ export default async function ReviewMeetingDetailPage({
             {subjectKind}
           </span>
           <div className="text-sm text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
-            <span>{new Date(data.meeting.meetingDate).toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short" })}</span>
+            <span>{new Date(data.meeting.meetingDate).toLocaleString("en-IN", { dateStyle: "full", timeStyle: "short", timeZone: "Asia/Kolkata" })}</span>
             <span>·</span>
             <span className="capitalize">{data.meeting.meetingMode.replace(/_/g, " ")}</span>
             {data.rm && (

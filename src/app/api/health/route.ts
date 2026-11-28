@@ -42,6 +42,8 @@ export async function GET() {
         // so "has my fix reached production?" is answerable without SSH-ing in.
         build: BUILD_SHA || null,
         builtAt: BUILD_AT || null,
+        // The clock server-rendered dates and times are written in (should be Asia/Kolkata).
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         uptimeSec: Math.round(process.uptime()),
         heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
         heapTotalMb: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),

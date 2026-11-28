@@ -289,7 +289,7 @@ export async function buildCommandQueue(
         items: r.rows.map((x: any) => ({
           id: x.id,
           title: x.party_name ?? "Client",
-          detail: `${x.subject ? x.subject : String(x.meeting_type).replace(/_/g, " ")} · ${new Date(x.meeting_date).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}`,
+          detail: `${x.subject ? x.subject : String(x.meeting_type).replace(/_/g, " ")} · ${new Date(x.meeting_date).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}`,
           href: `/dashboard/review-meetings/${x.id}`,
           date: ymd(x.meeting_date),
         })),

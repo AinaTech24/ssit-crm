@@ -28,7 +28,7 @@ function fmtDue(due: string | Date | null): string {
   if (!due) return "";
   const d = typeof due === "string" ? new Date(due) : due;
   if (isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
 async function listActiveTenants(): Promise<string[]> {

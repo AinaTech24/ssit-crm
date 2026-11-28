@@ -319,7 +319,7 @@ export default async function GoalPrintPage({
           </p>
           <p className="mt-2">
             Prepared by {data.tenant?.displayName ?? "your MFD"} · ARN {data.tenant?.arn ?? "—"} ·
-            Generated {new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}.
+            Generated {new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })}.
           </p>
         </div>
       </div>

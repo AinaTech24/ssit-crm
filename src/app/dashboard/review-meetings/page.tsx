@@ -1,3 +1,4 @@
+import { istDay } from "@/lib/dates/ist";
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { Calendar, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
@@ -233,7 +234,7 @@ export default async function ReviewMeetingsPage({
     .filter(
       (r) =>
         ["scheduled", "confirmed", "in_progress"].includes(r.status) &&
-        new Date(r.meeting_date).toDateString() === new Date().toDateString()
+        istDay(new Date(r.meeting_date)) === istDay()
     )
     .sort((a, b) => new Date(a.meeting_date).getTime() - new Date(b.meeting_date).getTime());
 
@@ -326,7 +327,7 @@ export default async function ReviewMeetingsPage({
                 className="min-w-[210px] rounded-lg border border-border p-3 hover:bg-secondary/40 transition-colors"
               >
                 <div className="text-lg font-bold tabular-nums">
-                  {new Date(m.meeting_date).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}
+                  {new Date(m.meeting_date).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Avatar

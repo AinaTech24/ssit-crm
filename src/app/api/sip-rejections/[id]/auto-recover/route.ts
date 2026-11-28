@@ -95,7 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         } as any);
 
         // 3. Update rejection recovery status
-        const timestamp = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+        const timestamp = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
         const newRemark = `⚡ [Auto-Recover ${timestamp}]: Automated WhatsApp recovery triggered and high-priority RM task created.`;
         const updatedRemarks = rej.remarks ? `${newRemark}\n${rej.remarks}` : newRemark;
 

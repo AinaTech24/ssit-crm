@@ -51,7 +51,7 @@ type EmployeeRow = { id: string; name: string | null };
 
 function hhmm(v: string | null | undefined): string | null {
   if (!v) return null;
-  return new Date(v).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return new Date(v).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" });
 }
 
 export default async function AttendanceCalendarPage({

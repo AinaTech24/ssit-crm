@@ -363,5 +363,5 @@ function fmt(v: any): string {
   if (!v) return "—";
   const d = v instanceof Date ? v : new Date(v);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }

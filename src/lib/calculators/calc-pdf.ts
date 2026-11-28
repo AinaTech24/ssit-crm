@@ -396,7 +396,7 @@ async function renderReport(
   ).forEach((ln) => { page.drawText(ln, { x: MARGIN, y: y - 4, size: 8.5, font, color: slate }); y -= 12; });
 
   // ════════════════ HEADER + FOOTER ════════════════
-  const dt = c.generatedAt || new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  const dt = c.generatedAt || new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
   const ruleY = H - 56;
   const pages = doc.getPages();
   pages.forEach((p, idx) => {

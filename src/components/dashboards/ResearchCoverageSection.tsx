@@ -34,7 +34,7 @@ type MeetingRow = {
 type Person = { id: string; name: string; roles: string[] | null; desk_id: string | null; desk_name: string | null };
 
 function fmt(d: string): string {
-  return new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  return new Date(d).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
 }
 const label = (s: string | null) => (s ?? "").replace(/_/g, " ");
 const roleOf = (p?: Person) => (p?.roles?.[0] ? ROLE_LABELS[p.roles[0]] ?? "" : "");

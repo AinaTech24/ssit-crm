@@ -317,7 +317,7 @@ function fmtDate(iso: string | null): string {
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 function fitText(text: string, font: PDFFont, size: number, maxWidth: number, min: number): number {
   let s = size;
