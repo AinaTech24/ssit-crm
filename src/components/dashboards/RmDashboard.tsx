@@ -125,7 +125,7 @@ export async function RmDashboard({
     `);
 
     // Today's follow-ups, earlier overdue ones and every open task.
-    const myDay = await loadMyDay(tx, session.tenantId, userId);
+    const myDay = await loadMyDay(tx, session, userId);
 
     // Birthdays in the next 7 days (works across the year end).
     const birthdays = await rowsOf(sql`

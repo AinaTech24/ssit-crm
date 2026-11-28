@@ -124,7 +124,7 @@ export async function RiaDashboard({ session }: { session: SessionUser }) {
     `);
 
     // Follow-ups due today and every open task.
-    const myDay = await loadMyDay(tx, session.tenantId, session.userId);
+    const myDay = await loadMyDay(tx, session, session.userId);
 
     return {
       clients: Number(k.clients ?? 0),

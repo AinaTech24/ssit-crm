@@ -70,7 +70,7 @@ export async function RaDashboard({
 
   const data = await withTenant(session.tenantId, async (tx) => {
     // The person's own follow-ups and tasks. The admin's firm-wide research view has no "my day".
-    const myDay = asAdmin && !target ? null : await loadMyDay(tx, session.tenantId, uid);
+    const myDay = asAdmin && !target ? null : await loadMyDay(tx, session, uid);
     const today = istDay();
 
     let research: { weekCount: number; monthCount: number; recent: ResearchEntryRow[] } | null = null;

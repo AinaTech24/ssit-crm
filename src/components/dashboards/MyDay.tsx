@@ -3,13 +3,14 @@ import { sql, type SQL } from "drizzle-orm";
 import { AlertCircle, Phone } from "lucide-react";
 import { withTenant, type Tx } from "@/db/client";
 import type { SessionUser } from "@/lib/auth/session";
-import { taskMineSql } from "@/lib/tasks/access";
+import { taskMineSql, taskScopeSql, taskTeamIds } from "@/lib/tasks/access";
 import { istDayBounds } from "@/lib/dates/ist";
 import { formatDate } from "@/lib/utils";
 import { DashboardEmptyState } from "./DashboardEmptyState";
 
 /**
- * One person's day: the follow-ups due today (earlier ones folded away) and every task still open.
+ * One person's day: the follow-ups due today (earlier ones folded away) and every task still open -
+ * theirs, the ones they handed to others, their shared task team's and, for a branch head, the team's.
  * Used on their own dashboard, when a manager views them, and on top of a branch head's team view.
  */
 
@@ -17,7 +18,7 @@ import { DashboardEmptyState } from "./DashboardEmptyState";
 const LIST_CAP = 200;
 
 type Row = Record<string, any>;
-export type MyDayData = { followUps: Row[]; overdueFollowUps: Row[]; myTasks: Row[] };
+export type MyDayData = { followUps: Row[]; overdueFollowUps: Row[]; myTasks: Row[]; teamView: boolean };
 
 /** The true size of a list that was read with COUNT(*) OVER (). */
 export function totalOf(rows: Row[]): number {
@@ -28,7 +29,8 @@ export function totalOf(rows: Row[]): number {
 export const openLeadSql = sql`l.converted_investor_id IS NULL AND l.stage NOT IN ('converted', 'lost', 'not_interested', 'cold')
   AND l.deleted_at IS NULL AND l.lost_reason IS DISTINCT FROM '__deleted__'`;
 
-export async function loadMyDay(tx: Tx, tenantId: string, userId: string): Promise<MyDayData> {
+export async function loadMyDay(tx: Tx, viewer: SessionUser, userId: string): Promise<MyDayData> {
+  const tenantId = viewer.tenantId;
   const { start: dayStart, end: dayEnd } = istDayBounds();
   const rowsOf = async (q: SQL) => (await tx.execute(q)).rows as Row[];
   const openTask = sql`t.tenant_id = ${tenantId}::uuid AND t.deleted_at IS NULL
@@ -69,13 +71,30 @@ export async function loadMyDay(tx: Tx, tenantId: string, userId: string): Promi
   const overdueFollowUps = await followUpRows((col, isActivity) =>
     isActivity ? sql`${col} >= ${monthAgo} AND ${col} < ${dayStart}` : sql`${col} < ${dayStart}`
   );
-  // All open tasks (assigned to the person, or they are a collaborator).
+  // Open tasks the person has a hand in, matching the Tasks page: theirs to do, ones they assigned or must
+  // approve, and their shared task team's. A branch head on their own dashboard also gets the team's.
+  const teamView = viewer.userId === userId && viewer.roles.includes("branch_head") && !viewer.roles.includes("owner");
+  const mine = sql`COALESCE(${taskMineSql("t", userId)}, FALSE)`;
+  let related: SQL;
+  if (teamView) {
+    related = await taskScopeSql(tx, viewer, "t");
+  } else {
+    const team = await taskTeamIds(tx, tenantId, userId);
+    const ids = sql.join(team.map((id) => sql`${id}::uuid`), sql`, `);
+    const shared = team.length ? sql` OR t.assignee_id IN (${ids}) OR t.created_by_id IN (${ids})` : sql``;
+    related = sql`(${mine} OR t.created_by_id = ${userId}::uuid OR t.meta->>'approverId' = ${userId}${shared})`;
+  }
   const myTasks = await rowsOf(sql`
-    SELECT t.id, t.title, t.priority, t.due_at, COUNT(*) OVER ()::int AS total_count
-      FROM tasks t WHERE ${openTask}
-     ORDER BY t.due_at ASC NULLS LAST, t.created_at DESC LIMIT ${LIST_CAP}
+    SELECT t.id, t.title, t.priority, t.status, t.due_at, u.name AS assignee_name, ${mine} AS is_mine,
+           COUNT(*) OVER ()::int AS total_count
+      FROM tasks t
+      LEFT JOIN users u ON u.id = t.assignee_id
+     WHERE t.tenant_id = ${tenantId}::uuid AND t.deleted_at IS NULL
+       AND t.status IN ('open', 'in_progress', 'blocked') AND t.type <> 'other_activity'
+       AND ${related}
+     ORDER BY is_mine DESC, t.due_at ASC NULLS LAST, t.created_at DESC LIMIT ${LIST_CAP}
   `);
-  return { followUps, overdueFollowUps, myTasks };
+  return { followUps, overdueFollowUps, myTasks, teamView };
 }
 
 export function ScrollList({ children }: { children: React.ReactNode }) {
@@ -154,6 +173,9 @@ export function OpenTasksBox({ data, title }: { data: MyDayData; title: string }
   const { start: dayStart } = istDayBounds();
   return (
     <Section title={title} count={totalOf(data.myTasks)}>
+      <p className="text-[11px] text-muted-foreground -mt-2 mb-2">
+        {data.teamView ? "Yours first, then your team's" : "Assigned to or by this person, and their shared task team's"}
+      </p>
       {data.myTasks.length === 0 ? (
         <DashboardEmptyState compact title="No open tasks 🎉" hint="Your task list is clear. Nice work staying on top of things." />
       ) : (
@@ -165,6 +187,8 @@ export function OpenTasksBox({ data, title }: { data: MyDayData; title: string }
                 <Link href={`/dashboard/tasks?task=${t.id}`} className="flex items-center gap-2 hover:underline min-w-0">
                   <span className="truncate">{t.title}</span>
                   <span className="text-xs uppercase text-muted-foreground">{t.priority}</span>
+                  {t.status !== "open" && <span className="chip text-[10px] bg-secondary capitalize">{String(t.status).replace(/_/g, " ")}</span>}
+                  {!t.is_mine && <span className="chip text-[10px] bg-secondary whitespace-nowrap">For {t.assignee_name ?? "nobody yet"}</span>}
                 </Link>
                 <span className={`text-xs whitespace-nowrap ${late ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                   {t.due_at ? formatDate(t.due_at) : "no due date"}
@@ -193,7 +217,7 @@ export async function MyDayPanel({
   const who = target ? `${target.name.split(" ")[0]}'s` : "My";
   let data: MyDayData;
   try {
-    data = await withTenant(session.tenantId, (tx) => loadMyDay(tx, session.tenantId, userId));
+    data = await withTenant(session.tenantId, (tx) => loadMyDay(tx, session, userId));
   } catch (err) {
     console.error("[my-day] failed", err instanceof Error ? err.message : err);
     return <div className="card-surface p-4 text-sm text-muted-foreground">Follow-ups and tasks couldn&apos;t load right now.</div>;
@@ -210,7 +234,7 @@ export async function MyDayPanel({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <FollowUpsBox data={data} title={`${who} follow-ups today`} />
-        <OpenTasksBox data={data} title={`${who} open tasks`} />
+        <OpenTasksBox data={data} title={data.teamView ? "Open tasks" : `${who} open tasks`} />
       </div>
     </div>
   );
